@@ -1,0 +1,19 @@
+# JSON logging is activated by the "prod" springProfile in logback-spring.xml
+zero:
+  jwt:
+    # no default on purpose: JWT_SECRET env is mandatory in prod
+    secret: ${JWT_SECRET}
+  seed:
+    # prod default: seeding is OFF. If explicitly enabled (SEED_ENABLED=true), a strong
+    # SEED_ADMIN_PASSWORD is mandatory — DataSeeder fails fast on a blank/dev-default password.
+    enabled: ${SEED_ENABLED:false}
+    host-admin-password: ${SEED_ADMIN_PASSWORD:}
+logging:
+  level:
+    root: INFO
+    com.mycompanyname.zero: INFO
+spring:
+  jpa:
+    properties:
+      hibernate:
+        format_sql: false

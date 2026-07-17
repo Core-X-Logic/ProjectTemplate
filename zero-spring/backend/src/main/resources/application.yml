@@ -1,0 +1,43 @@
+spring:
+  application.name: zero-platform
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/zero}
+    username: ${DB_USER:zero}
+    password: ${DB_PASSWORD:zero}
+  jpa:
+    hibernate.ddl-auto: validate
+    open-in-view: false
+  flyway.enabled: true
+  cache:
+    type: simple
+    cache-names: settings,permission-tree
+  mail:
+    host: ${MAIL_HOST:}          # boşsa LoggingEmailSender
+    port: ${MAIL_PORT:1025}
+    properties.mail.smtp.auth: false
+  messages:
+    basename: i18n/messages
+    encoding: UTF-8
+    fallback-to-system-locale: false
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+    web:
+      pageable:
+        default-page-size: 20
+        max-page-size: 100
+zero:
+  multitenancy.header: X-Tenant
+  jwt:
+    # dev-only secret (base64, >=64 bytes) — MUST be overridden via JWT_SECRET env in prod
+    secret: ${JWT_SECRET:ZGV2LW9ubHktc2VjcmV0LWtleS1jaGFuZ2UtaW4tcHJvZC1taW4tNjQtYnl0ZXMtbG9uZy1wbGVhc2UtY2hhbmdlLW1lLW5vdy0hIQ==}
+    access-token-ttl: 15m
+    refresh-token-ttl: 7d
+    issuer: zero-platform
+  seed:
+    enabled: true
+    host-admin-password: ${SEED_ADMIN_PASSWORD:Admin123!}
+management:
+  endpoints.web.exposure.include: health,info,metrics,prometheus
+  endpoint.health.probes.enabled: true

@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: zero-postgres
+    environment:
+      POSTGRES_DB: zero
+      POSTGRES_USER: zero
+      POSTGRES_PASSWORD: zero
+    ports:
+      # host 5433 — 5432 başka bir lokal proje tarafından kullanılıyor olabilir
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zero -d zero"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - zero-pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: zero-redis
+    ports:
+      # host 6380 — 6379 başka bir lokal proje tarafından kullanılıyor olabilir
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit
+    container_name: zero-mailpit
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+volumes:
+  zero-pgdata:

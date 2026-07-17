@@ -1,0 +1,15 @@
+logging:
+  level:
+    com.mycompanyname.zero: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.springframework.security: DEBUG
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/zero}
+  data:
+    redis:
+      port: ${REDIS_PORT:6380}
+  jpa:
+    properties:
+      hibernate:
+        format_sql: true
