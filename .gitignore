@@ -1,0 +1,122 @@
+# ------------------------------------------------------------------------------
+# Workspace-level Git ignore policy
+# Monorepo: Asp.NET Zero (reference) + zero-spring (target)
+# ------------------------------------------------------------------------------
+
+# Reference source project (keep ignored by default)
+Asp.NET Zero/
+
+# ------------------------------------------------------------------------------
+# OS and editor noise
+# ------------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+.idea/
+.vscode/
+*.code-workspace
+
+# ------------------------------------------------------------------------------
+# Logs and diagnostics
+# ------------------------------------------------------------------------------
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ------------------------------------------------------------------------------
+# Environment and secrets
+# ------------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+!.env.sample
+
+*.pfx
+*.p12
+*.pem
+*.key
+*.crt
+*.jks
+*.keystore
+
+# ------------------------------------------------------------------------------
+# Archives and heavy binary drops (including template zips)
+# ------------------------------------------------------------------------------
+*.zip
+*.7z
+*.rar
+*.tar
+*.gz
+*.bz2
+
+# ------------------------------------------------------------------------------
+# Java / Maven / Spring Boot
+# ------------------------------------------------------------------------------
+**/target/
+**/.mvn/wrapper/maven-wrapper.jar.backup
+**/.flattened-pom.xml
+
+# Spring boot runtime dumps
+*.hprof
+
+# ------------------------------------------------------------------------------
+# Node / Angular
+# ------------------------------------------------------------------------------
+**/node_modules/
+**/.angular/
+**/dist/
+**/.cache/
+**/.eslintcache
+**/coverage/
+**/.turbo/
+
+# Angular generated environment overrides (if used)
+**/src/environments/environment.local.ts
+
+# ------------------------------------------------------------------------------
+# .NET / ASP.NET (if any tracked projects are added later)
+# ------------------------------------------------------------------------------
+**/bin/
+**/obj/
+*.user
+*.suo
+*.rsuser
+
+# ------------------------------------------------------------------------------
+# Docker and local infra data
+# ------------------------------------------------------------------------------
+**/.docker/
+**/docker-data/
+**/.data/
+**/tmp/
+**/temp/
+
+# ------------------------------------------------------------------------------
+# Test artifacts
+# ------------------------------------------------------------------------------
+**/TestResults/
+**/surefire-reports/
+**/failsafe-reports/
+**/.pytest_cache/
+
+# ------------------------------------------------------------------------------
+# Security and scanner outputs
+# ------------------------------------------------------------------------------
+**/dependency-check-report.*
+**/trivy-report.*
+**/sbom.*
+
+# ------------------------------------------------------------------------------
+# Metronic and other purchased UI assets
+# Keep raw vendor packages out of git; commit only integrated app code.
+# ------------------------------------------------------------------------------
+metronic*/
+vendor-templates/
+ui-vendor/
+
+# If you create an extracted working area, keep it ignored:
+zero-spring/frontend/vendor/
