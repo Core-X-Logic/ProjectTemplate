@@ -33,17 +33,17 @@ RBAC guard + login) aşağıdaki "İlk vertical slice" tablosunun son satırınd
 | **Notifications** (inbox, unread, mark-read, bell, polling) | `[App]/Notifications/NotificationAppService.cs` | **Done** | **Done** (inbox + bell badge) | isAuthenticated · en/tr ✅ | NotificationInboxIT 1 · notifications-inbox 5 | **Closed** |
 | Frontend foundation (auth/rbac/i18n/api-client/shell) | Angular `AppSessionService`+`abp.js` | n/a | **Done** | RBAC guard + RequireAuth · en/tr | login 3, rbac 7, require-auth 4 | **Closed** |
 
-### Backend-only (parite tam, Frontend UI slice C bekliyor)
+### Slice C — KAPANDI ✅ (backend+frontend+permission+i18n+test tam; uçtan uca smoke)
 
-| Module | Backend | Frontend | Test Evidence | Not |
-|---|---|---|---|---|
-| Impersonation (act claim) | **Done (evidenced)** | slice C | ImpersonationIT 1 (cascade yasak + audit) | UI: "login as" akışı slice C |
-| Audit log (HTTP) + Entity history | **Done (evidenced)** | slice C | AuditLogIT 2, EntityHistoryIT 2 (Role+OU) | UI: audit görüntüleme slice C |
-| Settings (hiyerarşik) | **Done (evidenced)** | slice C | SettingsIT 3 | UI: settings ekranı slice C |
-| Localization (en/tr) | **Done (evidenced)** | (i18n altyapı frontend'te aktif) | LocalizationIT 2 | Dil CRUD UI slice C |
-| Email (welcome/confirm/forgot/reset) | **Done (evidenced)** | n/a (backend servis) | EmailDispatchIT 2, PasswordPolicyIT | — |
-| Şifre politikası + history | **Done (evidenced)** | slice C (profil ekranı) | PasswordPolicyIT 4 | — |
+| Module | Backend | Frontend (React) | Permission/i18n | Test Evidence | Durum |
+|---|---|---|---|---|---|
+| **Impersonation** (start, act-claim, cascade-block, back-to-impersonator, banner) | **Done** | **Done** (banner + users satır aksiyonu + auth-provider swap) | users.impersonate + `<Can>` · en/tr ✅ | ImpersonationIT 1 · impersonation FE 7 (cascade-disable) · smoke: authenticate→403→back | **Closed** |
+| **Audit log + Entity history** (filtre/sıralama/sayfa/export, property diff) | **Done** | **Done** (audit-logs + entity-history, server-pagination, xlsx export) | auditlogs.read · en/tr ✅ | AuditLogIT 2, EntityHistoryIT 2 · audit FE 9 · smoke: 9 log/5 change | **Closed** |
+| **Settings** (host/tenant tab, batch update, defaultValue ipucu, fallback) | **Done** (+SettingDto.defaultValue) | **Done** (tabs + rhf batch, any-permission guard, host double-lock) | settings.tenant/host.manage + `<Can>` · en/tr ✅ | SettingsIT 4 · settings FE 5 · smoke: defaultValue canlı | **Closed** |
 
-> **KAPANIŞ:** Kullanıcının tanımladığı **ilk vertical slice (Users + Roles/Permissions + OU + Notifications)**
-> beş sütunda da tam ve uçtan uca kanıtlı → **KAPANDI**. Backend paritesi tüm Faz2 modüllerinde tam;
-> Impersonation/Audit/Settings için React ekranları **slice C** kapsamına ertelendi (kapsam kilidi: ilk slice).
+Backend-servis modülleri (frontend ekranı gerektirmeyen): Localization (i18n altyapı FE'de aktif; dil-CRUD UI ileride),
+Email (welcome/confirm/forgot/reset — LocalizationIT 2, EmailDispatchIT 2), Şifre politikası (PasswordPolicyIT 4) — **Backend done**.
+
+> **KAPANIŞ:** İlk vertical slice + Slice C ile **tüm Faz 2 modülleri** (Users/Roles/OU/Notifications +
+> Impersonation/Audit/Settings) beş sütunda tam ve uçtan uca kanıtlı → **KAPANDI**. Faz dışı (SaaS F5,
+> veri migration F6, chat/realtime) kapsam dışında.

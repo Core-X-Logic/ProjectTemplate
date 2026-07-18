@@ -91,3 +91,16 @@ Keep a Changelog formatı. Tarihler mutlak (proje takvimi: 2026-07-17'de başlad
   OU→notifications→**tenant-escalation 403** = **9/9 PASS**.
 - **İlk vertical slice KAPANDI:** Users + Roles/Permissions + OU + Notifications — 5 sütun tam, uçtan uca kanıtlı.
 - Impersonation/Audit/Settings React ekranları slice C'ye ertelendi (kapsam kilidi). Faz 2 backend paritesi tam (52 test).
+
+### Faz 2 Slice C — Impersonation + Audit + Settings UI (2026-07-18) ✅ KAPANDI
+- 3 UI alanı uçtan uca: Impersonation (banner + users satır aksiyonu + auth-provider token swap + act-claim decode +
+  cascade-block + back-to-impersonator); Audit (logs filtre/sıralama/sayfa/xlsx export + entity-history property diff);
+  Settings (host/tenant tab + rhf batch update + any-permission guard + defaultValue ipucu).
+- Backend: SettingDto.defaultValue eklendi (**53 test**). Frontend: **68 test** (44+24), build yeşil, tsc/eslint temiz.
+- İnceleme 4 minör (kritik/yüksek 0) → hepsi kapatıldı: defaultValue backend, settings any-permission route/menu,
+  impersonate DropdownMenuItem a11y, kullanılmayan i18n render.
+- Typed client regen (defaultValue). **Uçtan uca smoke (canlı):** audit 9 + entity-changes 5 + settings defaultValue +
+  impersonate→authenticate→cascade 403→back = tümü PASS.
+- **Tüm Faz 2 modülleri KAPANDI** (Users/Roles/OU/Notifications + Impersonation/Audit/Settings). Yeni riskler: R-24
+  (soft-delete unique username, düşük), R-25 (impersonate cascade UI-only, backend authoritative, düşük).
+- Faz dışı: SaaS (F5), veri migration (F6), chat/realtime — kapsam dışı.

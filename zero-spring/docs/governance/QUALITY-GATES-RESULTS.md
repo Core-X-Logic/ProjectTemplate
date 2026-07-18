@@ -109,4 +109,19 @@ styles), auth/tenant/i18n provider zinciri, typed `api/client` (401 refresh sing
 
 **İlk vertical slice quality-gate: GEÇTİ.** Backend 52 test + frontend 44 test + uçtan uca smoke, 0 kritik/yüksek.
 
+## Faz 2 Slice C — Impersonation + Audit + Settings — 2026-07-18 ✅ (Lead doğruladı)
+
+| Kapı | Eşik | Sonuç | Durum |
+|---|---|---|---|
+| Backend verify | yeşil | **53 test** (+SettingDto.defaultValue SettingsIT), 0 fail | ✅ |
+| Frontend build | BUILD SUCCESS | built (3021 modül, dist) | ✅ |
+| Frontend test (Lead) | yeşil | **68/68 PASS** (14 dosya; +24 slice C: impersonation 7, audit 9, settings 5, require-auth any-perm) | ✅ |
+| Typed client senkron | gen:api | 42 path + SettingDto.defaultValue mevcut | ✅ |
+| Güvenlik | kritik/yüksek 0 | 0 (token swap tokenStore, act-decode güvenli, cascade UI+backend, host double-lock, visible-to-client OK) | ✅ |
+| **Uçtan uca smoke** (canlı backend) | 3 modül akış | audit(9) + entity-changes(5) + settings-defaultValue(6) + impersonate→authenticate→**cascade 403**→back-to-impersonator | ✅ |
+| İnceleme minörleri (#1-#4) | kapalı | defaultValue backend + settings any-perm + impersonate a11y + i18n temizlik | ✅ |
+| Modül kapama (5 sütun) | tam | Impersonation/Audit/Settings **Closed** | ✅ |
+
+**Slice C quality-gate: GEÇTİ.** Backend 53 + frontend 68 + uçtan uca smoke; 0 kritik/yüksek; 3 modül kapandı.
+
 > Kural: bu tablo "yeşil" göstermeden hiçbir Faz 2 kalemi "Done" sayılmaz.

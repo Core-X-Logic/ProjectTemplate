@@ -27,7 +27,9 @@ Kaynak analiz: ANALYSIS §3.1. `PHASE-2-REPORT.md` §F ile birebir hizalı (2026
 | R-20 | change-password şifre karmaşıklık politikasını atlıyor (`aaaaaaaa` kabul); reset ile tutarsız | H | M | **Yüksek** | **Closed** | ProfileService+AccountService tek yol: PasswordPolicyValidator+history; PasswordPolicyIT kanıtlı | F2 ✅ |
 | R-21 | Frontend starter config deprecation'ları (tsconfig baseUrl, import.meta.env tipi) | M | L | Düşük | **Closed** | vite-env.d.ts + tsconfig düzeltmeleri; `tsc -b` strict + build yeşil. (Vendor CSS `@media (max-width: var(...))` uyarısı kozmetik, build'i kırmıyor — R-23'e taşındı) | F2 ✅ |
 | R-22 | `mvnw` (POSIX) CRLF nedeniyle bash'te kırık — ubuntu CI'da build patlar | H | M | **Yüksek** | Mitigating | mvnw LF'e çevrildi (LF-only doğrulandı) + `.gitattributes` (eol=lf mvnw/*.sh, crlf *.cmd); repo autocrlf=true idi. **Commit + CI koşusu doğrulaması bekliyor** | F2 kapanış (commit) |
-| R-23 | Düşük artıklar: `read-all` endpoint'i testsiz; user_notifications.tenant_id dekoratif (user_id izolasyonu); vendor CSS media-query uyarısı | L | L | Düşük | Open | markAllRead testi + tenant_id semantiği + CSS düzeltme slice C/F3 | F2/F3 |
+| R-23 | Düşük artıklar: `read-all` endpoint'i testsiz; user_notifications.tenant_id dekoratif (user_id izolasyonu); vendor CSS media-query uyarısı | L | L | Düşük | Open | markAllRead testi + tenant_id semantiği + CSS düzeltme F3 | F3 |
+| R-24 | Soft-delete + unique(tenant_id, username): silinen kullanıcının username'i tekrar kullanılamıyor (409); ABP'de silinen username yeniden kullanılabilir | L | L | Düşük | Open | Unique index'e `deleted` dahil et (partial unique where deleted=false) veya silmede username'i mühürle; parity kararı | F3 |
+| R-25 | Impersonation cascade yasağı frontend'te yalnız UI-block (component); auth.impersonate() programatik çağrı client'ta re-check etmiyor — backend cascade kuralı otoriter (403 canlı kanıtlı) | L | M | Düşük | Mitigating | Backend authoritative (ImpersonationService + smoke 403); istenirse auth.impersonate guard eklenir | F3 (koşullu) |
 
 ## Mitigasyon takvimi (özet)
 
