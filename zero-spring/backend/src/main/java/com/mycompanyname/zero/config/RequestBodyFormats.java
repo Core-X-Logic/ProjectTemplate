@@ -40,7 +40,14 @@ import java.util.Set;
  * <p><b>Resolved lazily</b> via {@link ObjectProvider}: the filter is built by the security
  * configuration, and forcing {@code RequestMappingHandlerAdapter} into existence that early would
  * couple two unrelated corners of the context startup order for no benefit. The answer cannot change
- * after startup, so it is computed once, on the first throttled request, and memoised.
+ * after startup, so it is computed once and memoised.
+ *
+ * <p>Resolution is triggered by {@link RateLimitFilter#reportBodyFormatInventory()} on
+ * {@code ApplicationReadyEvent} — late enough for the adapter to exist, early enough to precede
+ * traffic. It used to be triggered by whichever request first needed it, which made the inventory
+ * below a claim rather than a fact: measured, the gap line appeared about two minutes after boot, on
+ * the first refused content type, and on a deployment that never received a malformed request it
+ * would never have appeared at all.
  */
 @Slf4j
 final class RequestBodyFormats {
@@ -99,8 +106,11 @@ final class RequestBodyFormats {
 
     /**
      * The gap, in full: formats this application will deserialize but the limiter cannot account
-     * for. Every one of them is refused on a throttled path. Reported at startup so the gap is a
-     * visible operational fact rather than something discovered by an adversary.
+     * for. Every one of them is refused on a throttled path.
+     *
+     * <p>Called once at startup by {@link RateLimitFilter#reportBodyFormatInventory()} — partly for
+     * the answer, but mostly because resolving is what writes the inventory to the log. That is what
+     * makes the gap a visible operational fact rather than something an adversary finds first.
      */
     Set<MediaType> unaccountableReadableFormats() {
         Set<MediaType> gap = new LinkedHashSet<>(readable());

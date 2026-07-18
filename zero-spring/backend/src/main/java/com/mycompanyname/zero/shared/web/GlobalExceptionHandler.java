@@ -10,21 +10,32 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.web.ErrorResponse;
 import org.springframework.web.HttpMediaTypeNotAcceptableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MultipartException;
 
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    /**
+     * The fragment {@code HttpHeaders.setContentType} puts in its {@code IllegalArgumentException}
+     * when handed a wildcard media type. See {@link #handleIllegalArgument} for why the match is on
+     * the message rather than on the exception type.
+     */
+    private static final String WILDCARD_CONTENT_TYPE_REJECTION = "Content-Type cannot contain wildcard";
 
     @ExceptionHandler(DomainException.class)
     public ProblemDetail handleDomainException(DomainException ex) {
@@ -128,6 +139,104 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
+    /**
+     * D2. The wildcard {@code Content-Type} case, and nothing else.
+     *
+     * <p><code>Content-Type: &#42;/&#42;</code> parses as a valid media type but
+     * {@code HttpHeaders.setContentType} refuses it, and {@code ServletServerHttpRequest.getHeaders()}
+     * calls that while the {@code @RequestBody} argument is being resolved — before the handler runs.
+     * So {@code HttpMediaTypeNotSupportedException} is never thrown, {@link
+     * #handleMediaTypeNotSupported} never sees it, and the {@code Exception} fallback answered 500
+     * with a full stack trace at {@code ERROR}: measured at ~189 log lines per request, driven by
+     * anyone, with no credentials, as fast as they care to ask.
+     *
+     * <p>{@code RateLimitFilter} refuses this at the edge too, but only on the five paths in
+     * {@code zero.ratelimit.paths}. The fault is in the argument resolver, which every
+     * {@code @RequestBody} endpoint goes through — live with a valid token, {@code POST /api/users}
+     * answered 500 twelve times out of twelve, unthrottled. This handler is what closes the rest.
+     *
+     * <p><b>Why it matches on the message.</b> A plain
+     * {@code @ExceptionHandler(IllegalArgumentException.class)} returning 415 would be a worse bug
+     * than the one it fixes: {@code IllegalArgumentException} is what a service throws when an
+     * invariant fails, so a blanket handler would quietly relabel real internal faults from every
+     * controller in the application as client errors — 415 to the caller, no {@code ERROR}, no stack
+     * trace to debug from. Everything that is not this exact case is therefore handed straight back
+     * to {@link #handleUnexpected} with its behaviour unchanged.
+     *
+     * <p>The message match is the narrowest signal available, and it fails <em>safe</em>: should a
+     * future Spring release reword it, the wildcard case reverts to the 500 it produces today rather
+     * than opening anything. {@code GlobalExceptionHandlerIllegalArgumentTest} builds its input by
+     * provoking the real {@code HttpHeaders.setContentType}, so that rewording breaks the build
+     * instead of going unnoticed.
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ProblemDetail handleIllegalArgument(IllegalArgumentException ex) throws Exception {
+        String message = ex.getMessage();
+        if (message == null || !message.contains(WILDCARD_CONTENT_TYPE_REJECTION)) {
+            return handleUnexpected(ex);
+        }
+        log.warn("Rejected a wildcard Content-Type before argument resolution: {}", message);
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+                "The request Content-Type is not supported by this endpoint");
+        problem.setTitle(ErrorCode.UNSUPPORTED_MEDIA_TYPE.name());
+        problem.setProperty("code", ErrorCode.UNSUPPORTED_MEDIA_TYPE.name());
+        return problem;
+    }
+
+    /**
+     * D3/T1, and the one framework exception the {@link ErrorResponse} rule in {@link
+     * #handleUnexpected} cannot reach: {@code MultipartException} extends {@code
+     * NestedRuntimeException} and carries no status of its own.
+     *
+     * <p>It is also the cheapest of the three triggers to fire. {@code
+     * StandardServletMultipartResolver} calls a request multipart on the {@code Content-Type} prefix
+     * alone, and {@code DispatcherServlet.checkMultipart} runs it <em>before</em> handler mapping — so
+     * a header with no {@code boundary} crashes on paths that have nothing to do with uploads and
+     * never reaches a controller that could have rejected it. Live: {@code GET /actuator/health} with
+     * {@code Content-Type: multipart/form-data} answered 500 with a 181-line stack trace, an empty
+     * body, and no credentials. That path must stay {@code permitAll} for the kubelet probe and is
+     * absent from {@code zero.ratelimit.paths}, so nothing throttles it: 30 serial requests wrote
+     * 629 KB of log in 1.3 s, about 21 KB apiece, which is ~42 GB/day from one client.
+     *
+     * <p>{@code MaxUploadSizeExceededException} is a subclass and <em>is</em> an {@code
+     * ErrorResponse}, meaning 413 rather than 400 — a size limit and a malformed header are different
+     * facts about the request — so it is handed back to the general rule instead of being flattened
+     * into this one.
+     */
+    @ExceptionHandler(MultipartException.class)
+    public ProblemDetail handleMultipart(MultipartException ex) throws Exception {
+        if (ex instanceof ErrorResponse) {
+            return handleUnexpected(ex);
+        }
+        log.warn("Rejected a malformed multipart request: {}", ex.getMessage());
+        return problem(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION,
+                "The request could not be processed as submitted");
+    }
+
+    /**
+     * D3, third trigger — found by driving the fix for the first two rather than reported.
+     * {@code GET /api/users/not-a-number} answered {@code 500 {"code":"INTERNAL"}}: a path variable
+     * that will not convert to {@code Long} is a client mistake, and every authenticated user of every
+     * tenant can produce one on any {@code @PathVariable}/{@code @RequestParam} endpoint in the
+     * application.
+     *
+     * <p>Needs naming explicitly because {@code MethodArgumentTypeMismatchException} extends {@code
+     * TypeMismatchException} and is not an {@code ErrorResponse}. Handling {@code
+     * TypeMismatchException} wholesale would be wrong in the same way a blanket {@code
+     * IllegalArgumentException} handler is (see {@link #handleIllegalArgument}): its other subclass,
+     * {@code ConversionNotSupportedException}, means this application is misconfigured and has to stay
+     * a 500 with a trace.
+     *
+     * <p>The rejected value is logged but deliberately kept out of the response body — it is client
+     * input, the client already has it, and reflecting it buys nothing.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ProblemDetail handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        log.warn("Rejected an unconvertible value for '{}': {}", ex.getName(), ex.getValue());
+        return problem(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION,
+                "A request parameter has a value of the wrong type");
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ProblemDetail handleDataIntegrityViolation(DataIntegrityViolationException ex) {
         log.warn("Data integrity violation: {}", ex.getMostSpecificCause().getMessage());
@@ -142,18 +251,91 @@ public class GlobalExceptionHandler {
      * Last-resort fallback: unexpected exceptions become a generic 500 ProblemDetail without
      * leaking internals. Security exceptions are rethrown so the Spring Security filter chain
      * keeps producing the proper 401/403 responses.
+     *
+     * <p><b>D3 — why this method also asks about {@link ErrorResponse}.</b> C3 and D2 each closed a
+     * framework exception that had fallen through to here and become a 500 with ~180 frames at
+     * {@code ERROR}: first 405, then 415, then 406, then the wildcard {@code Content-Type}. Each fix
+     * was correct and each one left the next one open, because the defect was never any particular
+     * exception — it was that this fallback sits behind <em>all</em> of Spring's MVC exceptions, which
+     * already know their own status and do not need a stack trace. Two more triggers duly turned up
+     * ({@code MultipartException}, {@code NoResourceFoundException}), and enumerating those two would
+     * have left the third ({@code MethodArgumentTypeMismatchException}) and every future one open.
+     *
+     * <p>So the rule is stated once instead: Spring marks every such exception with {@code
+     * ErrorResponse}, so ask the exception for its status rather than assuming 500. A plain 404 is
+     * answered as a 404 with one {@code WARN} line, and this fallback keeps only what genuinely
+     * cannot answer the question.
+     *
+     * <p><b>The 4xx condition is load-bearing.</b> An {@code ErrorResponse} carrying a 5xx is a server
+     * fault however well it describes itself — {@code MissingPathVariableException} means a mapping
+     * and a method signature disagree, which is a bug here, not in the caller. Downgrading those to a
+     * quiet WARN would use this fix to hide exactly the faults it exists to keep visible.
+     *
+     * <p>The security rethrow stays first. Neither Spring Security exception implements {@code
+     * ErrorResponse}, so the ordering is belt-and-braces rather than strictly required — but a future
+     * release making {@code AccessDeniedException} an {@code ErrorResponse} would otherwise silently
+     * take 403 reporting away from the filter chain, and that is not a failure worth risking on a
+     * guess about someone else's roadmap.
      */
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleUnexpected(Exception ex) throws Exception {
         if (ex instanceof AccessDeniedException || ex instanceof AuthenticationException) {
             throw ex;
         }
+        if (ex instanceof ErrorResponse errorResponse) {
+            HttpStatusCode statusCode = errorResponse.getStatusCode();
+            HttpStatus status = HttpStatus.resolve(statusCode.value());
+            if (status != null && status.is4xxClientError()) {
+                log.warn("Rejected a request with {} ({}): {}",
+                        status.value(), ex.getClass().getSimpleName(), ex.getMessage());
+                return problem(status, codeFor(status), detailFor(status));
+            }
+        }
         log.error("Unhandled exception", ex);
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR,
+        return problem(HttpStatus.INTERNAL_SERVER_ERROR, ErrorCode.INTERNAL,
                 "An unexpected error occurred");
-        problem.setTitle(ErrorCode.INTERNAL.name());
-        problem.setProperty("code", ErrorCode.INTERNAL.name());
+    }
+
+    private ProblemDetail problem(HttpStatus status, ErrorCode code, String detail) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
+        problem.setTitle(code.name());
+        problem.setProperty("code", code.name());
         return problem;
+    }
+
+    /**
+     * The inverse of {@link #mapStatus}, for exceptions that arrive already knowing their status.
+     * An unrecognised 4xx is reported as {@code VALIDATION} rather than {@code INTERNAL}: the caller
+     * has been told it is their request at fault, and the body must not contradict the status line.
+     */
+    private static ErrorCode codeFor(HttpStatus status) {
+        return switch (status) {
+            case NOT_FOUND -> ErrorCode.NOT_FOUND;
+            case UNAUTHORIZED -> ErrorCode.UNAUTHORIZED;
+            case FORBIDDEN -> ErrorCode.FORBIDDEN;
+            case CONFLICT -> ErrorCode.CONFLICT;
+            case METHOD_NOT_ALLOWED -> ErrorCode.METHOD_NOT_ALLOWED;
+            case NOT_ACCEPTABLE -> ErrorCode.NOT_ACCEPTABLE;
+            case UNSUPPORTED_MEDIA_TYPE -> ErrorCode.UNSUPPORTED_MEDIA_TYPE;
+            case PAYLOAD_TOO_LARGE -> ErrorCode.PAYLOAD_TOO_LARGE;
+            case TOO_MANY_REQUESTS -> ErrorCode.TOO_MANY_REQUESTS;
+            default -> ErrorCode.VALIDATION;
+        };
+    }
+
+    /**
+     * Fixed text per status. Spring's own {@code ProblemDetail} detail echoes the offending path or
+     * parameter back to the caller; this does not, for the reason given on {@link
+     * #handleMediaTypeNotSupported} — the client already knows what it sent, and the log is where
+     * that belongs.
+     */
+    private static String detailFor(HttpStatus status) {
+        return switch (status) {
+            case NOT_FOUND -> "The requested resource does not exist";
+            case BAD_REQUEST -> "The request could not be processed as submitted";
+            case PAYLOAD_TOO_LARGE -> "The request payload is larger than this endpoint accepts";
+            default -> status.getReasonPhrase();
+        };
     }
 
     private HttpStatus mapStatus(ErrorCode code) {

@@ -11,13 +11,18 @@ import com.mycompanyname.zero.shared.web.GlobalExceptionHandler;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter;
 
 import java.io.IOException;
@@ -355,6 +360,109 @@ class RateLimitMediaTypeFailClosedIT extends AbstractIntegrationIT {
                         + "the faults that are real, and on prod's JSON logging it is a cheap way to "
                         + "spend the log budget")
                 .noneMatch(event -> event.getLevel() == Level.ERROR);
+    }
+
+    /**
+     * D2, the residue — and the reason the four tests above stayed green through it.
+     *
+     * <p>Every wildcard case previously exercised here sent a <em>body</em>. The filter's media-type
+     * check sat after an early return taken when {@code body.length == 0}, so an empty-bodied request
+     * skipped the check entirely and reached the argument resolver, where
+     * {@code HttpHeaders.setContentType} threw {@code IllegalArgumentException} exactly as it does
+     * with a body. Live on dev at capacity 3: {@code POST /api/auth/login} with
+     * <code>Content-Type: &#42;/&#42;</code> and {@code Content-Length: 0} answered 500 INTERNAL,
+     * five times out of five, each one a full stack trace at ERROR — about 189 log lines per request.
+     * Anonymous, unauthenticated, and unbounded by anything but the IP allowance.
+     *
+     * <p>An empty body is not a reason to skip the check. It is the framework's business whether a
+     * missing body is a 400, but a {@code Content-Type} naming no readable format is this filter's
+     * business either way — the header is what crashes the resolver, not the bytes after it.
+     */
+    @Test
+    void anEmptyBodyWithAWildcardContentTypeIsRefusedWithoutWritingAStackTrace() {
+        int address = 0;
+        for (String contentType : List.of("*/*", "application/*", "application/*+json")) {
+            HttpResponse<String> response = post(
+                    LOGIN_PATH, contentType, "198.51.111." + (++address), "");
+
+            assertThat(response.statusCode())
+                    .as("%s with an empty body is the same client mistake as %s with a body — the "
+                            + "header is what the argument resolver cannot honour", contentType, contentType)
+                    .isEqualTo(HttpStatus.UNSUPPORTED_MEDIA_TYPE.value());
+        }
+
+        assertThat(captured.list)
+                .as("500 with a stack trace per request, driven by an anonymous caller with an empty "
+                        + "body, is the cheapest log-flood primitive in the application")
+                .noneMatch(event -> event.getLevel() == Level.ERROR);
+    }
+
+    /**
+     * The same shape across every throttled path, because the early return was in the filter rather
+     * than in any one endpoint — all five were confirmed 5/5 at 500 on dev.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            LOGIN_PATH, "/api/auth/refresh", FORGOT_PATH, "/api/account/reset-password",
+            CONFIRM_EMAIL_PATH})
+    void everyAnonymousThrottledEndpointRefusesAnEmptyWildcardBody(String path) {
+        HttpResponse<String> response = post(path, "*/*", "198.51.112.1", "");
+
+        assertThat(response.statusCode())
+                .as("%s: an empty-bodied wildcard request must be refused, not turned into a 500", path)
+                .isEqualTo(HttpStatus.UNSUPPORTED_MEDIA_TYPE.value());
+        assertThat(captured.list).noneMatch(event -> event.getLevel() == Level.ERROR);
+    }
+
+    /**
+     * The control that pins down the mechanism rather than the symptom, and a regression guard on the
+     * one wildcard spelling that always answered 415.
+     *
+     * <p>{@code IllegalArgumentException} is not thrown because the type is a wildcard; it is thrown
+     * because Spring tries to <em>add</em> a charset to a wildcard type. Supply the charset and
+     * {@code setContentType} is never reached, so the request lands on
+     * {@code HttpMediaTypeNotSupportedException} and the existing 415 handler answers it. If this
+     * ever diverges from the bare spellings above, the fix has been made at the wrong layer.
+     */
+    @Test
+    void aWildcardWithAnExplicitCharsetIsRefusedWithOrWithoutABody() {
+        HttpResponse<String> empty = post(LOGIN_PATH, "*/*;charset=utf-8", "198.51.113.1", "");
+        HttpResponse<String> full = post(
+                LOGIN_PATH, "*/*;charset=utf-8", "198.51.113.2", loginBody("charset-probe"));
+
+        assertThat(empty.statusCode())
+                .as("this spelling answered 415 before the fix and must continue to")
+                .isEqualTo(HttpStatus.UNSUPPORTED_MEDIA_TYPE.value());
+        assertThat(full.statusCode()).isEqualTo(HttpStatus.UNSUPPORTED_MEDIA_TYPE.value());
+        assertThat(full.body()).doesNotContain("LOGIN_FAILED");
+        assertThat(captured.list).noneMatch(event -> event.getLevel() == Level.ERROR);
+    }
+
+    /**
+     * The boundary the fix must not cross. Moving the media-type check ahead of the empty-body return
+     * makes it easy to refuse requests that carry no {@code Content-Type} at all — and the commonest
+     * of those is a wrong HTTP verb, which has to keep answering 405 with {@code Allow}. "No
+     * Content-Type" is the framework's to report; "a Content-Type naming no readable format" is the
+     * filter's. Over-refusing here would be a self-inflicted regression on C3's fix that looked like
+     * a passing security test.
+     */
+    @Test
+    void aWrongMethodWithNoContentTypeStillAnswers405() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(TENANT_HEADER, "default");
+
+        for (HttpMethod method : List.of(HttpMethod.PUT, HttpMethod.DELETE)) {
+            ResponseEntity<String> response = restTemplate.exchange(
+                    LOGIN_PATH, method, new HttpEntity<>(headers), String.class);
+
+            assertThat(response.getStatusCode())
+                    .as("%s on a POST-only endpoint carries no Content-Type and is a 405, not a 415",
+                            method)
+                    .isEqualTo(HttpStatus.METHOD_NOT_ALLOWED);
+            assertThat(response.getHeaders().getFirst(HttpHeaders.ALLOW))
+                    .as("a 405 still has to say what is allowed instead")
+                    .contains("POST");
+        }
     }
 
     /** An outright malformed type takes the same road: refused here, never handed to the framework. */

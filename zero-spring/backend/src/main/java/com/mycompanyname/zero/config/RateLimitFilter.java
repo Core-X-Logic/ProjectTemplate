@@ -12,6 +12,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.InvalidMediaTypeException;
@@ -188,20 +190,43 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return;
         }
 
-        // No body, nothing to account for. A wrong method or a missing body is the framework's to
-        // report, and refusing here would turn an honest 405 into a misleading 415.
-        if (body.length == 0) {
-            filterChain.doFilter(new CachedBodyHttpServletRequest(request, body), response);
+        // D1/D2. A media type this filter cannot parse means an identity it cannot read, and an
+        // identity it cannot read must not reach a handler — a fail-CLOSED rule rather than an
+        // allowlist that has to keep pace with the classpath.
+        //
+        // D2-residue. This check used to sit *after* the empty-body early return below, which meant a
+        // request with no body was never checked at all. That was not a gap in coverage so much as a
+        // hole straight through the control: `Content-Type: */*` with `Content-Length: 0` skipped the
+        // filter entirely and reached the argument resolver, where HttpHeaders.setContentType throws
+        // IllegalArgumentException before any handler runs — 500 and a full stack trace, ~189 log
+        // lines, per anonymous request. Live on dev at capacity 3: five of five on every one of the
+        // five throttled paths. The header is what the resolver cannot honour; the bytes after it
+        // were never the point, so emptiness is no reason to skip the check.
+        String rawContentType = request.getContentType();
+        boolean labelled = rawContentType != null && !rawContentType.isBlank();
+        MediaType mediaType = concreteContentType(request);
+        boolean unaccountable = mediaType == null || !RequestBodyFormats.isAccountable(mediaType);
+
+        // Two distinct conditions, deliberately not collapsed into one:
+        //
+        //   labelled && unaccountable  — a Content-Type that names no format this filter can read.
+        //                                Refused whether or not a body follows it.
+        //   !labelled && body present  — bytes with no label at all, which is the D1 case: an
+        //                                identity that cannot be established.
+        //
+        // What is left out is the case that must NOT be refused: no Content-Type and no body. That is
+        // overwhelmingly a wrong HTTP verb, and it has to keep reaching the framework so it gets the
+        // 405 (with Allow) that C3 was fixed to produce. Refusing it would turn an honest 405 into a
+        // misleading 415 — the same over-correction, in the opposite direction.
+        if (unaccountable && (labelled || body.length > 0)) {
+            rejectUnaccountableBody(response, path, client, rawContentType, mediaType);
             return;
         }
 
-        // D1/D2. From here the request has a body, so it has an identity this filter is responsible
-        // for counting. A media type it cannot parse means an identity it cannot read, and an identity
-        // it cannot read must not reach a handler — that is the whole of the fix, and it is a
-        // fail-CLOSED rule rather than an allowlist that has to keep pace with the classpath.
-        MediaType mediaType = concreteContentType(request);
-        if (mediaType == null || !RequestBodyFormats.isAccountable(mediaType)) {
-            rejectUnaccountableBody(response, path, client, request.getContentType(), mediaType);
+        // Nothing to account for. A missing body on a well-labelled request is the framework's to
+        // report, not this filter's.
+        if (body.length == 0) {
+            filterChain.doFilter(new CachedBodyHttpServletRequest(request, body), response);
             return;
         }
 
@@ -215,6 +240,32 @@ public class RateLimitFilter extends OncePerRequestFilter {
             }
         }
         filterChain.doFilter(new CachedBodyHttpServletRequest(request, body), response);
+    }
+
+    /**
+     * Makes {@link RequestBodyFormats}'s startup report an actual startup report.
+     *
+     * <p>The inventory resolves itself lazily, and its javadoc claimed it was "reported at startup" —
+     * but the only thing that forced resolution was the first request that needed it. Observed: the
+     * gap line appeared roughly two minutes after boot, on the first refused content type. A
+     * deployment that never receives a malformed request never logs it at all, so the one operational
+     * signal saying "this application deserializes a format the limiter cannot count" was visible
+     * only where somebody was already probing for it.
+     *
+     * <p>Resolution stays lazy by design (the security chain is built before the MVC adapter exists);
+     * this simply asks for the answer once the context is up, which is late enough for the adapter to
+     * be available and early enough to precede any traffic. Skipped when the limiter is disabled,
+     * because the report describes refusals that would not then happen.
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    public void reportBodyFormatInventory() {
+        if (!properties.isEnabled()) {
+            log.info("Rate limiter is disabled; no request body formats are refused and no inventory "
+                    + "is reported.");
+            return;
+        }
+        // Resolving is what logs the inventory — and the D1 gap, at WARN, when there is one.
+        bodyFormats.unaccountableReadableFormats();
     }
 
     /** Clears every bucket. Test-only seam so one scenario cannot starve the next. */
@@ -271,10 +322,18 @@ public class RateLimitFilter extends OncePerRequestFilter {
      * {@code ServletServerHttpRequest.getHeaders()} calls it while the {@code @RequestBody} argument
      * is being resolved — before the handler runs, so {@code HttpMediaTypeNotSupportedException} is
      * never thrown, the 415 handler never sees it, and the {@code Exception} fallback answers 500
-     * with a full stack trace at ERROR. Confirmed on dev and prod. Catching it here rather than
-     * adding a broad {@code @ExceptionHandler(IllegalArgumentException)} keeps the fix to the one
-     * request shape that causes it: a blanket handler would also swallow genuine internal faults
-     * from every controller in the application and report them as client errors.
+     * with a full stack trace at ERROR. Confirmed on dev and prod.
+     *
+     * <p><b>This is half the fix, and the smaller half.</b> Catching it here covers the throttled
+     * paths only, and the crash belongs to the argument resolver, not to them: measured live with a
+     * valid token, {@code POST /api/users} answered 500 twelve times out of twelve with no throttle
+     * bounding the loop. The other half is a deliberately narrow handler in
+     * {@code GlobalExceptionHandler}, which catches the same {@code IllegalArgumentException} by its
+     * message and covers every {@code @RequestBody} endpoint in the application. Narrow because a
+     * blanket {@code @ExceptionHandler(IllegalArgumentException)} would relabel genuine internal
+     * faults from every controller as client errors — which is why this filter-side check is worth
+     * keeping even with the handler in place: it stops the wildcard request at the edge, on a path
+     * where an anonymous caller can drive it.
      *
      * <p>Deliberately does not consult {@code Content-Length}: a client may stream the body with
      * chunked transfer encoding, in which case the length is -1 and a length-based check would

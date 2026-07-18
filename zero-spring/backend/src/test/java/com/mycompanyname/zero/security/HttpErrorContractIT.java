@@ -216,6 +216,53 @@ class HttpErrorContractIT extends AbstractIntegrationIT {
         assertThat(response.body()).doesNotContain("LOGIN_FAILED");
     }
 
+    /**
+     * D2, at its real scope. The wildcard {@code Content-Type} crash was diagnosed on the login
+     * endpoints and fixed inside {@code RateLimitFilter} — but the crash is not a property of those
+     * endpoints. It happens in {@code AbstractMessageConverterMethodArgumentResolver}, which every
+     * {@code @RequestBody} endpoint in the application goes through, and the filter runs on exactly
+     * the five paths in {@code zero.ratelimit.paths}.
+     *
+     * <p>Live before the fix, with a valid admin token: {@code POST /api/users} with
+     * <code>Content-Type: &#42;/&#42;</code> answered 500 twelve times out of twelve, one stack trace
+     * apiece, with no throttle bounding the loop — the filter never sees this path. Fixing only the
+     * filter closes one quadrant of four (throttled path, non-empty body) and leaves the other three
+     * open, which is why the second half of the fix lives in {@link GlobalExceptionHandler}.
+     *
+     * <p>Authenticated deliberately: an authenticated log-flood is a smaller threat than an anonymous
+     * one, but it is still a 500 for something that is plainly a client mistake, and every tenant
+     * user can drive it.
+     */
+    @Test
+    void aWildcardContentTypeOnAnUnthrottledBodyEndpointAnswers415WithoutAStackTrace() throws Exception {
+        String token = accessToken("default", SEED_ADMIN_USERNAME, SEED_ADMIN_PASSWORD);
+
+        for (String contentType : List.of("*/*", "application/*")) {
+            HttpResponse<String> response = HttpClient.newHttpClient().send(
+                    HttpRequest.newBuilder()
+                            .uri(URI.create("http://localhost:" + port + "/api/users"))
+                            .header(TENANT_HEADER, "default")
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                            .header(HttpHeaders.CONTENT_TYPE, contentType)
+                            .POST(HttpRequest.BodyPublishers.ofString(
+                                    "{\"userName\":\"wildcard-probe\",\"emailAddress\":"
+                                            + "\"wildcard-probe@example.com\",\"password\":\"Aa1!aaaa\"}"))
+                            .build(),
+                    HttpResponse.BodyHandlers.ofString());
+
+            assertThat(response.statusCode())
+                    .as("%s on /api/users is the same client mistake as on /api/auth/login, and this "
+                            + "path is outside the rate limiter entirely — got %s",
+                            contentType, response.body())
+                    .isEqualTo(HttpStatus.UNSUPPORTED_MEDIA_TYPE.value());
+        }
+
+        assertThat(captured.list)
+                .as("the 500 came with a full stack trace at ERROR, once per request, on a path with "
+                        + "no throttle in front of it")
+                .noneMatch(event -> event.getLevel() == Level.ERROR);
+    }
+
     private HttpHeaders jsonHeaders() {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
