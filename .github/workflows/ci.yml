@@ -11,9 +11,27 @@ on:
 #   build → backend / frontend (test) → typed-client-drift → migration-drift → live-smoke
 #         → security-checks → release
 #
-# Job isimleri `backend` ve `frontend` KASITLI olarak korundu: branch protection'daki
-# "required status checks" bu isimlere referans verir. Yeniden adlandırmak, korumayı
-# sessizce devre dışı bırakır (check "pending" kalır ya da hiç raporlanmaz).
+# ⚠️ BU DOSYANIN NEYİ GARANTİ ETMEDİĞİ — okumadan "gate" demeyin.
+#
+# Bu workflow uzun süre `zero-spring/.github/workflows/ci.yml` konumundaydı. GitHub Actions
+# YALNIZCA repo kökündeki `.github/workflows/` dizinini okur, dolayısıyla **hiç koşmadı**:
+# `gh api .../actions/runs --jq .total_count` → 0, kayıtlı workflow → 0, Actions ise açıktı.
+# Yani "sıralı release gate" iddiası, içeriği doğru olduğu hâlde, konumu yüzünden boştu.
+#
+# İkinci ve HÂLÂ AÇIK olan sınırlama: bu repoda **branch protection kurulamıyor**.
+#   gh api repos/.../branches/main/protection → 403 "Upgrade to GitHub Pro or make this
+#   repository public"  (private repo + ücretsiz org planı; rulesets API'si de aynı 403)
+# Sonuç: kırmızı bir check hiçbir merge'i veya push'u ENGELLEMEZ. `needs:` zinciri yalnızca
+# *workflow içi* akışı sıralar — bir gate düşerse sonraki job'lar koşmaz, ama main'e push
+# yine de mümkündür. "Hata release'i bloke eder" cümlesi bu plan altında DOĞRU DEĞİLDİR;
+# blokaj şu an insan disiplinine bağlıdır. (Kayıt: RISK-REGISTER PROD-R23.)
+#
+# Job isimleri `backend` ve `frontend` yine de KASITLI olarak korunuyor: plan yükseltilip
+# required status checks açıldığında bu isimlere referans verilecek.
+#
+# `defaults.run.working-directory: zero-spring` gizli bir sözleşme kurar: **`Checkout`'tan
+# önce hiçbir `run:` adımı eklenemez**, çünkü o noktada `zero-spring` dizini henüz yoktur ve
+# adım anında ölür. Şu an sekiz job'ın sekizi de `Checkout` ile başlıyor.
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -37,6 +55,22 @@ env:
   # Yalnızca `java -jar` adımlarına verilir: `backend` job'ında maven testleri
   # kendi @ActiveProfiles'ını kullanır, oraya sızdırılmaz.
   SPRING_PROFILES_ACTIVE_RUNTIME: dev
+
+# Bu workflow repo KÖKÜNDE yaşar (GitHub Actions yalnızca kökteki
+# .github/workflows/ dizinini okur), ama projenin tamamı `zero-spring/` altında.
+# Bu default TÜM `run:` adımlarının PWD'sini zero-spring yapar.
+#
+# DİKKAT — kapsamı sınırlıdır, iki istisnayı karıştırmayın:
+#  • `uses:` action girdileri (`with: path:`, `cache-dependency-path:` …) bu
+#    default'tan ETKİLENMEZ; GITHUB_WORKSPACE'e göredir → `zero-spring/` öneki şart.
+#  • Adım seviyesindeki `working-directory:` de GITHUB_WORKSPACE'e göredir, bu
+#    default'a göre DEĞİL → orada da tam yol (`zero-spring/backend`) yazılır.
+# `run:` scriptlerinin İÇİNDEKİ göreli yollar ise PWD=zero-spring olduğu için
+# önek ALMAZ. Bir dosyayı `run:` üretip `uses:` ile yüklüyorsanız (dist/, *.log,
+# *.sarif) ikisi birlikte hareket etmelidir: üretim `dist`, yükleme `zero-spring/dist`.
+defaults:
+  run:
+    working-directory: zero-spring
 
 jobs:
   # ── GATE 1: build ────────────────────────────────────────────────────────────
@@ -64,7 +98,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: frontend/app/package-lock.json
+          cache-dependency-path: zero-spring/frontend/app/package-lock.json
 
       # Testler burada kasıtlı olarak atlanır; test çalıştırma GATE 2'nin işi.
       # Bu adım sadece "derleniyor mu + paketlenebiliyor mu" sorusunu yanıtlar.
@@ -75,13 +109,13 @@ jobs:
       # gate'i birden bu turun kodunu hiç görmemiş bir artifact üzerinde yeşile
       # boyar. Temiz checkout'ta target/ zaten yok; maliyet sıfır, garanti mutlak.
       - name: Backend package (skip tests)
-        working-directory: backend
+        working-directory: zero-spring/backend
         run: |
           chmod +x mvnw
           ./mvnw -B -ntp -DskipTests clean package
 
       - name: Frontend install + build
-        working-directory: frontend/app
+        working-directory: zero-spring/frontend/app
         run: |
           npm ci
           npm run build
@@ -92,7 +126,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: backend-jar
-          path: backend/target/zero-platform-*.jar
+          path: zero-spring/backend/target/zero-platform-*.jar
           if-no-files-found: error
           retention-days: 7
 
@@ -130,7 +164,7 @@ jobs:
           cache: maven
 
       - name: Build and verify (unit + integration, Testcontainers)
-        working-directory: backend
+        working-directory: zero-spring/backend
         run: |
           chmod +x mvnw
           ./mvnw -B -ntp clean verify
@@ -141,9 +175,9 @@ jobs:
         with:
           name: backend-test-reports
           path: |
-            backend/target/surefire-reports/
-            backend/target/failsafe-reports/
-            backend/target/site/jacoco/
+            zero-spring/backend/target/surefire-reports/
+            zero-spring/backend/target/failsafe-reports/
+            zero-spring/backend/target/site/jacoco/
           if-no-files-found: ignore
 
   # ── GATE 2b: frontend test ───────────────────────────────────────────────────
@@ -156,7 +190,7 @@ jobs:
     needs: build
     defaults:
       run:
-        working-directory: frontend/app
+        working-directory: zero-spring/frontend/app
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -166,7 +200,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: frontend/app/package-lock.json
+          cache-dependency-path: zero-spring/frontend/app/package-lock.json
 
       - name: Install
         run: npm ci
@@ -183,8 +217,8 @@ jobs:
         with:
           name: frontend-test-reports
           path: |
-            frontend/app/coverage/
-            frontend/app/test-results/
+            zero-spring/frontend/app/coverage/
+            zero-spring/frontend/app/test-results/
           if-no-files-found: ignore
 
   # ── GATE 3: typed-client-drift ───────────────────────────────────────────────
@@ -226,13 +260,13 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: frontend/app/package-lock.json
+          cache-dependency-path: zero-spring/frontend/app/package-lock.json
 
       - name: Download backend jar
         uses: actions/download-artifact@v4
         with:
           name: backend-jar
-          path: dist
+          path: zero-spring/dist
 
       # Redis GEREKMEZ: dev profilinde de spring.cache.type=simple (base'den miras)
       # ve ImpersonationTokenStore in-memory. Lettuce bağlantısı lazy olduğu için
@@ -264,13 +298,13 @@ jobs:
           exit 1
 
       - name: Install frontend deps (pinned openapi-typescript)
-        working-directory: frontend/app
+        working-directory: zero-spring/frontend/app
         run: npm ci
 
       # `npm run gen:api` ile BİREBİR aynı çağrı — generator sürümü de
       # package-lock'tan geldiği için üretim koşulları yerelle özdeş.
       - name: Regenerate typed client from live /v3/api-docs
-        working-directory: frontend/app
+        working-directory: zero-spring/frontend/app
         run: |
           set -euo pipefail
           curl -sf http://localhost:8080/v3/api-docs -o "${RUNNER_TEMP}/api-docs.json"
@@ -278,7 +312,7 @@ jobs:
             -o "${RUNNER_TEMP}/schema.generated.d.ts"
 
       - name: Fail on schema drift
-        working-directory: frontend/app
+        working-directory: zero-spring/frontend/app
         run: |
           set -euo pipefail
           if ! diff -u src/api/schema.d.ts "${RUNNER_TEMP}/schema.generated.d.ts"; then
@@ -297,8 +331,8 @@ jobs:
         with:
           name: openapi-snapshot
           path: |
-            api-docs.json
-            backend.log
+            zero-spring/api-docs.json
+            zero-spring/backend.log
           if-no-files-found: ignore
 
   # ── GATE 4: migration-drift ──────────────────────────────────────────────────
@@ -353,7 +387,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: backend-jar
-          path: dist
+          path: zero-spring/dist
 
       - name: Resolve the previous migration set
         id: baseset
@@ -459,8 +493,8 @@ jobs:
         with:
           name: migration-drift-logs
           path: |
-            migration-boot.log
-            second.log
+            zero-spring/migration-boot.log
+            zero-spring/second.log
           if-no-files-found: ignore
 
   # ── GATE 5: live-smoke ───────────────────────────────────────────────────────
@@ -501,7 +535,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: backend-jar
-          path: dist
+          path: zero-spring/dist
 
       - name: Start backend
         run: |
@@ -646,7 +680,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: live-smoke-backend-log
-          path: backend.log
+          path: zero-spring/backend.log
           if-no-files-found: ignore
 
   # ── GATE 6: security-checks ──────────────────────────────────────────────────
@@ -683,7 +717,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: frontend/app/package-lock.json
+          cache-dependency-path: zero-spring/frontend/app/package-lock.json
 
       # BLOKLAYICI: yalnızca tartışmasız gerçek bulgular.
       - name: Secret pattern scan (blocking)
@@ -694,9 +728,13 @@ jobs:
           scan() {
             local label="$1" pattern="$2"
             # .git ve lock dosyaları hariç; -I binary'leri atlar.
+            # `.` = zero-spring (defaults.run.working-directory). Kök `.github` AYRICA taranmalı:
+            # workflow dosyaları credential gömmenin klasik yeridir ve ci.yml artık repo kökünde
+            # yaşıyor, yani `.` kapsamının dışında. `Asp.NET Zero/` bilinçli olarak dışarıda
+            # (untracked vendor referansı; kök .gitignore'da).
             if grep -rInE --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=target \
                  --exclude='*.lock' --exclude='package-lock.json' \
-                 -- "${pattern}" . ; then
+                 -- "${pattern}" . "${GITHUB_WORKSPACE}/.github" ; then
               echo "::error::Secret scan hit: ${label}"
               FAILURES=$((FAILURES + 1))
             else
@@ -720,6 +758,11 @@ jobs:
             else
               echo "PASS  application-prod.yml secrets are env-referenced"
             fi
+          else
+            # `else` dalı olmadan bu kontrol, dosya taşındığında/yeniden adlandırıldığında
+            # SESSİZCE atlanır ve job yeşil kalır — bu turun konusu olan sınıfın ta kendisi.
+            echo "::error::${PROD_YML} bulunamadı; prod secret kontrolü koşamadı (yol değişmiş olabilir)"
+            FAILURES=$((FAILURES + 1))
           fi
 
           if [ "${FAILURES}" -ne 0 ]; then
@@ -729,29 +772,38 @@ jobs:
           echo "Secret pattern scan clean."
 
       # BLOKLAYICI DEĞİL (yukarıdaki gerekçe). Rapor artifact olarak yayınlanır.
+      #
+      # `${GITHUB_WORKSPACE}` mount ediliyor, `${PWD}` DEĞİL. Bu adım `defaults.run.working-directory`
+      # yüzünden `zero-spring/` içinde koşuyor ve orada `.git` yok — `.git` workspace kökünde.
+      # `detect` (yani `--no-git` olmayan mod) git geçmişini tarar, dolayısıyla `.git` içermeyen bir
+      # dizin mount edilirse gitleaks repo açamaz ve HER koşuda hata verir. Üstelik bu hata üç ayrı
+      # yerde yutuluyordu: `continue-on-error: true`, SARIF hiç üretilmediği için
+      # `if-no-files-found: ignore`, ve adımın advisory olması. Sonuç: `fetch-depth: 0`'ın maliyeti
+      # ödenip faydası hiç alınmadan **yeşil** görünen bir secret taraması. Rapor yolu da mount ile
+      # birlikte hareket etmek zorunda, yoksa upload adımı boşa bakar.
       - name: gitleaks full-history scan (advisory)
         id: gitleaks
         continue-on-error: true
         run: |
           set -uo pipefail
-          docker run --rm -v "${PWD}:/repo" -w /repo \
+          docker run --rm -v "${GITHUB_WORKSPACE}:/repo" -w /repo \
             zricethezav/gitleaks:v8.18.4 detect \
             --source=/repo --redact --exit-code=1 \
-            --report-format=sarif --report-path=/repo/gitleaks.sarif
+            --report-format=sarif --report-path=/repo/zero-spring/gitleaks.sarif
 
       - name: Upload gitleaks report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: gitleaks-report
-          path: gitleaks.sarif
+          path: zero-spring/gitleaks.sarif
           if-no-files-found: ignore
 
       # BLOKLAYICI: frontend bağımlılıkları doğrudan tarayıcıya gider; high/critical
       # bir zafiyet son kullanıcıya ulaşır. Eşik bilinçli olarak `high` — `moderate`
       # dev-only transitive paketlerde sürekli gürültü üretir.
       - name: npm audit (frontend, high+)
-        working-directory: frontend/app
+        working-directory: zero-spring/frontend/app
         run: npm audit --audit-level=high
 
   # ── RELEASE ──────────────────────────────────────────────────────────────────
@@ -772,7 +824,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: backend-jar
-          path: dist
+          path: zero-spring/dist
 
       - name: Release artifact hazır
         run: |

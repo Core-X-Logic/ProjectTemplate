@@ -225,4 +225,23 @@ Feature freeze nedeniyle değiştirilmedi; **PROD-R21** olarak kaydedildi.
 
 **F5 Slice B + hardening quality-gate: GEÇTİ.**
 
+### ⛔ Düzeltme (2026-07-19) — yukarıdaki tabloların hepsi ELLE koşuldu, CI ile değil
+
+GO verildikten sonra release adımının ilk kontrolü olarak "CI gerçekten yeşil mi?" sorulunca çıktı:
+**CI hiç koşmamıştı.** `ci.yml` `zero-spring/.github/workflows/` altındaydı; GitHub Actions yalnız
+repo kökündeki `.github/workflows/`'u okur (`actions/runs → total_count: 0`, kayıtlı workflow 0,
+Actions ise açık). Dolayısıyla:
+
+- Bu dosyadaki **her ölçüm geçerlidir** — hepsi elle `mvnw clean verify`, `npm test` ve canlı smoke ile alındı.
+- Ama hiçbiri **otomatik kapı** tarafından korunmuyordu; bir sonraki commit sessizce bozabilirdi.
+  Release gate'in var olma sebebi tam olarak buydu.
+- "CI/CD release gate" P0 kalemi bu tarihe kadar **kapalı sayılmamalıydı**. PROD-R22 olarak kayda geçti.
+
+İkinci ve **hâlâ açık** sınırlama (PROD-R23): bu repoda branch protection **kurulamıyor**
+(private repo + ücretsiz plan → `branches/main/protection` 403). Kırmızı bir check hiçbir push'u
+engellemez; `needs:` zinciri yalnız workflow *içi* akışı sıralar. "Hata release'i bloke eder"
+cümlesi bu plan altında doğru değildir.
+
+**Bu bölümün kapanışı, ilk gerçek CI koşusunun sonucuna bağlıdır — YAML'in parse olması kanıt değildir.**
+
 > Kural: bu tablo "yeşil" göstermeden hiçbir Faz 2 kalemi "Done" sayılmaz.

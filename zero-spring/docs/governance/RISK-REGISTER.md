@@ -201,6 +201,37 @@ taşıp **boş gövde** döndürüyordu (her chunked isteği sessizce boşaltan 
 - **PROD-R12:** Kapandı — CI'da `migration-drift` gate'i. *(Register bir süre "gate CI'ya eklendi"
   diyordu; **gate yoktu**. İddia doğrulanmadan kapalı yazılmıştı, bu tur gerçekten yazıldı.)*
 
+### CI bağlama turu — "kontrol var ama onu okuyan şey oraya bakmıyor" (2026-07-19)
+
+> **Bu turun bulunuş şekli kayda değer.** GO verildikten *sonra*, release adımının ilk işi olarak
+> "CI gerçekten yeşil mi?" diye sorulunca ortaya çıktı. Tek komut yetti: `gh api .../actions/runs`
+> → `total_count: 0`. Yedi tur boyunca ci.yml'in *içeriği* incelendi, *konumu* bir kez sorulmadı.
+
+| ID | Bulgu | Kanıt | Şiddet | Durum |
+|---|---|---|---|---|
+| PROD-R22 | **CI hiç koşmadı.** `ci.yml` `zero-spring/.github/workflows/` altındaydı; GitHub Actions yalnız **repo kökündeki** `.github/workflows/`'u okur. Actions repo'da açıktı (`enabled: true`) — yani kapalı olduğu için değil, dosya hiç kaydedilmediği için. Tüm release-gate zinciri (build → test → typed-client-drift → migration-drift → live-smoke → security-checks → release) inert | `actions/runs total_count=0`, `actions/workflows` boş | **Kritik (süreç)** | **Closed** — kök `.github/workflows/ci.yml`; `defaults.run.working-directory: zero-spring` + 28 yolun iki ayrı kurala göre yeniden yazımı (adım `working-directory` ve action `with:` girdileri workspace'e göre; `run:` içi göreli yollar PWD'ye göre). **Kanıt ilk gerçek koşuda tamamlanır** |
+| PROD-R23 | **Branch protection kurulamıyor** → kırmızı check hiçbir merge/push'u engellemez. `needs:` zinciri yalnız *workflow içi* akışı sıralar | `branches/main/protection` → **403 "Upgrade to GitHub Pro or make this repository public"**; `rulesets` → aynı 403; repo `private: true`, org planı ücretsiz | **Yüksek** | **Open — kodla kapatılamaz.** Seçenekler: (a) GitHub Team/Pro planı, (b) repo'yu public yapmak, (c) blokajı insan disiplinine bırakmak (bugünkü durum). ci.yml başlığındaki aksi yöndeki cümle düzeltildi |
+| PROD-R24 | **gitleaks üç katmanlı fail-open.** `-v "${PWD}:/repo"` mount ediyordu; `defaults` yüzünden `PWD` = `zero-spring` ve orada `.git` **yok** (repo kökünde). `detect` git-geçmişi modudur → her koşuda hata. Hata üç yerde yutuluyordu: `continue-on-error`, SARIF üretilmediği için `if-no-files-found: ignore`, ve adımın advisory olması. `fetch-depth: 0`'ın maliyeti ödenip faydası hiç alınmadan **yeşil** | Denetim: `ls -d zero-spring/.git` → yok; `git rev-parse --show-toplevel` → üst dizin | Orta | **Closed** — `${GITHUB_WORKSPACE}` mount + rapor yolu birlikte taşındı |
+| PROD-R25 | Bloklayıcı secret grep'i `.` (= `zero-spring`) tarıyordu → **kök `.github/workflows/ci.yml` kendi taramasının dışında**. Workflow dosyaları credential gömmenin klasik yeri | `-- "${pattern}" .` | Düşük | **Closed** — `"${GITHUB_WORKSPACE}/.github"` kapsama eklendi |
+| PROD-R26 | `application-prod.yml` kontrolü `if [ -f ]` ile sarılıydı, **`else` dalı yoktu** → dosya taşınırsa kontrol sessizce atlanır, job yeşil kalır | `ci.yml` secret scan | Düşük | **Closed** — `else` → `::error::` + `FAILURES++` |
+| PROD-R27 | **Dockerfile'ı hiçbir otomasyon build etmiyor.** `docker-compose.yml`'de `build:` yok, CI'da `docker build` yok; tek referans RELEASE-RUNBOOK. Yani PROD-R20'nin sertleştirmeleri (prod profili, heap tavanı, HEALTHCHECK) hiçbir kapıda doğrulanmıyor | `grep -rn "docker build"` → yalnız runbook | Orta | **Open** — bilinçli sıralama: ilk CI koşusunun **yeşil olduğu kanıtlanmadan** yavaş ve denenmemiş bir adım eklemek, "yol yeniden yazımı mı bozuk, docker build mi bozuk" ayrımını imkânsızlaştırır. Baseline yeşil olunca `release` gate'ine eklenecek |
+| PROD-R28 | `dependabot.yml`, `CODEOWNERS`, `renovate.json` **hiç yok** (yanlış yerde değil — mevcut değil). `npm audit --audit-level=high` kapısı var ama bağımlılığı güncelleyecek otomasyon yok; CODEOWNERS yokluğu PROD-R23 ile birleşince zorunlu inceleme sıfır | `git ls-files` → 0 eşleşme | Düşük | **Open** — eksik kontrol, ölü kontrol değil |
+
+**Doğrulanan iyi durumlar (bu turda ölçüldü):** `.gitattributes` `zero-spring/` altında ama alt-dizinden
+aşağı özyinelemeli uygulandığı için **etkili** — `git check-attr` ile doğrulandı (`mvnw: eol=lf`,
+`mvnw.cmd: eol=crlf`), BOM içerik olarak da temiz (R-22 gerçekten kapalı);
+`package-lock.json` commit'li ve ignore edilmiyor (`npm ci` sağlam); `.gitignore` CI'ın ürettiği
+artifact'ları sabote etmiyor (`upload-artifact` `.gitignore` okumaz); repoda çakışan ikinci bir
+workflow yok; `Asp.NET Zero/` tamamen untracked, CI açısından yok hükmünde.
+
+**Yanlış çıkan bir hipotez (kayıt).** `migration-drift` içindeki `git archive <BASE> backend/src/...`
+yolunun taşımadan sonra `zero-spring/` öneki alması gerektiğini düşünmüştüm. **Yanlış:** `git archive`
+pathspec'i cwd'ye göre çözer ve arşiv girdileri de cwd-görelidir; ampirik olarak doğrulandı
+(`cd zero-spring && git archive HEAD backend/... | tar -t` → `backend/...` ile başlıyor,
+`--strip-components=6` doğru). Önek eklenseydi `pathspec did not match` → `have_base=false` →
+`::warning::` → **gate hiçbir şey doğrulamadan yeşil** dönerdi. Yani "düzeltme" tam olarak korkulan
+sessiz-yeşil modunu üretecekti.
+
 **Doğrulanan iyi durumlar (aksiyon gerekmez):** gerçek secret sızıntısı **yok** (gitleaks desenleri 0 eşleşme);
 JWT algoritma HS512 **pinlenmiş** + issuer doğrulaması zorunlu + secret uzunluğu boot'ta fail-fast;
 refresh token SHA-256 hash + atomik rotasyon + reuse'da aile revoke; BCrypt(12); migration'larda **DROP/RENAME yok**,
