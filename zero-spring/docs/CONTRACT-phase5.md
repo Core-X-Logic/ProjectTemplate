@@ -128,6 +128,22 @@ parity matrisinde kapanmaz.
 
 ---
 
+### ⛔ FEATURE FREEZE — 2026-07-18 (Slice B verify sonrası)
+
+Slice B backend verify yeşil (**133 test**) olduğu anda **feature freeze** ilan edildi.
+Bu noktadan sonra **yalnız** şunlar üzerinde çalışılır:
+- `RISK-REGISTER.md` → "F5-B Production Readiness — P0" tablosundaki **PROD-R1..R16**
+- **F5-R9 prod fix** (izin uzlaştırmasının prod'da fiilen çalışması)
+
+**Dondurulan (bu fazda YAPILMAYACAK):**
+- Slice B frontend kalemleri: tenant self-service abonelik sayfası (`/subscriptions/me` ekranı), upgrade akışı UI
+  → backend `SubscriptionGuard` + `/api/subscriptions/me` hazır; ekran bir sonraki fazda
+- Slice C'nin tamamı (Stripe, webhook, invoice, tenant self-registration)
+- `current_period_start_at` kalıcılığı (changeEdition rekonstrüksiyon nüansı — Slice B ajanı notu)
+
+**Kanıt kuralı:** her düzeltme için **test + (uygulanabilirse) canlı smoke + risk durumu + gate sonucu** zorunlu.
+**GO kuralı:** tüm P0'lar kapanmadan ve **canlı smoke geçmeden GO verilmez.**
+
 ## Slice F5-C — Billing provider (Stripe) + Webhook + Invoice
 
 **Kapsam:** `payments`, `invoices`, `webhook_events` tabloları; `StripeBillingProvider` (**Prices API**,

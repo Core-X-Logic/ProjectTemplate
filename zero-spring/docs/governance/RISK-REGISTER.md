@@ -43,7 +43,7 @@ Kaynak analiz: ANALYSIS §3.1. `PHASE-2-REPORT.md` §F ile birebir hizalı (2026
 | F5-R6 | Seeder idempotency tuzağı (host admin varsa seed atlanır → edition seed çalışmaz) | H | L | Orta | Mitigating | Edition seed'i ayrı idempotent adım (edition varlığına bakar) | F5-A |
 | F5-R7 | Abonelik geçerlilik kapısı her istekte DB'ye gider | M | M | Orta | Open | Cache'li `SubscriptionGuard`, yalnız tenant-scoped uçlarda | F5-B |
 | F5-R8 | Kaynak sistemdeki kritik kusurların kopyalanması (istemci-tetikli aktivasyon, webhook 400-retry, Customer.Description eşleştirme) | M | H | **Yüksek** | Mitigating | ADR-0011/0014 ile açıkça yasaklandı; `F5-SAAS-INVENTORY.md` §11 K1-K16 listesi | F5-C |
-| F5-R9 | **Yeni izinler mevcut kurulumda statik Admin rollerine eklenmiyor** — seeder "zaten var → atla" davranışı; testler temiz DB kullandığı için false-green (R-19 sınıfı). Canlı smoke ile yakalandı: host admin 17/22 izin, `/api/editions` 403 | H | H | **Yüksek** | **Closed** (F5-A) | `DataSeeder`'a her açılışta çalışan idempotent izin-uzlaştırma (yalnız `isStatic` roller) + `RolePermissionReconciliationIT` (negatif kanıtla doğrulandı); canlı log: `reconciled to 22 permission(s)`. **Kural:** canlı smoke her slice'ta zorunlu (`CONTRACT-phase5.md` ortak kurallar) | F5-A ✅ |
+| F5-R9 | **Yeni izinler mevcut kurulumda statik Admin rollerine eklenmiyor** — seeder "zaten var → atla"; testler temiz DB kullandığı için false-green. Canlı smoke ile yakalandı: host admin 17/22 izin, `/api/editions` 403 | H | H | **Yüksek** | ⚠️ **Kısmi — dev'de Closed, PROD'DA AÇIK** | Dev/canlı doğrulandı (`reconciled to 22 permission(s)`), **ama** uzlaştırma `zero.seed.enabled` bayrağına bağlı ve prod profilinde seed **kapalı** → prod'da hiç çalışmaz. **Düzeltme (P0-D3):** uzlaştırmayı ayrı bayrağa taşı (`zero.seed.reconcile-permissions`, prod'da default **true**) | F5-B hardening |
 | F5-R10 | **Tenant create admin bootstrap yok** — `POST /api/tenants` ile açılan tenant'ta `Admin` rolü ve admin kullanıcısı oluşturulmuyor; tenant giriş yapılamaz halde kalıyor ve izin uzlaştırması onu atlıyor (Faz 1'den beri) | H | M | **Yüksek** | Open — [Issue #1](https://github.com/Core-X-Logic/ProjectTemplate/issues/1) | Provisioning'e statik `Admin` rolü + admin kullanıcı ekle (tek transaction, `tenancy` yaprak kalacak şekilde event/listener ile); create→login→`/me` IT'si | Slice C öncesi (self-registration ön koşulu) |
 
 ## F6 (veri migration) erken riskleri — F5 tasarımında azaltıldı
@@ -55,6 +55,101 @@ Kaynak analiz: ANALYSIS §3.1. `PHASE-2-REPORT.md` §F ile birebir hizalı (2026
 | F6-R3 | `ExtraProperties` JSON'dan tutar/edition çıkarma | **Yüksek** | Open | F6 |
 | F6-R4 | Feature TPH ayrım hatası → tenant override'ın edition'a yazılması | **Yüksek** | Mitigating | P7: ayrı tablolar (`edition_features`/`tenant_features`) |
 | F6-R5 | Gateway metadata migration'ı (Stripe `metadata.tenantId`) unutulursa recurring webhook tenant çözemez | **Yüksek** | Open | F6 cutover; P3: `external_ref`/`provider` kolonları F5-A'da hazır |
+
+## F5-B Production Readiness — P0 release blocker'ları (2026-07-18 denetimi)
+
+Kaynak: 4 paralel salt-okuma denetimi (security / data-migration / observability / performance).
+Hepsi **kanıtlı** (dosya:satır). `PROD-Rxx` = prod çıkışını bloklayan bulgu.
+
+> **Not (2026-07-18, kapanış turu):** Aşağıdaki tablo **denetim anındaki** durumu kayıt altında tutar;
+> `Durum` kolonu tespit anına aittir ve tarihsel kayıt olarak **değiştirilmemiştir**.
+> Güncel durum ve kanıtlar için bkz. [Kapanış turu](#f5-b-p0-kapanış-turu-2026-07-18).
+
+| ID | Bulgu | Kanıt | Etki | Seviye | Durum |
+|---|---|---|---|---|---|
+| PROD-R1 | **JWT secret dev default'u base config'te commit'li** — `SPRING_PROFILES_ACTIVE=prod` set edilmezse uygulama sessizce **repodaki bilinen anahtarla** token imzalar → herkes host-admin token forge edebilir | `application.yml:34` (prod override `application-prod.yml:5` yalnız prod profilinde) | Tam yetki yükseltmesi, sessiz | **KRİTİK** | Open |
+| PROD-R2 | Aynı profil-bağımlılığı `SEED_ADMIN_PASSWORD`'de — profil kaçarsa bilinen şifreli host admin seed'lenir | `application.yml:39-40` | Yetki yükseltmesi | **Yüksek** | Open |
+| PROD-R3 | **CORS konfigürasyonu hiç yok** — prod'da ayrı origin'den servis edilen SPA hiçbir API çağrısı yapamaz; acele "wildcard" düzeltme baskısı doğurur | backend'de `.cors(...)` yok; `frontend/app/.env.example:1` cross-origin | Release blocker (işlevsiz) + wildcard riski | **Yüksek** | Open |
+| PROD-R4 | **HSTS pratikte gönderilmiyor** — `server.forward-headers-strategy` tanımsız; TLS'i sonlandıran proxy arkasında `isSecure()=false` → HSTS sessizce yazılmaz | `application.yml`/`application-prod.yml` | Downgrade/MITM penceresi | **Yüksek** | Open |
+| PROD-R5 | CSP / Referrer-Policy / Permissions-Policy header'ları yok (Spring default'ları yalnız nosniff + frame-options veriyor) | `SecurityConfig.java:42-59`, grep 0 eşleşme | XSS azaltımı yok, referrer sızıntısı | Orta | Open |
+| PROD-R6 | **Rate limit / brute-force koruması yok** (lockout var ama IP/uç bazlı limit yok) | grep: Bucket4j/RateLimiter → 0 | Login ve SaaS uçlarında kaba kuvvet / kaynak tüketimi | **Yüksek** | Open |
+| PROD-R7 | **Prod'da `spring.cache.type=simple`** (Redis override yok) → çok-instance'ta stale feature/limit → **yanlış yetki/limit uygulanır** | `application.yml:12`, prod'da override yok | Yanlış feature gating | **KRİTİK** | Open |
+| PROD-R8 | `cache-names` eksik — Slice B `@Cacheable("features")` ekler eklemez dev/test'te 500 | `application.yml:13` vs `CacheConfig.java:33-34` | Boot/runtime hatası | **Yüksek** | Open |
+| PROD-R9 | **HikariCP ayarsız** (varsayılan 10 bağlantı / 30 sn timeout) → yük altında cascade failure | yml'de pool bloğu yok | Kararlılık | **Yüksek** | Open |
+| PROD-R10 | **Soft-deleted admin → unique violation → boot loop** (seed yeniden oluşturmaya çalışır) | `V1__baseline.sql` unique(tenant_id, username), soft-delete `deleted` kolonu dışarıda | Uygulama açılmaz | **KRİTİK** (R-24 Düşük→Yüksek) | Open |
+| PROD-R11 | `nulls not distinct` **PG15+ zorunlu**, sürüm guard'ı yok ve testte kanıtsız | `V1__baseline.sql`, `V2__phase2.sql` | Eski PG'de migration patlar | **Yüksek** | Open |
+| PROD-R12 | Migration **dry-run planı release gate değil**; checksum drift kontrolü yok | süreç | Prod migration sürprizi | **Yüksek** | Open (gate CI'ya eklendi) |
+| PROD-R13 | Redis SPOF — `CacheErrorHandler` yok; Redis kesintisi tüm platformu 500'e düşürür | `CacheConfig.java` | Kullanılabilirlik | Orta | Open |
+| PROD-R14 | `lower(username)` fonksiyonel index yok → login'de tenant içi seq scan | `V1__baseline.sql:28` | Performans | Orta | Open |
+| PROD-R15 | Çoklu replika **seed yarışı** (advisory lock yok); `SaasSeeder` idempotency testi yok; ShedLock `usingDbTime()` yok | `DataSeeder`, `SaasSeeder` | Boot yarışı / saat kayması | Orta | Open |
+| PROD-R16 | Key rotation yok (`kid` claim'i yok), `audience` doğrulanmıyor, access token revocation yok (15 dk pencere) | `JwtService.java:66`, `SecurityConfig.java:91-96` | Rotasyon = tüm oturumlar düşer | Orta | Open |
+
+### F5-B P0 kapanış turu (2026-07-18)
+
+Test durumu: **168 yeşil** (150 IT + 18 unit); kapanış turundan önce 133 idi.
+Her satırın kanıtı, o bulguyu *özellikle* hedefleyen bir testtir — mevcut testlerin yeşil kalması kanıt sayılmaz.
+
+| ID | Durum | Değişiklik | Kanıt (test) |
+|---|---|---|---|
+| PROD-R1 | **Closed** | `application.yml`'de `zero.jwt.secret` **default'suz** (`${JWT_SECRET}`); dev/test anahtarları kendi profil dosyalarına taşındı. `JwtSecretValidator`: sızmış default **her profilde** reddedilir, repodaki tüm anahtarlar `prod`'da reddedilir | `JwtSecretValidatorTest` (5 test) |
+| PROD-R2 | **Closed** | Base config `${SEED_ADMIN_PASSWORD:}` (boş); `DataSeeder`'daki fail-fast **profil bağımsız** — boş/dev-default şifre `prod` aktif olmasa da reddedilir | `SeedHardeningIT.aBlankSeedPasswordIsRefusedWithoutTheProdProfile`, `...theCommittedDevDefaultPasswordIsRefusedOutsideDevAndTest` |
+| PROD-R3 | **Closed** | `CorsConfigurationSource` + `.cors(...)`; origin listesi config'ten, base'de **boş** (fail-closed), prod'da default'suz `${CORS_ALLOWED_ORIGINS}`; `allowCredentials=false` | `CorsPolicyIT` (4 test) |
+| PROD-R4 | **Closed** | `server.forward-headers-strategy: framework` + HSTS (1 yıl, includeSubDomains, preload) | `SecurityHeadersIT.hstsIsWrittenWhenTheProxyReportsATlsRequest` (X-Forwarded-Proto ile proxy taklidi) |
+| PROD-R5 | **Closed** | CSP (`default-src 'none'`, prod), Referrer-Policy, Permissions-Policy, frameOptions deny | `SecurityHeadersIT.everyResponseCarriesTheHardeningHeaders` |
+| PROD-R6 | **Mitigating** | Bucket4j token bucket: IP **ve** kullanıcı adı boyutunda, 4 kimliksiz uçta, 429 + ProblemDetail + Retry-After | `RateLimitIT` (6 test) — **artık risk:** bucket'lar instance-local, N replika = N x limit; bkz. aşağıdaki not |
+| PROD-R7 | **Closed** | Zaten kapalıydı (`application-prod.yml` `cache.type=redis`) | — |
+| PROD-R8 | **Closed** | `cache-names` gerçek kullanımla hizalandı; kullanılmayan `permission-tree` **silindi** (izin ağacı cache'e hiç uğramıyor) | `PermissionTreeIT`, `SettingsIT`, `FeatureResolutionIT` (mevcut) |
+| PROD-R9 | **Closed** | Hikari pool ayarları (max/min-idle/connection-timeout/max-lifetime/leak-detection) base + prod | — (konfigürasyon; davranış testi yok) |
+| PROD-R10 | **Closed** | V6: `uq_users_tenant_username` → **partial unique index** (`where deleted = false`), `nulls not distinct` korunarak | `SoftDeletedUsernameReuseIT` (3 test) |
+| PROD-R11 | **Closed** | `PostgresVersionGuard` (Flyway `BEFORE_MIGRATE`, V1'den önce) + V6 başında `DO` bloğu. V1/V2'ye **dokunulmadı** (checksum) | `MigrationGuardIT` (3 test) |
+| PROD-R12 | Open | Süreç maddesi; bu turun kapsamı dışında | — |
+| PROD-R13 | **Closed** | `CacheConfig implements CachingConfigurer` + `CacheErrorHandler`: Redis hatası 500 yerine cache bypass + WARN | — (hata yolu; enjeksiyon testi yok) |
+| PROD-R14 | **Closed** | V6: `ix_users_tenant_lower_username` fonksiyonel index | `SoftDeletedUsernameReuseIT.theHardeningIndexesExist` |
+| PROD-R15 | **Closed** | (a) `pg_advisory_xact_lock` — `DataSeeder` + `SaasSeeder`, ortak anahtar; (b) idempotency IT; (c) ShedLock `usingDbTime()` **+ V6'da `shedlock` kolon tipi düzeltmesi** (aşağıdaki nota bakın) | `SaasSeederIdempotencyIT` (2 test), `ShedLockIT` (3 test) |
+| PROD-R16 | **Mitigating** | `audience` claim üretiliyor **ve** doğrulanıyor (`JwtAudienceValidator`) | `JwtAudienceIT` (4 test) — `kid`/rotasyon ve access-token revocation **hâlâ açık**, bkz. not |
+| F5-R9 | **Closed** | İzin uzlaştırması `zero.seed.reconcile-permissions` bayrağına taşındı (default true, prod dahil); `seed.enabled=false` iken de çalışır | `SeedHardeningIT.reconciliationRunsWhenSeedingIsDisabled`, `...reconciliationCanBeTurnedOffOnItsOwnFlag` |
+
+#### Kapanış turunda ortaya çıkan yeni bulgu: ShedLock `usingDbTime()` + `timestamptz` uyumsuzluğu
+
+`usingDbTime()` açıldığında `ShedLockIT` kırmızıya döndü ve nedeni testin kendisi değildi.
+ShedLock'un PostgreSQL server-time SQL'i `timezone('utc', CURRENT_TIMESTAMP)` üretir — bu bir
+**`timestamp` (tz'siz)** UTC duvar saatidir. `V5__shedlock.sql` ise kolonları proje konvansiyonuna
+uyarak `timestamptz` tanımlamıştı. Tz'siz bir değeri `timestamptz` kolona yazmak, PostgreSQL'in onu
+**yazan oturumun** (yani o node'un JVM'inin) zaman diliminde yorumlaması demektir. Ölçüldü: bir
+`Europe/Istanbul` JVM her kilidi **3 saat geçmişe** yazıyordu. Tek node'da karşılaştırmalar kendi
+içinde tutarlı olduğu için sessiz kalır; **farklı zaman dilimlerindeki iki node** ise birbirinden
+farklı instant yazar ve karşılıklı dışlama sessizce çalışmaz — yani `usingDbTime()`'ın çözmesi
+beklenen sorunun ta kendisi geri gelir.
+
+Düzeltme V6'da: `shedlock.lock_until` / `locked_at` → `timestamp` (tz'siz), `at time zone 'utc'`
+ile veri koruyarak. Bu iki kolon, projenin "her yerde `timestamptz`" kuralına **bilinçli ve
+belgelenmiş** istisnadır; gerekçe hem `V6__hardening.sql` hem `SchedulingConfig` içinde yazılıdır.
+`ShedLockIT` artık karşılaştırmaları veritabanı içinde yapar (JVM saatiyle kıyas yok).
+
+#### Kapanmayan / kabul edilen artık riskler
+
+- **PROD-R6 (rate limit) — çok-instance:** Bucket'lar `ConcurrentHashMap`'te, JVM-local. N replika
+  toplamda N x limit'e izin verir. Sınırsız bir sel yerine limitin küçük bir katına indiği için
+  koruma anlamlıdır ve yeni altyapı gerektirmez. Paylaşımlı sayaç = Bucket4j Redis/Hazelcast
+  backend'i; anahtar türetimi (`RateLimitFilter.bucketFor`) bunu tek noktada değiştirilebilir
+  bırakacak şekilde yazıldı. Ayrıca istemci kimliği `X-Forwarded-For`'a dayanır — bu, HSTS ile
+  **aynı** güven sınırıdır: istemcinin gönderdiği `X-Forwarded-*` başlıklarını ezen bir proxy arkasında
+  çalışmak zorunludur.
+- **PROD-R16 (`kid` / key rotation):** Yapılmadı. Gerekçe: `kid` tek başına rotasyonu çözmez —
+  anlamlı olması için decoder'ın **aynı anda birden çok anahtarı** kabul etmesi (eski + yeni),
+  yani çok anahtarlı bir `JWKSource` ve anahtarların konfigürasyondan bir set olarak okunması gerekir.
+  Bu, tek anahtarlı `zero.jwt.secret` sözleşmesini değiştiren bir tasarım işidir ve "faz dışı yeni
+  özellik ekleme" kısıtına girer. `audience` doğrulaması bu turda kapatıldı; `kid` + çok anahtarlı
+  decoder ve access-token revocation (15 dk pencere) **açık** kalır.
+- **PROD-R9 / PROD-R13:** Kodda kapalı, ancak davranışsal testi yok (pool tükenmesi ve Redis kesintisi
+  enjekte etmeyi gerektirir). Konfigürasyon ve hata yolu kod incelemesiyle doğrulandı.
+- **PROD-R12:** Süreç maddesi, bu turun kapsamı dışında bırakıldı.
+
+**Doğrulanan iyi durumlar (aksiyon gerekmez):** gerçek secret sızıntısı **yok** (gitleaks desenleri 0 eşleşme);
+JWT algoritma HS512 **pinlenmiş** + issuer doğrulaması zorunlu + secret uzunluğu boot'ta fail-fast;
+refresh token SHA-256 hash + atomik rotasyon + reuse'da aile revoke; BCrypt(12); migration'larda **DROP/RENAME yok**,
+default'suz NOT NULL **yok**; SaaS entity'lerinde JPA association yerine düz FK → lazy N+1 yüzeyi yok;
+`SubscriptionService` liste sorguları batch (`findAllById`) → N+1 yok; SaaS index'leri yeterli.
 
 ## Mitigasyon takvimi (özet)
 

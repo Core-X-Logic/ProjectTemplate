@@ -5,9 +5,98 @@ on:
     branches: [main]
   pull_request:
 
+# Sıralı prod release gate. Her job bir öncekine `needs` ile bağlı; herhangi biri
+# düşerse zincirin geri kalanı hiç çalışmaz ve `release` job'ı asla tetiklenmez.
+#
+#   build → backend / frontend (test) → typed-client-drift → live-smoke → security-checks → release
+#
+# Job isimleri `backend` ve `frontend` KASITLI olarak korundu: branch protection'daki
+# "required status checks" bu isimlere referans verir. Yeniden adlandırmak, korumayı
+# sessizce devre dışı bırakır (check "pending" kalır ya da hiç raporlanmaz).
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Tüm gate'lerde tek kaynaktan kullanılan CI Postgres koordinatları.
+  DB_URL: jdbc:postgresql://localhost:5432/zero
+  DB_USER: zero
+  DB_PASSWORD: zero
+  # Smoke gate'inin login olabilmesi için seed şifresi deterministik olmalı.
+  # (prod profili kullanılmadığı için DataSeeder'ın fail-fast kontrolü tetiklenmez)
+  SEED_ADMIN_PASSWORD: Ci-Smoke-Passw0rd!
+  # C5: jar'ı ayağa kaldıran gate'ler AÇIKÇA dev profiliyle boot eder. Gerekçe:
+  #  • /v3/api-docs artık yalnızca dev/test profillerinde anonim okunabilir. Kapı
+  #    "prod değilse aç" idi ve profilsiz boot'ta AÇIK kalıyordu (fail-open); yön
+  #    tersine çevrildi, base kapalı. typed-client-drift bu dokümanı okuduğu için
+  #    profil artık zorunlu — belirtilmezse gate 401 alır.
+  #  • Aynı şekilde live-smoke seed'lenmiş admin ile login oluyor ve base'de
+  #    zero.seed.enabled=false (B4). dev profili ikisini de açıkça sağlar.
+  # Yalnızca `java -jar` adımlarına verilir: `backend` job'ında maven testleri
+  # kendi @ActiveProfiles'ını kullanır, oraya sızdırılmaz.
+  SPRING_PROFILES_ACTIVE_RUNTIME: dev
+
 jobs:
-  backend:
+  # ── GATE 1: build ────────────────────────────────────────────────────────────
+  # NEDEN zorunlu: derlenmeyen bir kod tabanında test/kontrat/smoke sonuçlarının
+  # hiçbir anlamı yok. En ucuz ve en hızlı sinyal; zincirin başında durur ve
+  # sonraki job'ların boşa Postgres/JVM ayağa kaldırmasını engeller.
+  # Ayrıca üretilen jar'ı artifact olarak yayınlar; drift ve smoke gate'leri
+  # backend'i yeniden derlemek yerine TAM OLARAK test edilen bu jar'ı çalıştırır.
+  build:
+    name: build
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/app/package-lock.json
+
+      # Testler burada kasıtlı olarak atlanır; test çalıştırma GATE 2'nin işi.
+      # Bu adım sadece "derleniyor mu + paketlenebiliyor mu" sorusunu yanıtlar.
+      - name: Backend package (skip tests)
+        working-directory: backend
+        run: |
+          chmod +x mvnw
+          ./mvnw -B -ntp -DskipTests package
+
+      - name: Frontend install + build
+        working-directory: frontend/app
+        run: |
+          npm ci
+          npm run build
+
+      # Sonraki gate'ler bu jar'ı indirip çalıştırır (yeniden derleme yok →
+      # test edilen artifact ile smoke edilen artifact birebir aynı).
+      - name: Upload backend jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-jar
+          path: backend/target/zero-platform-*.jar
+          if-no-files-found: error
+          retention-days: 7
+
+  # ── GATE 2a: backend test ────────────────────────────────────────────────────
+  # NEDEN zorunlu: `verify` surefire (unit) + failsafe (Testcontainers IT) +
+  # jacoco check zincirini koşturur. Multi-tenant izolasyon, permission ve
+  # subscription invariant'larının regresyona uğramadığını kanıtlayan tek yer.
+  backend:
+    name: backend
+    runs-on: ubuntu-latest
+    needs: build
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,8 +125,14 @@ jobs:
             backend/target/site/jacoco/
           if-no-files-found: ignore
 
+  # ── GATE 2b: frontend test ───────────────────────────────────────────────────
+  # NEDEN zorunlu: `npm run build` = `tsc -b && vite build`, yani tip hatası
+  # build'i düşürür. Vitest ise davranış regresyonlarını yakalar. İkisi de
+  # backend'den bağımsız koştuğu için backend job'ı ile paralel çalışır.
   frontend:
+    name: frontend
     runs-on: ubuntu-latest
+    needs: build
     defaults:
       run:
         working-directory: frontend/app
@@ -61,6 +156,456 @@ jobs:
       - name: Unit / behaviour tests (Vitest)
         run: npm run test
 
-      # Not: `npm run gen:api` çalışan backend gerektirir (openapi-typescript /v3/api-docs).
-      # schema.d.ts repoda tutulur; CI'da OpenAPI drift kontrolü F4'te backend'i ayağa kaldıran
-      # ayrı bir job ile eklenecek (Contract quality-gate genişletme).
+      - name: Upload Vitest reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-test-reports
+          path: |
+            frontend/app/coverage/
+            frontend/app/test-results/
+          if-no-files-found: ignore
+
+  # ── GATE 3: typed-client-drift ───────────────────────────────────────────────
+  # NEDEN zorunlu: `src/api/schema.d.ts` repoda elle commit'lenen bir TÜRETİLMİŞ
+  # dosya. Backend'de bir DTO/endpoint değişip schema yeniden üretilmezse frontend
+  # DERLENMEYE DEVAM EDER ama yanlış tiplere göre derlenir — hata ancak runtime'da,
+  # üretimde ortaya çıkar. Bu gate backend'i gerçekten ayağa kaldırıp /v3/api-docs
+  # üzerinden schema'yı yeniden üretir ve repodakiyle byte-byte karşılaştırır.
+  typed-client-drift:
+    name: typed-client-drift
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: zero
+          POSTGRES_USER: zero
+          POSTGRES_PASSWORD: zero
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/app/package-lock.json
+
+      - name: Download backend jar
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-jar
+          path: dist
+
+      # Redis GEREKMEZ: dev profilinde de spring.cache.type=simple (base'den miras)
+      # ve ImpersonationTokenStore in-memory. Lettuce bağlantısı lazy olduğu için
+      # boot sırasında Redis'e hiç dokunulmaz.
+      - name: Start backend
+        run: |
+          set -euo pipefail
+          JAR=$(ls dist/zero-platform-*.jar | head -n1)
+          echo "Booting ${JAR}"
+          JWT_SECRET="$(head -c 64 /dev/urandom | base64 -w0)" \
+          SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE_RUNTIME}" \
+          DB_URL="${DB_URL}" DB_USER="${DB_USER}" DB_PASSWORD="${DB_PASSWORD}" \
+          SEED_ADMIN_PASSWORD="${SEED_ADMIN_PASSWORD}" \
+          nohup java -jar "${JAR}" > backend.log 2>&1 &
+          echo $! > backend.pid
+
+      - name: Wait for readiness
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8080/actuator/health > /dev/null; then
+              echo "Backend is up after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Backend did not become healthy within 60s"
+          tail -n 200 backend.log
+          exit 1
+
+      - name: Install frontend deps (pinned openapi-typescript)
+        working-directory: frontend/app
+        run: npm ci
+
+      # `npm run gen:api` ile BİREBİR aynı çağrı — generator sürümü de
+      # package-lock'tan geldiği için üretim koşulları yerelle özdeş.
+      - name: Regenerate typed client from live /v3/api-docs
+        working-directory: frontend/app
+        run: |
+          set -euo pipefail
+          curl -sf http://localhost:8080/v3/api-docs -o "${RUNNER_TEMP}/api-docs.json"
+          npx --no-install openapi-typescript http://localhost:8080/v3/api-docs \
+            -o "${RUNNER_TEMP}/schema.generated.d.ts"
+
+      - name: Fail on schema drift
+        working-directory: frontend/app
+        run: |
+          set -euo pipefail
+          if ! diff -u src/api/schema.d.ts "${RUNNER_TEMP}/schema.generated.d.ts"; then
+            echo "::error::Typed client drift: src/api/schema.d.ts, çalışan backend'in OpenAPI şemasıyla uyuşmuyor. Backend'i lokal çalıştırıp 'npm run gen:api' ile yeniden üretin ve commit'leyin."
+            exit 1
+          fi
+          echo "Typed client is in sync."
+
+      - name: Upload OpenAPI snapshot
+        if: always()
+        run: cp "${RUNNER_TEMP}/api-docs.json" ./api-docs.json || true
+
+      - name: Upload drift diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-snapshot
+          path: |
+            api-docs.json
+            backend.log
+          if-no-files-found: ignore
+
+  # ── GATE 4: live-smoke ───────────────────────────────────────────────────────
+  # NEDEN zorunlu: Testcontainers IT'leri Spring context'i kendi kurar; gerçek
+  # `java -jar` başlangıcını (Flyway migration zinciri, seed runner, filter sırası,
+  # security chain) doğrulamaz. Bu gate paketlenmiş jar'ı üretimdeki gibi çalıştırıp
+  # kritik akışları HTTP üzerinden assert eder — özellikle NEGATİF tenant izolasyon
+  # vakalarını, çünkü bir izolasyon açığı 200 döner ve pozitif testlerden kaçar.
+  live-smoke:
+    name: live-smoke
+    runs-on: ubuntu-latest
+    needs: typed-client-drift
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: zero
+          POSTGRES_USER: zero
+          POSTGRES_PASSWORD: zero
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Download backend jar
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-jar
+          path: dist
+
+      - name: Start backend
+        run: |
+          set -euo pipefail
+          JAR=$(ls dist/zero-platform-*.jar | head -n1)
+          echo "Booting ${JAR}"
+          JWT_SECRET="$(head -c 64 /dev/urandom | base64 -w0)" \
+          SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE_RUNTIME}" \
+          DB_URL="${DB_URL}" DB_USER="${DB_USER}" DB_PASSWORD="${DB_PASSWORD}" \
+          SEED_ADMIN_PASSWORD="${SEED_ADMIN_PASSWORD}" \
+          nohup java -jar "${JAR}" > backend.log 2>&1 &
+          echo $! > backend.pid
+
+      - name: Wait for readiness
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8080/actuator/health > /dev/null; then
+              echo "Backend is up after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Backend did not become healthy within 60s"
+          tail -n 200 backend.log
+          exit 1
+
+      - name: Critical flow smoke (HTTP assertions)
+        run: |
+          set -euo pipefail
+          API=http://localhost:8080
+          FAILURES=0
+
+          # Beklenen HTTP kodunu assert eder; sapmada gövdeyi basar ama koşuya
+          # devam eder, böylece tek raporda TÜM kırıkları görürüz.
+          assert_code() {
+            local label="$1" expected="$2" actual="$3" body="$4"
+            if [ "${actual}" = "${expected}" ]; then
+              echo "PASS  ${label} (${actual})"
+            else
+              echo "::error::FAIL ${label}: beklenen ${expected}, gelen ${actual}"
+              echo "----- response body -----"
+              cat "${body}" 2>/dev/null || true
+              echo
+              FAILURES=$((FAILURES + 1))
+            fi
+          }
+
+          # 1) HOST admin login — seed'in çalıştığını ve JWT üretimini kanıtlar.
+          CODE=$(curl -s -o /tmp/host-login.json -w '%{http_code}' \
+            -X POST "${API}/api/auth/login" \
+            -H 'Content-Type: application/json' \
+            -d "{\"usernameOrEmail\":\"admin\",\"password\":\"${SEED_ADMIN_PASSWORD}\"}")
+          assert_code "host login" 200 "${CODE}" /tmp/host-login.json
+          # `|| true`: gövde JSON değilse jq hata verir ve `set -e` koşuyu
+          # yarıda keser; token boş kalsın, kontrolü aşağıdaki guard yapsın.
+          HOST_TOKEN=$(jq -r '.accessToken // empty' /tmp/host-login.json 2>/dev/null || true)
+          if [ -z "${HOST_TOKEN}" ]; then
+            echo "::error::Host access token alınamadı; kalan akışlar koşulamaz."
+            tail -n 200 backend.log
+            exit 1
+          fi
+
+          # 2) /api/auth/me — resource-server chain + claim çözümlemesi ayakta mı.
+          CODE=$(curl -s -o /tmp/me.json -w '%{http_code}' \
+            "${API}/api/auth/me" -H "Authorization: Bearer ${HOST_TOKEN}")
+          assert_code "host /api/auth/me" 200 "${CODE}" /tmp/me.json
+          # Host kullanıcısının tenantId'si null OLMALI; doluysa tenant sızıntısı var.
+          ME_TENANT=$(jq -r '.tenantId // "null"' /tmp/me.json 2>/dev/null || echo "unparseable")
+          if [ "${ME_TENANT}" != "null" ]; then
+            echo "::error::FAIL host /api/auth/me: tenantId null bekleniyordu, gelen ${ME_TENANT}"
+            FAILURES=$((FAILURES + 1))
+          else
+            echo "PASS  host tenantId is null"
+          fi
+
+          # 3) Editions list — SaaS seed + host-only permission yolu.
+          CODE=$(curl -s -o /tmp/editions.json -w '%{http_code}' \
+            "${API}/api/editions" -H "Authorization: Bearer ${HOST_TOKEN}")
+          assert_code "host GET /api/editions" 200 "${CODE}" /tmp/editions.json
+
+          # 4) Subscriptions list — default tenant'ın subscription'ı provision edilmiş mi.
+          CODE=$(curl -s -o /tmp/subs.json -w '%{http_code}' \
+            "${API}/api/subscriptions" -H "Authorization: Bearer ${HOST_TOKEN}")
+          assert_code "host GET /api/subscriptions" 200 "${CODE}" /tmp/subs.json
+
+          # 5) NEGATİF — host token'ı + X-Tenant header'ı = tenant mismatch.
+          #    AuthenticatedTenantFilter, JWT claim'i ile header'ı karşılaştırır;
+          #    header ile yetki genişletme (privilege widening) burada 403 olmalı.
+          CODE=$(curl -s -o /tmp/mismatch.json -w '%{http_code}' \
+            "${API}/api/auth/me" \
+            -H "Authorization: Bearer ${HOST_TOKEN}" -H 'X-Tenant: default')
+          assert_code "NEGATIVE host token + X-Tenant (tenant mismatch)" 403 "${CODE}" /tmp/mismatch.json
+
+          # 6) TENANT admin login (X-Tenant: default).
+          CODE=$(curl -s -o /tmp/tenant-login.json -w '%{http_code}' \
+            -X POST "${API}/api/auth/login" \
+            -H 'Content-Type: application/json' -H 'X-Tenant: default' \
+            -d "{\"usernameOrEmail\":\"admin\",\"password\":\"${SEED_ADMIN_PASSWORD}\"}")
+          assert_code "tenant login" 200 "${CODE}" /tmp/tenant-login.json
+          TENANT_TOKEN=$(jq -r '.accessToken // empty' /tmp/tenant-login.json 2>/dev/null || true)
+
+          # 7) NEGATİF — tenant admin host-only SaaS kaynağına erişemez.
+          #    DataSeeder tenant Admin rolünden hostOnlyPermissionNames()'i çıkarır;
+          #    bu 200 dönerse host/tenant permission ayrımı kırılmış demektir.
+          if [ -n "${TENANT_TOKEN}" ]; then
+            CODE=$(curl -s -o /tmp/tenant-subs.json -w '%{http_code}' \
+              "${API}/api/subscriptions" \
+              -H "Authorization: Bearer ${TENANT_TOKEN}" -H 'X-Tenant: default')
+            assert_code "NEGATIVE tenant admin GET /api/subscriptions" 403 "${CODE}" /tmp/tenant-subs.json
+
+            CODE=$(curl -s -o /tmp/tenant-editions.json -w '%{http_code}' \
+              "${API}/api/editions" \
+              -H "Authorization: Bearer ${TENANT_TOKEN}" -H 'X-Tenant: default')
+            assert_code "NEGATIVE tenant admin GET /api/editions" 403 "${CODE}" /tmp/tenant-editions.json
+          else
+            echo "::error::Tenant access token alınamadı; negatif tenant testleri koşulamadı."
+            FAILURES=$((FAILURES + 1))
+          fi
+
+          # 8) NEGATİF — token'sız korumalı endpoint 401 olmalı.
+          CODE=$(curl -s -o /tmp/anon.json -w '%{http_code}' "${API}/api/auth/me")
+          assert_code "NEGATIVE anonymous /api/auth/me" 401 "${CODE}" /tmp/anon.json
+
+          # 9) NEGATİF — bilinmeyen tenant header'ı 400 TENANT_UNKNOWN olmalı.
+          CODE=$(curl -s -o /tmp/unknown-tenant.json -w '%{http_code}' \
+            -X POST "${API}/api/auth/login" \
+            -H 'Content-Type: application/json' -H 'X-Tenant: no-such-tenant' \
+            -d '{"usernameOrEmail":"admin","password":"whatever"}')
+          assert_code "NEGATIVE unknown tenant header" 400 "${CODE}" /tmp/unknown-tenant.json
+
+          echo "──────────────────────────────"
+          if [ "${FAILURES}" -ne 0 ]; then
+            echo "::error::live-smoke: ${FAILURES} assertion başarısız"
+            tail -n 200 backend.log
+            exit 1
+          fi
+          echo "live-smoke: tüm assertion'lar geçti"
+
+      - name: Upload backend log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-smoke-backend-log
+          path: backend.log
+          if-no-files-found: ignore
+
+  # ── GATE 5: security-checks ──────────────────────────────────────────────────
+  # NEDEN zorunlu: sızmış bir credential geri alınamaz — rotasyon gerektirir; bu
+  # yüzden merge ÖNCESİ bloklamak tek etkili nokta.
+  #
+  # PRAGMATİK YAKLAŞIM (bilinçli tercih):
+  #  • Bloklayıcı olan: dar kapsamlı, sıfıra yakın false-positive üreten desen
+  #    taraması (private key blokları, AWS anahtarları, prod config'te literal
+  #    secret). Bunlar yakalandığında istisnasız gerçek bulgudur.
+  #  • Bloklayıcı OLMAYAN: gitleaks tam-geçmiş taraması. Repo, kasıtlı olarak
+  #    commit'lenmiş dev-only placeholder'lar içeriyor (application.yml'deki dev
+  #    JWT secret'ı, 'Admin123!' seed varsayılanı). Bunlar gitleaks'in generic
+  #    kurallarını tetikler; .gitleaksignore olmadan gate kalıcı kırmızı olur ve
+  #    ekip onu görmezden gelmeye başlar — yani gate işlevini yitirir. Rapor
+  #    artifact olarak yayınlanır; .gitleaksignore eklendikten sonra
+  #    continue-on-error kaldırılıp bloklayıcı hale getirilmelidir.
+  #  • Backend için ağır OWASP Dependency-Check KASITLI olarak yok: NVD feed'i
+  #    her koşuda ~10+ dk sürer, API anahtarı ister ve transitive Spring Boot
+  #    CVE'lerinde yüksek gürültü üretir. PR yolunda değil, ayrı bir zamanlanmış
+  #    (schedule) workflow'a ait. Sürüm yükseltmeleri Dependabot'a bırakılmalı.
+  security-checks:
+    name: security-checks
+    runs-on: ubuntu-latest
+    needs: live-smoke
+    steps:
+      - name: Checkout (full history for secret scanning)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/app/package-lock.json
+
+      # BLOKLAYICI: yalnızca tartışmasız gerçek bulgular.
+      - name: Secret pattern scan (blocking)
+        run: |
+          set -uo pipefail
+          FAILURES=0
+
+          scan() {
+            local label="$1" pattern="$2"
+            # .git ve lock dosyaları hariç; -I binary'leri atlar.
+            if grep -rInE --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=target \
+                 --exclude='*.lock' --exclude='package-lock.json' \
+                 -- "${pattern}" . ; then
+              echo "::error::Secret scan hit: ${label}"
+              FAILURES=$((FAILURES + 1))
+            else
+              echo "PASS  ${label}"
+            fi
+          }
+
+          scan "private key block"      '-----BEGIN (RSA|EC|DSA|OPENSSH|PGP)? ?PRIVATE KEY-----'
+          scan "AWS access key id"      'A(KIA|SIA|ROA)[0-9A-Z]{16}'
+          scan "Slack token"            'xox[baprs]-[0-9A-Za-z-]{10,}'
+          scan "GitHub PAT"             'gh[pousr]_[0-9A-Za-z]{36}'
+          scan "Google API key"         'AIza[0-9A-Za-z_-]{35}'
+
+          # prod config'te her secret env referansı OLMALI (${...}).
+          # Literal bir değer buraya girerse imaja gömülür ve rotasyon imkânsızlaşır.
+          PROD_YML=backend/src/main/resources/application-prod.yml
+          if [ -f "${PROD_YML}" ]; then
+            if grep -InE '^[[:space:]]*(secret|password|host-admin-password|token|api-key):[[:space:]]*[^$[:space:]]' "${PROD_YML}"; then
+              echo "::error::${PROD_YML} içinde literal secret var; \${ENV_VAR} referansı kullanın."
+              FAILURES=$((FAILURES + 1))
+            else
+              echo "PASS  application-prod.yml secrets are env-referenced"
+            fi
+          fi
+
+          if [ "${FAILURES}" -ne 0 ]; then
+            echo "::error::security-checks: ${FAILURES} bloklayıcı secret bulgusu"
+            exit 1
+          fi
+          echo "Secret pattern scan clean."
+
+      # BLOKLAYICI DEĞİL (yukarıdaki gerekçe). Rapor artifact olarak yayınlanır.
+      - name: gitleaks full-history scan (advisory)
+        id: gitleaks
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          docker run --rm -v "${PWD}:/repo" -w /repo \
+            zricethezav/gitleaks:v8.18.4 detect \
+            --source=/repo --redact --exit-code=1 \
+            --report-format=sarif --report-path=/repo/gitleaks.sarif
+
+      - name: Upload gitleaks report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: gitleaks.sarif
+          if-no-files-found: ignore
+
+      # BLOKLAYICI: frontend bağımlılıkları doğrudan tarayıcıya gider; high/critical
+      # bir zafiyet son kullanıcıya ulaşır. Eşik bilinçli olarak `high` — `moderate`
+      # dev-only transitive paketlerde sürekli gürültü üretir.
+      - name: npm audit (frontend, high+)
+        working-directory: frontend/app
+        run: npm audit --audit-level=high
+
+  # ── RELEASE ──────────────────────────────────────────────────────────────────
+  # Yalnızca main'e push'ta VE yukarıdaki tüm gate'ler yeşilse çalışır.
+  # `needs: security-checks` zincirin son halkası olduğu için tüm önceki
+  # gate'ler transitif olarak zorunludur (biri düşerse buraya hiç gelinmez).
+  # ŞU AN GERÇEK DEPLOY YOK — sadece artifact'i toplayıp hazır olduğunu raporlar.
+  release:
+    name: release
+    runs-on: ubuntu-latest
+    needs: security-checks
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download backend jar
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-jar
+          path: dist
+
+      - name: Release artifact hazır
+        run: |
+          set -euo pipefail
+          JAR=$(ls dist/zero-platform-*.jar | head -n1)
+          {
+            echo "## Release artifact hazır"
+            echo
+            echo "| Alan | Değer |"
+            echo "| --- | --- |"
+            echo "| Commit | \`${GITHUB_SHA}\` |"
+            echo "| Artifact | \`$(basename "${JAR}")\` |"
+            echo "| Boyut | $(du -h "${JAR}" | cut -f1) |"
+            echo
+            echo "Geçilen gate'ler: build → backend/frontend test → typed-client-drift → live-smoke → security-checks"
+            echo
+            echo "> Gerçek deploy adımı henüz bağlı değil (placeholder)."
+          } >> "${GITHUB_STEP_SUMMARY}"
+          echo "Release artifact hazır: ${JAR}"
