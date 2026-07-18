@@ -1,9 +1,28 @@
 name: CI
 
+# Actions dakikası bu planda sınırlı bir kaynak (private repo). Bu zincir 8 job açıyor ve
+# üçü Postgres ayağa kaldırıp jar boot ediyor, yani tam bir koşu ucuz değil. `paths-ignore`
+# bu yüzden var: bu depoda dokümantasyon commit'leri kod commit'lerinden daha sık ve bir
+# markdown değişikliğinin Testcontainers suite'ini çalıştırması saf israf.
+#
+# DİKKAT — `paths-ignore` bir güvenlik kapısı DEĞİL: listelenen yollar CI'ın hiç okumadığı
+# yollardır. Buraya CI'ın davranışını etkileyen bir şey (workflow dosyası, config, kaynak,
+# Dockerfile) eklenirse gate sessizce atlanır ve "yeşil" görünür. Yeni satır eklemeden önce
+# "CI bu dosyayı okuyor mu?" sorusunu cevaplayın.
+#
+# `workflow_dispatch`: doküman-only bir commit'ten sonra yine de tam zinciri koşturmak
+# gerekirse (ya da release öncesi doğrulama için) elle tetiklemeye izin verir.
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'zero-spring/docs/**'
   pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - 'zero-spring/docs/**'
+  workflow_dispatch:
 
 # Sıralı prod release gate. Her job bir öncekine `needs` ile bağlı; herhangi biri
 # düşerse zincirin geri kalanı hiç çalışmaz ve `release` job'ı asla tetiklenmez.

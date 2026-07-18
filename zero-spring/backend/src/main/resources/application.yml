@@ -170,6 +170,18 @@ zero:
       # Boş bırakılırsa SubscriptionAccessCheck.DEFAULT_EXEMPT_PATHS geçerlidir
       # (auth, account, localization, /api/subscriptions/me, actuator, swagger).
       exempt-paths: ""
+springdoc:
+  # PROD-R30. /v3/api-docs ciktisi JVM kosulari arasinda KARARSIZDI: springdoc, Spring'in
+  # Page/Pageable arayuzlerini reflection ile geziyor ve getDeclaredMethods() sirasi JVM
+  # spesifikasyonunda garanti edilmiyor. Olculdu — ayni jar, iki ayri boot:
+  #   PageUserDto: totalPages/totalElements/first/last alanlari yer degistirdi.
+  # typed-client-drift gate'i uretilen semayi commit'lenmis dosyayla BYTE-BYTE karsilastiriyor,
+  # yani gate hicbir sey degismeden rastgele kirmiziya donerdi. Flaky bir release gate,
+  # olmayan gate'ten kotudur: "yeniden koştur" refleksini ogretir, o refleks de gate'in
+  # yakalamak icin var oldugu GERCEK drift'i gormezden gelmeyi ogretir.
+  # Cozum kaynagi deterministik yapmak; karsilastirmayi gevsetmek degil.
+  writer-with-order-by-keys: true
+
 management:
   endpoints.web.exposure.include: health,info,metrics,prometheus
   endpoint.health.probes.enabled: true

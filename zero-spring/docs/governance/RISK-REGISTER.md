@@ -240,6 +240,32 @@ olduğu sürece iki durum birbirinden ayırt edilemez. Grup bir **konfigürasyon
 konfigürasyon olarak test ediliyor. `liveness`'ın `db` içermediği de iddia ediliyor: veritabanı
 kesintisi JVM'i öldürmek için sebep değildir, aksi hâlde kesinti bir crash-loop'a dönüşür.
 
+### CI koşuları 2-3'ün bulduğu — PROD-R30 / PROD-R31 (2026-07-19)
+
+CI koştukça her koşu bir öncekinin göremediği katmanı açtı. Koşu 3'te `backend` ✅ oldu ve
+`typed-client-drift` **kendi asıl işinde** düştü — yani gate ilk gerçek icrasında var olma
+sebebini yakaladı.
+
+| ID | Bulgu | Kanıt | Şiddet | Durum |
+|---|---|---|---|---|
+| PROD-R31 | **Typed client bayattı.** `POST /api/subscriptions/{tenantId}/change-edition` ile `ChangeEditionRequest` / `EditionChangeDto` şemaları backend'de vardı, commit'li `schema.d.ts`'te **yoktu**. Frontend bayat tiplere karşı sorunsuz derleniyordu; hata ancak üretimde, çağrı yapıldığında çıkardı | CI `diff -u` çıktısı; yeniden üretimde 86 satır ekleme | Orta | **Closed** — `npm run gen:api` ile yeniden üretildi; frontend build ✓, 90/90 test ✓ |
+| PROD-R30 | **Gate'in kendisi flaky'ydi.** springdoc, Spring'in `Page`/`Pageable` arayüzlerini reflection ile geziyor ve `getDeclaredMethods()` sırası JVM spesifikasyonunda garanti değil. Ölçüldü: **aynı jar, iki ayrı boot** → `PageUserDto` içinde `totalPages`/`totalElements`/`first`/`last` yer değiştirdi. Gate byte-byte `diff` yaptığı için hiçbir şey değişmeden rastgele kırmızıya dönerdi | İki JVM boot'unun hash karşılaştırması: önce farklı, düzeltmeden sonra **aynı** | Orta | **Closed** — `springdoc.writer-with-order-by-keys: true`; determinizm iki ayrı JVM ile yeniden ölçülerek doğrulandı |
+
+**Neden kaynak deterministik yapıldı, karşılaştırma gevşetilmedi:** flaky bir release gate,
+olmayan gate'ten **kötüdür**. "Yeniden koştur" refleksini öğretir; o refleks de gate'in yakalamak
+için var olduğu gerçek drift'in (PROD-R31 — tam da bu koşuda yakalanan) görmezden gelinmesini
+öğretir. Diff'i "sıralamayı yok say" diye gevşetmek, gate'i zayıflatarak semptomu gizlerdi.
+
+### Actions maliyeti — PROD-R32
+
+| ID | Bulgu | Şiddet | Durum |
+|---|---|---|---|
+| PROD-R32 | Zincir 8 job açıyor, üçü Postgres kaldırıp jar boot ediyor; koşu ~7,7 dk duvar saati. Depo private ve planın Actions dakikası sınırlı. Doküman commit'leri kod commit'lerinden sık ve her biri tam Testcontainers suite'ini tetikliyordu | Orta (süreç) | **Mitigating** — (a) `paths-ignore`: `**/*.md`, `zero-spring/docs/**` (doğrulandı: `docs/` altında `.md` dışı dosya yok); (b) `workflow_dispatch` ile elle tam koşu; (c) **`zero-spring/scripts/ci-local.sh`** — gate'leri lokalde, tek kullanımlık Postgres ile ve `REDIS_PORT=1` ile (CI'daki gerçek durum) koşturur. *Kesin kota `admin:org` scope'u olmadan doğrulanamadı; timing API `billable=0` diyor ama bu **teyit sayılmadı**.* |
+
+> `paths-ignore` bir **güvenlik kapısı değil**: listelenen yollar CI'ın hiç okumadığı yollardır.
+> Buraya CI'ın davranışını etkileyen bir yol eklenirse gate sessizce atlanır ve yeşil görünür.
+> Uyarı `ci.yml` içinde de yazılı.
+
 **Doğrulanan iyi durumlar (bu turda ölçüldü):** `.gitattributes` `zero-spring/` altında ama alt-dizinden
 aşağı özyinelemeli uygulandığı için **etkili** — `git check-attr` ile doğrulandı (`mvnw: eol=lf`,
 `mvnw.cmd: eol=crlf`), BOM içerik olarak da temiz (R-22 gerçekten kapalı);
