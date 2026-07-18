@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import { LoaderCircle } from 'lucide-react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/providers/auth-provider';
+import { hasAnyPermission } from '@/auth/rbac';
 import { ForbiddenPage } from '@/auth/pages/forbidden';
 
 function FullscreenLoader() {
@@ -16,6 +17,12 @@ interface RequireAuthProps {
   /** When set, the user must additionally hold this permission. */
   permission?: string;
   /**
+   * When set (non-empty), the user must hold AT LEAST ONE of these permissions
+   * (any-of). Combines with `permission` as an independent gate: if both are
+   * supplied the single `permission` must hold AND one of `anyPermission`.
+   */
+  anyPermission?: string[];
+  /**
    * Optional guarded subtree. When omitted an `<Outlet />` is rendered, so the
    * component works both as a wrapper and as a layout route element.
    */
@@ -27,8 +34,13 @@ interface RequireAuthProps {
  *  - while the session bootstraps -> spinner
  *  - no authenticated user -> redirect to `/login`
  *  - authenticated but missing `permission` -> 403 page
+ *  - authenticated but holding none of `anyPermission` -> 403 page
  */
-export function RequireAuth({ permission, children }: RequireAuthProps) {
+export function RequireAuth({
+  permission,
+  anyPermission,
+  children,
+}: RequireAuthProps) {
   const { user, loading, permissions } = useAuth();
   const location = useLocation();
 
@@ -41,6 +53,14 @@ export function RequireAuth({ permission, children }: RequireAuthProps) {
   }
 
   if (permission && !permissions.includes(permission)) {
+    return <ForbiddenPage />;
+  }
+
+  if (
+    anyPermission &&
+    anyPermission.length > 0 &&
+    !hasAnyPermission(permissions, anyPermission)
+  ) {
     return <ForbiddenPage />;
   }
 

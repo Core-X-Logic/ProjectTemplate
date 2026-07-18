@@ -55,6 +55,23 @@ function renderGuarded(permission?: string) {
   );
 }
 
+function renderGuardedAny(anyPermission: string[]) {
+  return renderWithProviders(
+    <Routes>
+      <Route path="/login" element={<div>login screen</div>} />
+      <Route
+        path="/secret"
+        element={
+          <RequireAuth anyPermission={anyPermission}>
+            <div>secret content</div>
+          </RequireAuth>
+        }
+      />
+    </Routes>,
+    { route: '/secret' },
+  );
+}
+
 beforeEach(() => {
   useAuthMock.mockReset();
   localStorage.clear();
@@ -94,5 +111,28 @@ describe('RequireAuth', () => {
     renderGuarded(undefined);
 
     expect(await screen.findByText('secret content')).toBeInTheDocument();
+  });
+
+  it('renders children when the user holds ONE of the anyPermission set', async () => {
+    setAuth({
+      user: { id: '1', username: 'tester' },
+      permissions: ['settings.host.manage'],
+    });
+
+    renderGuardedAny(['settings.tenant.manage', 'settings.host.manage']);
+
+    expect(await screen.findByText('secret content')).toBeInTheDocument();
+  });
+
+  it('renders Forbidden when the user holds NONE of the anyPermission set', async () => {
+    setAuth({
+      user: { id: '1', username: 'tester' },
+      permissions: ['users.read'],
+    });
+
+    renderGuardedAny(['settings.tenant.manage', 'settings.host.manage']);
+
+    expect(await screen.findByText('Access denied')).toBeInTheDocument();
+    expect(screen.queryByText('secret content')).not.toBeInTheDocument();
   });
 });

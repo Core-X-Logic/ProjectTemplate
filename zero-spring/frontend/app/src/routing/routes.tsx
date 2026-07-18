@@ -9,6 +9,9 @@ import { RolesPage } from '@/features/roles/pages/roles';
 import { RoleFormPage } from '@/features/roles/pages/role-form';
 import { OrganizationUnitsPage } from '@/features/organization-units/pages/organization-units';
 import { NotificationsPage } from '@/features/notifications/pages/notifications';
+import { AuditLogsPage } from '@/features/audit/pages/audit-logs';
+import { EntityHistoryPage } from '@/features/audit/pages/entity-history';
+import { SettingsPage } from '@/features/settings/pages/settings';
 import { NotFoundPage } from '@/routing/not-found';
 
 /**
@@ -72,6 +75,38 @@ export function AppRoutes() {
             }
           />
           <Route path="notifications" element={<NotificationsPage />} />
+          {/* Audit — two read-only screens sharing the `auditlogs.read`
+              permission. `/audit` is the request log; `/audit/entity-history`
+              is the property-level change log. */}
+          <Route
+            path="audit"
+            element={
+              <RequireAuth permission="auditlogs.read">
+                <AuditLogsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="audit/entity-history"
+            element={
+              <RequireAuth permission="auditlogs.read">
+                <EntityHistoryPage />
+              </RequireAuth>
+            }
+          />
+          {/* Settings is reachable by tenant OR host operators — the page then
+              shows only the scope tabs the user may manage. Any-of guard mirrors
+              the backend `@PreAuthorize` on the two settings scopes. */}
+          <Route
+            path="settings"
+            element={
+              <RequireAuth
+                anyPermission={['settings.tenant.manage', 'settings.host.manage']}
+              >
+                <SettingsPage />
+              </RequireAuth>
+            }
+          />
 
           <Route path="forbidden" element={<ForbiddenPage />} />
         </Route>

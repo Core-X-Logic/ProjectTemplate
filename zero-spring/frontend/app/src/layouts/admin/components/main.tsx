@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { ImpersonationBanner } from '@/features/impersonation/components/impersonation-banner';
 import { useLayout } from './context';
 import { Footer } from './footer';
 import { Header } from './header';
@@ -45,6 +46,10 @@ export function Main() {
 
   return (
     <>
+      {/* Fixed top banner — self-hides unless the session is an impersonation.
+          Mounted at the top of the shell so it is visible on every page. */}
+      <ImpersonationBanner />
+
       {!isMobile && <Sidebar />}
 
       <div className="wrapper flex grow flex-col">

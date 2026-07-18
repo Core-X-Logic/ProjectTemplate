@@ -50,6 +50,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Can } from '@/auth/rbac';
 import { RequireAuth } from '@/auth/require-auth';
+import { ImpersonateAction } from '@/features/impersonation/components/impersonate-action';
 import { UserFormDialog } from '@/features/users/pages/user-form';
 import {
   useActivateUser,
@@ -262,6 +263,14 @@ function UsersListContent() {
                     <FormattedMessage id="users.action.delete" />
                   </DropdownMenuItem>
                 </Can>
+                {/* Impersonate — self-gated by `users.impersonate` (renders
+                    null otherwise) and by a valid target id. */}
+                {user.id !== undefined && (
+                  <ImpersonateAction
+                    userId={user.id}
+                    username={user.username}
+                  />
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           );

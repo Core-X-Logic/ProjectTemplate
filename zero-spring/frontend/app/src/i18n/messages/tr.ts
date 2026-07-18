@@ -1,6 +1,9 @@
+import { auditMessagesTr } from '@/features/audit/messages';
+import { impersonationTr } from '@/features/impersonation/messages';
 import { notificationsTr } from '@/features/notifications/messages';
 import { organizationUnitsMessages } from '@/features/organization-units/messages';
 import { rolesMessages } from '@/features/roles/messages';
+import { settingsTr } from '@/features/settings/messages';
 import { usersMessagesTr } from '@/features/users/messages';
 
 /**
@@ -71,11 +74,14 @@ const tr: Record<string, string> = {
   'dashboard.comingSoonSlice':
     'Özellik modülleri bir sonraki dikey dilimde gelecek.',
 
-  // Feature catalogues (slice B) — namespaced, no key collisions
+  // Feature catalogues (slice B + C) — namespaced, no key collisions
   ...usersMessagesTr,
   ...rolesMessages.tr,
   ...organizationUnitsMessages.tr,
   ...notificationsTr,
+  ...auditMessagesTr,
+  ...impersonationTr,
+  ...settingsTr,
 };
 
 export default tr;

@@ -1,5 +1,13 @@
 import { useMemo } from 'react';
-import { Bell, Building2, LayoutGrid, ShieldCheck, Users } from 'lucide-react';
+import {
+  Bell,
+  Building2,
+  LayoutGrid,
+  ScrollText,
+  Settings,
+  ShieldCheck,
+  Users,
+} from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
 import { MenuConfig, MenuItem } from './types';
 
@@ -39,9 +47,19 @@ export const MENU_SIDEBAR: MenuConfig = [
     icon: Bell,
     path: '/notifications',
   },
-  // slice C: audit + settings ekranları. `/audit` (auditlogs.read) ve
-  // `/settings` (settings.tenant.manage) menü öğeleri, bu ekranlar routes.tsx'te
-  // tanımlanana kadar KALDIRILDI — aksi halde kırık navigasyon (404) oluşuyordu.
+  {
+    title: 'nav.audit',
+    icon: ScrollText,
+    path: '/audit',
+    permission: 'auditlogs.read',
+  },
+  {
+    title: 'nav.settings',
+    icon: Settings,
+    path: '/settings',
+    // Visible to tenant OR host operators; the route + page gate the scopes.
+    anyPermission: ['settings.tenant.manage', 'settings.host.manage'],
+  },
 ];
 
 /**
@@ -63,6 +81,14 @@ export function filterMenuByPermission(
     }
 
     if (item.permission && !can(item.permission)) {
+      return acc;
+    }
+
+    if (
+      item.anyPermission &&
+      item.anyPermission.length > 0 &&
+      !item.anyPermission.some(can)
+    ) {
       return acc;
     }
 
