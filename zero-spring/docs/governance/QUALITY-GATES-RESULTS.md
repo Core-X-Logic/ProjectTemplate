@@ -124,4 +124,32 @@ styles), auth/tenant/i18n provider zinciri, typed `api/client` (401 refresh sing
 
 **Slice C quality-gate: GEÇTİ.** Backend 53 + frontend 68 + uçtan uca smoke; 0 kritik/yüksek; 3 modül kapandı.
 
+## F5 Slice A — SaaS (Editions + Features + Subscriptions) — 2026-07-18 ✅ (Lead doğruladı)
+
+| Kapı | Eşik | Sonuç | Durum |
+|---|---|---|---|
+| Backend verify | yeşil | **89 test** (86 IT + 3 unit), 0 fail — Lead elle koştu | ✅ |
+| `ModularityTests` | `saas` sınırları, döngü yok | geçti (`saas :: api` named interface) | ✅ |
+| Frontend build | BUILD SUCCESS | built 7.56s (3037 modül) | ✅ |
+| Frontend test (Lead) | yeşil | **90/90 PASS** (19 dosya; 68→90) | ✅ |
+| Typed client senkron | `gen:api` | 42 → **53 path**, tüm SaaS uçları | ✅ |
+| **Uçtan uca smoke** (canlı backend) | iş kuralları + güvenlik | **10/10 PASS** (aşağıda) | ✅ |
+| Açık kritik/yüksek güvenlik | 0 | 0 | ✅ |
+| Sözleşme iş kuralları (A.1 §1-6) | tümü | free+trial 400, kullanımdaki edition 409, fiyat snapshot, override zinciri — canlı kanıt | ✅ |
+
+**Smoke kanıtı (canlı):** host izinleri 22 · editions list · edition create (id=4, 49.90 USD) ·
+edition feature ata (maxUserCount=25) · paket atama **TRIALING + snapshot 49.9000 USD/MONTHLY + trialEnd 14g** ·
+free+trial reddi **400** · kullanımdaki edition silme reddi **409** · tenant override 25→**50** ·
+tenant izin seti **14** (host-only yok) · tenant edition create **403** · tenant feature yükseltme **403** ·
+`/me` yalnız kendi aboneliği.
+
+**Süreç bulgusu (F5-R9):** İlk smoke, testlerin yakalayamadığı gerçek bir üretim hatasını ortaya çıkardı —
+mevcut kurulumda yeni izinler statik Admin rollerine eklenmiyordu (host admin 17/22, `/api/editions` 403).
+Testler temiz DB kullandığı için yeşildi (**false-green**, R-19 sınıfı). Düzeltme: her açılışta çalışan
+idempotent izin-uzlaştırma + `RolePermissionReconciliationIT` (negatif kanıtla doğrulandı). Canlı log:
+`Static role 'Admin' reconciled to 22 permission(s)`.
+**Kural:** her faz için **canlı smoke zorunlu** — temiz-DB testi yeterli değil.
+
+**F5 Slice A quality-gate: GEÇTİ.**
+
 > Kural: bu tablo "yeşil" göstermeden hiçbir Faz 2 kalemi "Done" sayılmaz.

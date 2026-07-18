@@ -47,3 +47,24 @@ Email (welcome/confirm/forgot/reset — LocalizationIT 2, EmailDispatchIT 2), Ş
 > **KAPANIŞ:** İlk vertical slice + Slice C ile **tüm Faz 2 modülleri** (Users/Roles/OU/Notifications +
 > Impersonation/Audit/Settings) beş sütunda tam ve uçtan uca kanıtlı → **KAPANDI**. Faz dışı (SaaS F5,
 > veri migration F6, chat/realtime) kapsam dışında.
+
+## F5 — SaaS ticari katman (Slice A kapandı)
+
+Kaynak envanteri: `F5-SAAS-INVENTORY.md` · gap: `F5-GAP-ANALYSIS.md` · sözleşme: `CONTRACT-phase5.md`.
+
+| Module | Kaynak (ASP.NET Zero) | Backend | Frontend (React) | Permission/i18n | Test Evidence | Durum |
+|---|---|---|---|---|---|---|
+| **Editions (paket katalogu)** | `SubscribableEdition` + `EditionAppService` | **Done** (CRUD, fiyat düzenlenebilir ADR-0012, silme 409 kuralları) | **Done** (liste + form + feature editörü) | editions.read/manage `Side.HOST` · en/tr ✅ | EditionCrudIT 6 · editions-list + feature-values-editor FE testleri · smoke | **Closed** |
+| **Feature definitions + values** | `AppFeatures` + `EditionFeatureSetting`/`TenantFeatureSetting` | **Done** (registry, edition+tenant değerleri, çözümleme zinciri) | **Done** (tipe göre editör: BOOLEAN/NUMBER/STRING) | editions.read / tenantfeatures.manage · en/tr ✅ | FeatureResolutionIT 4 · smoke (edition 25 → tenant override 50) | **Closed** |
+| **Tenant package assignment** | `TenantManager` + `AbpTenants.EditionId` | **Done** (fiyat snapshot, trial kuralları, event-driven provisioning) | **Done** (paket atama dialogu) | subscriptions.manage · en/tr ✅ | SubscriptionAssignmentIT 8 · assign-edition-dialog FE · smoke (TRIALING) | **Closed** |
+| **Subscription status model** | implicit (IsActive+EndDate+InTrial) | **Done** (explicit status ADR-0009, geçiş guard'ı, `subscription_events`) | **Done** (status badge, activate/cancel) | subscriptions.read/manage · en/tr ✅ | SubscriptionStateMachineIT 4 · subscriptions-list FE · smoke | **Closed** |
+| **SaaS yetkilendirme** | `Pages.Editions.*` / `Pages.Tenants.*` (host-only) | **Done** (5 izin `Side.HOST`, ADR-0015 izolasyon) | **Done** (`<Can>` + RequireAuth) | 5 izin · en/tr ✅ | SaasAuthorizationIT 8 + SaasPermissionsAlignmentTest 2 · RolePermissionReconciliationIT 4 · smoke (403×2) | **Closed** |
+| Billing provider (SPI) | ortak arayüz **yok** | **Done (SPI + Manual)** | n/a | — | (Stripe Slice C) | Slice C |
+| Subscription lifecycle (job) | 3 worker, lock yok | Not started | Not started | — | — | Slice B |
+| Feature enforcement (`@RequiresFeature`) | imperatif `IFeatureChecker` | Not started (okuma hazır) | n/a | — | — | Slice B |
+| Proration / upgrade | `GetUpgradePrice` + min eşik | Not started | Not started | — | — | Slice B |
+| Payment / Invoice / Webhook | Stripe+PayPal, idempotency yok | Not started | Not started | — | — | Slice C |
+| Tenant self-registration | Free/Trial/Paid | Not started | Not started | — | — | Slice C (ops.) |
+
+> **Slice A kapanışı:** 5 modül beş sütunda tam + uçtan uca canlı kanıtlı. Slice B (lifecycle/enforcement/
+> proration) ve Slice C (billing/webhook/invoice) sözleşmede tanımlı, henüz başlamadı.

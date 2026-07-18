@@ -31,6 +31,30 @@ Kaynak analiz: ANALYSIS §3.1. `PHASE-2-REPORT.md` §F ile birebir hizalı (2026
 | R-24 | Soft-delete + unique(tenant_id, username): silinen kullanıcının username'i tekrar kullanılamıyor (409); ABP'de silinen username yeniden kullanılabilir | L | L | Düşük | Open | Unique index'e `deleted` dahil et (partial unique where deleted=false) veya silmede username'i mühürle; parity kararı | F3 |
 | R-25 | Impersonation cascade yasağı frontend'te yalnız UI-block (component); auth.impersonate() programatik çağrı client'ta re-check etmiyor — backend cascade kuralı otoriter (403 canlı kanıtlı) | L | M | Düşük | Mitigating | Backend authoritative (ImpersonationService + smoke 403); istenirse auth.impersonate guard eklenir | F3 (koşullu) |
 
+## F5 (SaaS ticari katman) riskleri — 2026-07-18 eklendi
+
+| ID | Risk | Olas. | Etki | Seviye | Durum | Mitigasyon | Ne zaman |
+|---|---|---|---|---|---|---|---|
+| F5-R1 | Modulith döngüsü: feature gating `identity→saas`, izin sabitleri `saas→identity` | M | H | **Yüksek** | Mitigating | `saas :: api` named interface; SaaS izinleri `saas` içinde; `tenancy`'ye saas bağımlılığı yok (event) | F5-A |
+| F5-R2 | Feature cache tutarsızlığı (edition/tenant değişince stale değer) | M | M | Orta | Open | Redis cache + yazma yollarında explicit evict + IT kanıtı | F5-B |
+| F5-R3 | Tenant kendi feature/limitini yükseltebilir | M | H | **Yüksek** | Mitigating | Tüm SaaS yazma uçları `Side.HOST`; `SaasAuthorizationIT` negatif test | F5-A |
+| F5-R4 | Para hassasiyeti (double kullanımı) | L | H | Orta | Mitigating | `BigDecimal` + `numeric(19,4)` + zorunlu currency | F5-A |
+| F5-R5 | Ay-sonu/timezone kayması (31 Oca + 1 ay) | M | M | Orta | Open | `java.time.Period` + clamp kuralı + birim test | F5-B |
+| F5-R6 | Seeder idempotency tuzağı (host admin varsa seed atlanır → edition seed çalışmaz) | H | L | Orta | Mitigating | Edition seed'i ayrı idempotent adım (edition varlığına bakar) | F5-A |
+| F5-R7 | Abonelik geçerlilik kapısı her istekte DB'ye gider | M | M | Orta | Open | Cache'li `SubscriptionGuard`, yalnız tenant-scoped uçlarda | F5-B |
+| F5-R8 | Kaynak sistemdeki kritik kusurların kopyalanması (istemci-tetikli aktivasyon, webhook 400-retry, Customer.Description eşleştirme) | M | H | **Yüksek** | Mitigating | ADR-0011/0014 ile açıkça yasaklandı; `F5-SAAS-INVENTORY.md` §11 K1-K16 listesi | F5-C |
+| F5-R9 | **Yeni izinler mevcut kurulumda statik Admin rollerine eklenmiyor** — seeder "zaten var → atla" davranışı; testler temiz DB kullandığı için false-green (R-19 sınıfı). Canlı smoke ile yakalandı: host admin 17/22 izin, `/api/editions` 403 | H | H | **Yüksek** | Mitigating | `DataSeeder`'a her açılışta çalışan idempotent izin-uzlaştırma adımı (yalnız `isStatic` roller) + `RolePermissionReconciliationIT`; **her faz için canlı smoke zorunlu** | F5-A |
+
+## F6 (veri migration) erken riskleri — F5 tasarımında azaltıldı
+
+| ID | Risk | Seviye | Durum | Not |
+|---|---|---|---|---|
+| F6-R1 | Implicit→explicit durum türetme hatası (müşteri erişimi haksız kesilir/açılır) | **Yüksek** | Mitigating | Karar tablosu `F5-ETL-IMPACT.md` §2'de sabitlendi |
+| F6-R2 | 30-gün → ay dönüşümünde abonelik süresi kayması | **Yüksek** | Mitigating | P4: `current_period_end_at` doğrudan taşınır, yeniden hesaplanmaz |
+| F6-R3 | `ExtraProperties` JSON'dan tutar/edition çıkarma | **Yüksek** | Open | F6 |
+| F6-R4 | Feature TPH ayrım hatası → tenant override'ın edition'a yazılması | **Yüksek** | Mitigating | P7: ayrı tablolar (`edition_features`/`tenant_features`) |
+| F6-R5 | Gateway metadata migration'ı (Stripe `metadata.tenantId`) unutulursa recurring webhook tenant çözemez | **Yüksek** | Open | F6 cutover; P3: `external_ref`/`provider` kolonları F5-A'da hazır |
+
 ## Mitigasyon takvimi (özet)
 
 - **F1 ✅:** R-01, R-02 Closed; R-10 taşınmama kararı.

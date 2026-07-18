@@ -13,3 +13,10 @@ Durum: `Accepted` · `Superseded by ADR-X` · `Proposed`.
 | [0006](ADR-0006-frontend-angular.md) | Frontend Angular ile devam | ~~Superseded~~ by 0008 | F2/F4 |
 | [0007](ADR-0007-migration-strategy.md) | Greenfield parity build + tek seferlik ETL + big-bang cutover | Accepted | Genel |
 | [0008](ADR-0008-frontend-react-vite.md) | Frontend React + Vite + TypeScript (Metronic starter) | Accepted | F2 |
+| [0009](ADR-0009-explicit-subscription-status.md) | Explicit `SubscriptionStatus` + domain geçiş metotları | Accepted | F5-A |
+| [0010](ADR-0010-billing-provider-spi.md) | `BillingProvider` SPI + registry; gerçek gateway Slice C'de | Accepted | F5-A/C |
+| [0011](ADR-0011-webhook-idempotency.md) | Webhook idempotency (`webhook_events` UQ; duplicate/kalıcı hatada 200) | Accepted | F5-C |
+| [0012](ADR-0012-subscription-price-snapshot.md) | Abonelikte fiyat snapshot; edition düzenlenebilir | Accepted | F5-A |
+| [0013](ADR-0013-billing-period-java-time.md) | `BillingPeriod` + `java.time` (30/365 gün sabitleri terk) | Accepted | F5-A |
+| [0014](ADR-0014-server-authoritative-activation.md) | Server-authoritative aktivasyon (webhook + reconciliation) | Accepted | F5-C |
+| [0015](ADR-0015-saas-tenant-isolation.md) | SaaS'ta `@Filter` yok; host-only izin + explicit sorgu izolasyonu | Accepted | F5-A |

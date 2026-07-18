@@ -104,3 +104,33 @@ Keep a Changelog formatı. Tarihler mutlak (proje takvimi: 2026-07-17'de başlad
 - **Tüm Faz 2 modülleri KAPANDI** (Users/Roles/OU/Notifications + Impersonation/Audit/Settings). Yeni riskler: R-24
   (soft-delete unique username, düşük), R-25 (impersonate cascade UI-only, backend authoritative, düşük).
 - Faz dışı: SaaS (F5), veri migration (F6), chat/realtime — kapsam dışı.
+
+## [Faz 5] — 2026-07-18 — SaaS ticari katman
+
+### Analiz ve tasarım (ilk zorunlu teslim)
+- 4 paralel envanter taramasıyla **`F5-SAAS-INVENTORY.md`**: gerçek şema (TPH edition/feature; payments'ta
+  Amount/EditionId DROP edilip JSON'a taşınmış), 7 enum semantiği, implicit state machine (13 geçiş), proration
+  formülü, payment abstraction'ın **gerçekte olmadığı**, webhook idempotency yokluğu, invoice race condition —
+  ve **16 kusur listesi (K1-K16)**.
+- **`F5-GAP-ANALYSIS.md`** (20 gap + taşınmayacak kararlar), **`F5-ARCHITECTURE.md`** (saas modülü, explicit state
+  machine, BillingProvider SPI, webhook idempotency, feature gating, provisioning), **`CONTRACT-phase5.md`**
+  (Slice A/B/C + kabul/test kriterleri), **`F5-ETL-IMPACT.md`** (12 eşleme riski + F6 için bağlayıcı durum
+  türetme tablosu + tasarıma yansıtılan 10 karar).
+- ADR-0009..0015 (explicit status, BillingProvider SPI, webhook idempotency, fiyat snapshot, BillingPeriod,
+  server-authoritative aktivasyon, SaaS izolasyon kararı).
+
+### Slice F5-A ✅ KAPANDI (Lead doğrulandı)
+- **Backend:** `saas` modülü (`saas :: api` named interface, Modulith döngüsüz) + `V4__saas.sql`
+  (editions, edition_features, tenant_features, subscriptions, subscription_events + ETL kolonları) +
+  5 host-only izin + event-driven provisioning + ayrı idempotent SaaS seed. **89 test** (53 → 89).
+- **Frontend:** `features/editions` (liste/form/feature editörü) + `features/subscriptions` (liste/paket atama/
+  tenant-feature paneli) + routing/menü/i18n. **90 test** (68 → 90), build yeşil. Ajan iki gerçek bug'ı
+  yakaladı (grid `sort` → backend 500; dialog kapalıyken fetch).
+- **Typed client:** 42 → 53 path.
+- **Uçtan uca canlı smoke 10/10:** edition CRUD, feature ata, paket atama (TRIALING + fiyat snapshot),
+  free+trial 400, kullanımdaki edition 409, tenant override 25→50, tenant 403×2, `/me`.
+- **F5-R9 (Yüksek) bulundu ve kapatıldı:** mevcut kurulumda yeni izinler statik Admin rollerine eklenmiyordu
+  (host admin 17/22 → `/api/editions` 403). Testler temiz DB kullandığı için **false-green**. Düzeltme:
+  her açılışta idempotent izin-uzlaştırma + `RolePermissionReconciliationIT` (negatif kanıtla doğrulandı).
+  **Yeni kural: her faz için canlı smoke zorunlu.**
+- Açık: Slice B (lifecycle job + feature enforcement + proration), Slice C (Stripe + webhook + invoice).
