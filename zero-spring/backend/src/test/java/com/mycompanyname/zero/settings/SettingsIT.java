@@ -86,6 +86,18 @@ class SettingsIT extends AbstractIntegrationIT {
     }
 
     @Test
+    void tenantSettingsCarryDefinitionDefaultAsHint() {
+        HttpHeaders admin = tenantAdmin();
+        // Even with a tenant override in place, defaultValue must reflect the definition fallback (SETTINGS parity).
+        putTenantSetting(admin, REQUIRED_LENGTH, "12");
+
+        JsonNode body = getTenantSettings(admin);
+        assertThat(settingDefaultValue(body, REQUIRED_LENGTH))
+                .as("defaultValue must equal the definition default (App.Password.RequiredLength = 6)")
+                .isEqualTo("6");
+    }
+
+    @Test
     void tenantUserCannotReadHostSettings() {
         HttpHeaders admin = tenantAdmin();
         ResponseEntity<JsonNode> response = restTemplate.exchange(
@@ -127,5 +139,32 @@ class SettingsIT extends AbstractIntegrationIT {
             return null;
         }
         return value.isValueNode() ? value.asText() : value.path("value").asText();
+    }
+
+    /**
+     * Reads the {@code defaultValue} hint from an array/page of {@code {name, value, defaultValue}} objects.
+     */
+    private String settingDefaultValue(JsonNode body, String name) {
+        if (body == null) {
+            return null;
+        }
+        JsonNode array = null;
+        if (body.isArray()) {
+            array = body;
+        } else if (body.path("content").isArray()) {
+            array = body.path("content");
+        } else if (body.path("settings").isArray()) {
+            array = body.path("settings");
+        }
+        if (array == null) {
+            return null;
+        }
+        for (JsonNode node : array) {
+            if (name.equals(node.path("name").asText())) {
+                JsonNode value = node.path("defaultValue");
+                return value.isNull() || value.isMissingNode() ? null : value.asText();
+            }
+        }
+        return null;
     }
 }

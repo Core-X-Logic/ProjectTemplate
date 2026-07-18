@@ -89,7 +89,8 @@ public class SettingController {
     private List<SettingDto> resolve(List<SettingDefinition> definitions, Long tenantId, Long userId) {
         return definitions.stream()
                 .map(definition -> new SettingDto(definition.name(),
-                        settingManager.getOrDefault(definition.name(), tenantId, userId)))
+                        settingManager.getOrDefault(definition.name(), tenantId, userId),
+                        definition.defaultValue()))
                 .toList();
     }
 
