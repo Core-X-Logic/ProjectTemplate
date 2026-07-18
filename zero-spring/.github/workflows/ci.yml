@@ -8,7 +8,8 @@ on:
 # Sıralı prod release gate. Her job bir öncekine `needs` ile bağlı; herhangi biri
 # düşerse zincirin geri kalanı hiç çalışmaz ve `release` job'ı asla tetiklenmez.
 #
-#   build → backend / frontend (test) → typed-client-drift → live-smoke → security-checks → release
+#   build → backend / frontend (test) → typed-client-drift → migration-drift → live-smoke
+#         → security-checks → release
 #
 # Job isimleri `backend` ve `frontend` KASITLI olarak korundu: branch protection'daki
 # "required status checks" bu isimlere referans verir. Yeniden adlandırmak, korumayı
@@ -300,7 +301,169 @@ jobs:
             backend.log
           if-no-files-found: ignore
 
-  # ── GATE 4: live-smoke ───────────────────────────────────────────────────────
+  # ── GATE 4: migration-drift ──────────────────────────────────────────────────
+  # NEDEN zorunlu (PROD-R12): buradaki HER doğrulama bugüne kadar TEMİZ bir veritabanı
+  # üzerinde yapılıyordu. MigrationGuardIT, live-smoke, Testcontainers — hepsi boş bir
+  # şemaya V1..Vn uygular. Prod'da olan şey bu değildir: prod'da MEVCUT bir kurulum
+  # vardır ve yalnızca yeni sürümler uygulanır. F5-R9 tam olarak bu boşluktan geçti —
+  # temiz DB'de tüm suite yeşilken çalışan kurulum bozuktu.
+  #
+  # Bu gate önceki sürümün migration setini uygular (= "mevcut kurulum"), sonra bu
+  # commit'in setini ONUN ÜSTÜNE koyar ve üç ayrı şeyi assert eder:
+  #   1. checksum drift — uygulanmış bir V dosyası sonradan düzenlendiyse `validate` düşer.
+  #      Bu, prod'da Flyway'in başlangıçta patlamasıyla AYNI hatadır, ama deploy'dan önce.
+  #   2. dolu şema üzerine migrate — yeni sürüm var olan veriye/kısıtlara karşı uygulanır.
+  #   3. entity ↔ şema uyumu — jar `ddl-auto=validate` ile YÜKSELTİLMİŞ şemaya karşı boot eder.
+  #      Yeni bir kolonu migration'a eklemeyi unutmak burada yakalanır; temiz kurulumda
+  #      yakalanmaz, çünkü orada da aynı eksik kolon eksiktir ve tutarlı görünür.
+  # 4. idempotency — migrate iki kez koşar; ikincisi hiçbir şey uygulamamalıdır.
+  migration-drift:
+    name: migration-drift
+    runs-on: ubuntu-latest
+    needs: typed-client-drift
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: zero
+          POSTGRES_USER: zero
+          POSTGRES_PASSWORD: zero
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - name: Checkout
+        # Geçmiş gerekli: "önceki sürümün migration seti" bir önceki commit'ten/base
+        # branch'ten çıkarılıyor. fetch-depth: 1 ile bu gate hiçbir şey karşılaştıramaz.
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Download backend jar
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-jar
+          path: dist
+
+      - name: Resolve the previous migration set
+        id: baseset
+        run: |
+          set -euo pipefail
+          MIGDIR=backend/src/main/resources/db/migration
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="origin/${{ github.base_ref }}"
+            git fetch --no-tags --depth=50 origin "${{ github.base_ref }}" || true
+          else
+            BASE="HEAD^"
+          fi
+
+          if ! git rev-parse --verify "${BASE}" >/dev/null 2>&1; then
+            echo "::warning::Karşılaştırılacak önceki commit yok (${BASE}); gate temiz kurulumla sınırlı koşacak"
+            echo "have_base=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          mkdir -p oldset
+          if git archive "${BASE}" "${MIGDIR}" 2>/dev/null | tar -x -C oldset --strip-components=6; then
+            echo "have_base=true" >> "$GITHUB_OUTPUT"
+            echo "Önceki set (${BASE}):"
+            ls -1 oldset
+          else
+            echo "::warning::${BASE} içinde ${MIGDIR} yok; gate temiz kurulumla sınırlı koşacak"
+            echo "have_base=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Flyway CLI, uygulamanın kendisi değil: eski seti uygularken yeni jar'ın entity
+      # doğrulaması araya girmemeli — yoksa "eski şema + yeni entity" adımı, ölçmek
+      # istediğimiz şeyin ta kendisi olduğu halde, kurulumu hiç kuramadan patlar.
+      - name: Apply the PREVIOUS migration set (simulated existing installation)
+        if: steps.baseset.outputs.have_base == 'true'
+        run: |
+          set -euo pipefail
+          docker run --rm --network host \
+            -v "${PWD}/oldset:/flyway/sql:ro" \
+            flyway/flyway:11-alpine \
+            -url="${DB_URL}" -user="${DB_USER}" -password="${DB_PASSWORD}" \
+            -connectRetries=10 -baselineOnMigrate=false \
+            migrate
+
+      # Asıl kapı. `validate` uygulanmış her migration'ın checksum'ını dosyalarla
+      # karşılaştırır: yayınlanmış bir V dosyası düzenlendiyse burada düşer.
+      - name: Validate the CURRENT set against it (checksum drift)
+        if: steps.baseset.outputs.have_base == 'true'
+        run: |
+          set -euo pipefail
+          if ! docker run --rm --network host \
+            -v "${PWD}/backend/src/main/resources/db/migration:/flyway/sql:ro" \
+            flyway/flyway:11-alpine \
+            -url="${DB_URL}" -user="${DB_USER}" -password="${DB_PASSWORD}" \
+            -connectRetries=10 -ignoreMigrationPatterns='*:pending' \
+            validate; then
+            echo "::error::migration-drift: checksum drift — yayınlanmış bir migration dosyası değiştirilmiş. Mevcut kurulumlarda Flyway başlangıçta patlar. Düzeltme: dosyayı geri al ve değişikliği YENİ bir V sürümü olarak ekle."
+            exit 1
+          fi
+
+      - name: Migrate onto the populated schema, then prove it is idempotent
+        run: |
+          set -euo pipefail
+          run_flyway() {
+            docker run --rm --network host \
+              -v "${PWD}/backend/src/main/resources/db/migration:/flyway/sql:ro" \
+              flyway/flyway:11-alpine \
+              -url="${DB_URL}" -user="${DB_USER}" -password="${DB_PASSWORD}" \
+              -connectRetries=10 "$@"
+          }
+          run_flyway migrate
+          run_flyway migrate | tee second.log
+          if ! grep -q "already up to date\|No migration necessary\|Schema .* is up to date" second.log; then
+            echo "::error::migration-drift: ikinci migrate no-op değil — bir migration tekrar uygulanıyor"
+            exit 1
+          fi
+          run_flyway info
+
+      # F5-R9 sınıfı: entity haritası YÜKSELTİLMİŞ şemaya uyuyor mu. ddl-auto=validate
+      # olduğu için uyumsuzluk boot'u düşürür; migration'sız eklenen bir alan burada çıkar.
+      - name: Boot the jar against the upgraded schema (ddl-auto=validate)
+        run: |
+          set -euo pipefail
+          JAR=$(ls dist/zero-platform-*.jar | head -n1)
+          JWT_SECRET="$(head -c 64 /dev/urandom | base64 -w0)" \
+          SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE_RUNTIME}" \
+          DB_URL="${DB_URL}" DB_USER="${DB_USER}" DB_PASSWORD="${DB_PASSWORD}" \
+          SEED_ADMIN_PASSWORD="${SEED_ADMIN_PASSWORD}" \
+          nohup java -jar "${JAR}" > migration-boot.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/actuator/health/readiness >/dev/null 2>&1; then
+              echo "Yükseltilmiş şema üzerinde boot OK"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::migration-drift: jar yükseltilmiş şemaya karşı boot edemedi (ddl-auto=validate uyumsuzluğu olabilir)"
+          tail -n 120 migration-boot.log
+          exit 1
+
+      - name: Upload migration logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-drift-logs
+          path: |
+            migration-boot.log
+            second.log
+          if-no-files-found: ignore
+
+  # ── GATE 5: live-smoke ───────────────────────────────────────────────────────
   # NEDEN zorunlu: Testcontainers IT'leri Spring context'i kendi kurar; gerçek
   # `java -jar` başlangıcını (Flyway migration zinciri, seed runner, filter sırası,
   # security chain) doğrulamaz. Bu gate paketlenmiş jar'ı üretimdeki gibi çalıştırıp
@@ -309,7 +472,7 @@ jobs:
   live-smoke:
     name: live-smoke
     runs-on: ubuntu-latest
-    needs: typed-client-drift
+    needs: migration-drift
     services:
       postgres:
         image: postgres:16
@@ -486,7 +649,7 @@ jobs:
           path: backend.log
           if-no-files-found: ignore
 
-  # ── GATE 5: security-checks ──────────────────────────────────────────────────
+  # ── GATE 6: security-checks ──────────────────────────────────────────────────
   # NEDEN zorunlu: sızmış bir credential geri alınamaz — rotasyon gerektirir; bu
   # yüzden merge ÖNCESİ bloklamak tek etkili nokta.
   #
@@ -624,7 +787,7 @@ jobs:
             echo "| Artifact | \`$(basename "${JAR}")\` |"
             echo "| Boyut | $(du -h "${JAR}" | cut -f1) |"
             echo
-            echo "Geçilen gate'ler: build → backend/frontend test → typed-client-drift → live-smoke → security-checks"
+            echo "Geçilen gate'ler: build → backend/frontend test → typed-client-drift → migration-drift → live-smoke → security-checks"
             echo
             echo "> Gerçek deploy adımı henüz bağlı değil (placeholder)."
           } >> "${GITHUB_STEP_SUMMARY}"

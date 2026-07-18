@@ -86,7 +86,10 @@ Hepsi **kanıtlı** (dosya:satır). `PROD-Rxx` = prod çıkışını bloklayan b
 
 ### F5-B P0 kapanış turu (2026-07-18)
 
-Test durumu: **168 yeşil** (150 IT + 18 unit); kapanış turundan önce 133 idi.
+Test durumu: **326 yeşil** (236 IT + 90 unit); sertleştirme başlarken 133, ilk P0 turu sonunda 168 idi.
+*(Bu satır bir süre "168 yeşil (150 IT + 18 unit)" olarak kaldı ve turu kapatan bağımsız incelemede
+yanlış olduğu tespit edildi — register denetim kaydı olarak kullanılıyor, eskimiş sayı bir sonraki turu
+yanlış yönlendirir. Gerçek ölçüm: `mvnw clean verify`, `BUILD SUCCESS`, 0 fail / 0 error / 0 skip.)*
 Her satırın kanıtı, o bulguyu *özellikle* hedefleyen bir testtir — mevcut testlerin yeşil kalması kanıt sayılmaz.
 
 | ID | Durum | Değişiklik | Kanıt (test) |
@@ -102,7 +105,7 @@ Her satırın kanıtı, o bulguyu *özellikle* hedefleyen bir testtir — mevcut
 | PROD-R9 | **Closed** | Hikari pool ayarları (max/min-idle/connection-timeout/max-lifetime/leak-detection) base + prod | — (konfigürasyon; davranış testi yok) |
 | PROD-R10 | **Closed** | V6: `uq_users_tenant_username` → **partial unique index** (`where deleted = false`), `nulls not distinct` korunarak | `SoftDeletedUsernameReuseIT` (3 test) |
 | PROD-R11 | **Closed** | `PostgresVersionGuard` (Flyway `BEFORE_MIGRATE`, V1'den önce) + V6 başında `DO` bloğu. V1/V2'ye **dokunulmadı** (checksum) | `MigrationGuardIT` (3 test) |
-| PROD-R12 | Open | Süreç maddesi; bu turun kapsamı dışında | — |
+| PROD-R12 | **Closed** | **CI `migration-drift` gate'i** (`ci.yml`, GATE 4): önceki sürümün migration seti uygulanır (= mevcut kurulum), sonra bu commit'in seti onun üstüne konur → `validate` (checksum drift), dolu şema üzerine `migrate`, ikinci `migrate` no-op (idempotency), ve jar'ın `ddl-auto=validate` ile yükseltilmiş şemaya karşı boot etmesi | `ci.yml` GATE 4; `MigrationGuardIT` (3), `PostgresVersionGuardTest` |
 | PROD-R13 | **Closed** | `CacheConfig implements CachingConfigurer` + `CacheErrorHandler`: Redis hatası 500 yerine cache bypass + WARN | — (hata yolu; enjeksiyon testi yok) |
 | PROD-R14 | **Closed** | V6: `ix_users_tenant_lower_username` fonksiyonel index | `SoftDeletedUsernameReuseIT.theHardeningIndexesExist` |
 | PROD-R15 | **Closed** | (a) `pg_advisory_xact_lock` — `DataSeeder` + `SaasSeeder`, ortak anahtar; (b) idempotency IT; (c) ShedLock `usingDbTime()` **+ V6'da `shedlock` kolon tipi düzeltmesi** (aşağıdaki nota bakın) | `SaasSeederIdempotencyIT` (2 test), `ShedLockIT` (3 test) |
@@ -143,7 +146,60 @@ belgelenmiş** istisnadır; gerekçe hem `V6__hardening.sql` hem `SchedulingConf
   decoder ve access-token revocation (15 dk pencere) **açık** kalır.
 - **PROD-R9 / PROD-R13:** Kodda kapalı, ancak davranışsal testi yok (pool tükenmesi ve Redis kesintisi
   enjekte etmeyi gerektirir). Konfigürasyon ve hata yolu kod incelemesiyle doğrulandı.
-- **PROD-R12:** Süreç maddesi, bu turun kapsamı dışında bırakıldı.
+
+### Adversaryal turlar B–F ve kapanış turu (2026-07-18)
+
+> **Kayıt düzeltmesi.** Aşağıdaki 30 bulgu bir süre yalnızca kod yorumlarında ve commit mesajlarında
+> yaşadı; register'da satırları yoktu. Bu, register'ın denetim kaydı olma işlevini bozar — bu yüzden
+> geriye dönük olarak buraya alındılar. Hepsi kapalı; kanıt sütunu ya test adı ya canlı ölçümdür.
+> Her tur, bir öncekinin düzeltmesini **saldırgan gözüyle yeniden inceleyerek** açıldı.
+
+| Tur | Bulgu | Durum | Kanıt |
+|---|---|---|---|
+| B1 | Yüzde-kodlu yol (`/api/auth/%6Cogin`) throttle'ı atlıyor; context-path kırılması | **Closed** | `ThrottledPathMatcherTest`, `ContextPathRateLimitIT` |
+| B2 | Aşırı gövde → username çıkarımı atlanıyor → bucket bypass (20 KB pad) | **Closed** | `RateLimitBypassIT`; canlı 20 KB login → **413** |
+| B3 | `X-Forwarded-For`'un **en solu** okunuyor → çağıran kendi bucket'ını seçiyor | **Closed** | `ClientAddressResolver` (sağdan `trusted-proxy-count`), `RateLimitBypassIT` |
+| B4 | `zero.seed.enabled` default `true` → profil kaçarsa bilinen admin seed'lenir | **Closed** | `SeedProfileDefaultTest`, `SeedHardeningIT` |
+| B5 | `PostgresVersionGuard` `SQLException`'ı yutuyordu → **fail-open** | **Closed** | `PostgresVersionGuardTest` |
+| B6 | `/v3/api-docs` her profilde anonim → 54 route + DTO keşfi | **Closed** | `ApiDocsExposureIT`, `ProdApiDocsExposureIT` |
+| B7 | `maven-wrapper.properties` **BOM'lu** → `./mvnw` POSIX'te kırık → CI hiç build edemezdi | **Closed** | `MavenWrapperEncodingTest` (R-22 de kapandı) |
+| B8 | CORS property doğrulaması yok | **Closed** | `CorsPropertiesValidationTest` |
+| C1 | Limiter'ın format envanteri yanlış (`+json` son eki) | **Closed** | `RateLimitMediaTypeFailClosedIT`, `RequestBodyFormatsTest` |
+| C2 | Username çıkarımı fazla katı (`isTextual()`) → sayısal username bucket'tan kaçıyor | **Closed** | `RateLimitMediaTypeFailClosedIT` |
+| C3 | 405/415/406 → `handleUnexpected` → **500 + stack trace** | **Closed** | `HttpErrorContractIT`, `ClientErrorLogBudgetIT` |
+| C4 | Reddedilen istek IP bucket'ını harcamıyordu → ücretsiz ret = sınırsız hız | **Closed** | `RateLimitBypassIT:188` |
+| C5 | api-docs kapısı `if (!production)` → **profilsiz boot'ta fail-open** (canlı 200) | **Closed** | `DefaultProfileApiDocsExposureIT` |
+| C6 | `trusted-proxy-count` dev'de prod şeklini taklit ediyordu | **Closed** | `DevProfileSecurityIT` |
+| C7 | **Test kalitesi:** tüm rate-limit testleri header'ı aynı kurduğu için D1 boyunca yeşil kaldı | **Closed** | `RateLimitContentTypeBypassIT:38` (R-19 false-green sınıfı) |
+| D1 | Media-type allowlist: çağıranın seçtiği `Content-Type` 16 KB sınırını kapatıyor (`application/yaml`, springdoc üzerinden) | **Closed** | `RateLimitMediaTypeFailClosedIT`; allowlist → **fail-closed** kural |
+| D2 | Limiter'ın parse edemediği gövde ölçülmeden geçiyordu | **Closed** | `RateLimitMediaTypeFailClosedIT:71` |
+| D3 | `@ExceptionHandler(Exception.class)` kendi status'unu taşıyan **tüm** framework exception'larının önünde → 500 + trace | **Closed** | `FrameworkExceptionContractIT` — tek tek isim yerine **sınıf** kapatıldı (`ErrorResponse` 4xx kuralı) |
+| D4 | `max-body-bytes` yalnız throttled yollarda | **Closed → F1** | kalıcı çözüm F1 |
+| D5 | Media-type yazımlarını elle saymak yetmedi (üçüncü tekrar) | **Closed** | türetilmiş envanter |
+| E1 | `?sort=;drop` → 500 + 233 frame, ~29 KB log/istek; **yetkisiz ama kimlikli** herkes | **Closed** | `ClientErrorLogBudgetIT:191`, `GlobalExceptionHandlerSortTest` — 3 ayrı exception şekli |
+| E2 | Reddedilen sort property'si çağırana echo ediliyordu | **Closed** | `GlobalExceptionHandlerSortTest:202` |
+| E3 | Maven incremental compile stale `.class` → CI'da false green/red | **Closed** | `ci.yml` `clean verify` / `clean package` |
+| E4 | Geçerli token tutan çağıran ERROR satırı üretebiliyordu (gerçek arızayı gürültüye gömme) | **Closed** | `ClientErrorLogBudgetIT:157`; canlı: tüm smoke boyunca **0 ERROR** |
+| **F1** | **Gövde sınırı yalnız 5 anonim yolda.** `@RequestBody` binding `@PreAuthorize`'dan **önce** koştuğu için sıfır izinli kullanıcı 1.5 MB gönderiyor, 403'ü gövde tamamen deserialize edildikten **sonra** alıyordu — allocation boyutu çağıranın seçimi | **Closed** | `RequestBodyLimitIT` (11), `RequestBodyLimitLayeringIT` (2), `BoundedBodyReaderTest` (6); canlı 1.5 MB **ve chunked** → 413 |
+
+**F1'in kendi implementasyonunda bulunan iki hata** (her biri kasten bozularak kanıtlandı):
+(a) `instanceof CachedBodyHttpServletRequest` kısa devresi "sıkı kural kazanır"ı tasarım özelliği
+olmaktan çıkarıp default değerlerin tesadüfüne çeviriyordu — limitler ters çevrilerek
+`RequestBodyLimitLayeringIT` ile kilitlendi; (b) `maxBodyBytes + 1` `Integer.MAX_VALUE`'da negatife
+taşıp **boş gövde** döndürüyordu (her chunked isteği sessizce boşaltan yanlış-konfigürasyon).
+
+### Kapanış turunda açılan yeni maddeler
+
+| ID | Bulgu | Kaynak | Etki | Şiddet | Durum |
+|---|---|---|---|---|---|
+| PROD-R17 | `/actuator/metrics` ve `/actuator/prometheus` **yetki istemiyordu**: yalnız `anyRequest().authenticated()` altındaydı → sıfır izinli tenant kullanıcısı heap/JVM durumu, route isimleri, istek sayaçları ve `spring.security.filterchains.*` (hangi korumaların devrede olduğu) okuyabiliyordu. Base config'te expose edildiği ve prod override'ı olmadığı için **prod davranışı** | `SecurityConfig`, `application.yml` | Keşif yüzeyi (yetki yükseltmesi değil) | Orta | **Closed** — `/actuator/**` → `settings.host.manage` (host-only). `ActuatorExposureIT` (5). Negatif kanıt: kural kaldırılınca sıfır izinli kullanıcı **200 + tam metrik listesi** |
+| PROD-R18 | `REDIS_PORT` env'i **hiç okunmuyordu** (`port: 6379` literal); runbook'ta zorunlu değişken olarak listeliydi. Prod cache'i Redis olduğu için en çok muhtaç ortam ayarlayamayan ortamdı | `application.yml` | Yönetilen Redis'e (Azure 6380/TLS) bağlanılamaz | Yüksek (deployment) | **Closed** — `${REDIS_PORT:6379}` |
+| PROD-R19 | SMTP auth desteklenmiyordu: `mail.smtp.auth: false` sabit, `MAIL_USERNAME`/`PASSWORD` okunmuyordu → SES/SendGrid/Postmark imkânsız. Üstelik `MAIL_HOST` boşken `LoggingEmailSender`'a **sessizce** düşülüyor, yani şifre sıfırlama kimsenin görmediği bir şekilde ölüyordu | `application.yml` | Şifre sıfırlama / e-posta doğrulama prod'da çalışmaz | Yüksek (fonksiyonel) | **Closed** — username/password + `MAIL_SMTP_AUTH` / `MAIL_SMTP_STARTTLS`. *Kalan:* `MAIL_HOST` boşken fail-fast değil (bilinçli, freeze) |
+| PROD-R20 | Imajda profil, heap sınırı ve healthcheck yoktu; entrypoint exec-form olduğu için `JAVA_OPTS` de genişlemiyordu | `backend/Dockerfile` | Yanlış config'le boot / OOM-kill / trafiğe erken açılma | Orta | **Closed** — `SPRING_PROFILES_ACTIVE=prod`, `MaxRAMPercentage=75`, readiness `HEALTHCHECK`, `exec` shell-form (SIGTERM PID 1'e ulaşsın) |
+| PROD-R21 | `/api/users` **SQL'de sayfalamıyor**: `@EntityGraph("roles")` + `Page<User>` → Hibernate `HHH90003004`, tüm silinmemiş kullanıcılar rollerle heap'e çekilip Java'da diliniyor | `UserRepository:36-71` | 50k kullanıcılı tenant'ta her sayfa isteği bellek/latency uçurumu; sayfa boyutu koruma olmaktan çıkıyor | Orta | **Open** — feature freeze; düzeltme: iki aşamalı sorgu (id sayfası → roller) veya `@BatchSize`. Canlı ölçümle tespit edildi (5 kullanıcıda görünmez) |
+
+- **PROD-R12:** Kapandı — CI'da `migration-drift` gate'i. *(Register bir süre "gate CI'ya eklendi"
+  diyordu; **gate yoktu**. İddia doğrulanmadan kapalı yazılmıştı, bu tur gerçekten yazıldı.)*
 
 **Doğrulanan iyi durumlar (aksiyon gerekmez):** gerçek secret sızıntısı **yok** (gitleaks desenleri 0 eşleşme);
 JWT algoritma HS512 **pinlenmiş** + issuer doğrulaması zorunlu + secret uzunluğu boot'ta fail-fast;

@@ -33,7 +33,17 @@ spring:
   mail:
     host: ${MAIL_HOST:}          # boşsa LoggingEmailSender
     port: ${MAIL_PORT:1025}
-    properties.mail.smtp.auth: false
+    # PROD-R19: auth was pinned to false and username/password were read from nowhere, so no real
+    # relay (SES, SendGrid, Postmark — all of them require credentials) could be configured. Password
+    # reset and email confirmation would have failed in production, and quietly: the sender falls back
+    # to LoggingEmailSender when MAIL_HOST is blank, so the failure mode is a user who never receives
+    # the mail rather than an error anyone sees. Defaults keep dev/mailpit and the GreenMail tests
+    # working unchanged.
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties.mail.smtp:
+      auth: ${MAIL_SMTP_AUTH:false}
+      starttls.enable: ${MAIL_SMTP_STARTTLS:false}
   messages:
     basename: i18n/messages
     encoding: UTF-8
@@ -41,11 +51,24 @@ spring:
   data:
     redis:
       host: ${REDIS_HOST:localhost}
-      port: 6379
+      # PROD-R18: this was the literal 6379, so REDIS_PORT was documented as a required variable in
+      # the runbook while being read by nothing. Only application-dev.yml overrode it. Managed Redis
+      # rarely runs on 6379 (Azure Cache uses 6380 for TLS), and prod switches the cache to redis —
+      # so the one environment that depends on the connection was the one that could not configure it.
+      port: ${REDIS_PORT:6379}
     web:
       pageable:
         default-page-size: 20
         max-page-size: 100
+  servlet:
+    multipart:
+      # F1. Driven by the same placeholder as zero.request.max-body-bytes on purpose. Boot's defaults
+      # here are 1 MB / 10 MB, so leaving them alone would have put a second, larger size ceiling on
+      # the same requests — and the effective limit would then be whichever of the two an operator
+      # did not know about. One knob, one answer. There are no multipart endpoints today; this is so
+      # that adding one cannot silently arrive with a bound nobody chose.
+      max-file-size: ${REQUEST_MAX_BODY_BYTES:1048576}
+      max-request-size: ${REQUEST_MAX_BODY_BYTES:1048576}
 server:
   # PROD-R4: behind a TLS-terminating proxy the request reaches Tomcat over plain HTTP, so
   # request.isSecure() is false and Spring Security silently drops the HSTS header. Honouring
@@ -96,6 +119,27 @@ zero:
     # charge (B2). These endpoints take a handful of short strings; 16 KB is already far above any
     # legitimate request, and raising it widens the window the limiter has to buffer per request.
     max-body-bytes: ${RATE_LIMIT_MAX_BODY_BYTES:16384}
+  request:
+    # F1: the application-wide body bound, and the reason it is a separate block from the one above.
+    # zero.ratelimit.max-body-bytes (16 KB) is enforced by RateLimitFilter, and that filter runs on
+    # zero.ratelimit.paths — five anonymous endpoints. Everything else in the application had NO body
+    # limit at all: Tomcat imposes none on a JSON body, and @RequestBody binding happens during
+    # argument resolution, i.e. BEFORE @PreAuthorize. Measured on this configuration: a principal
+    # holding a valid token and zero permissions posted 1.5 MB to POST /api/users and got its 403
+    # only after the whole body had been buffered and deserialized. The allocation size was the
+    # caller's to choose.
+    #
+    # The primary control is the reverse proxy (nginx client_max_body_size — see
+    # docs/RELEASE-RUNBOOK.md); this is the layer that holds when that one is missing or wrong.
+    #
+    # 1 MB because the largest legitimate body this API takes is a role with its permission list,
+    # three orders of magnitude below it. Raising it also raises the multipart ceilings above, which
+    # is the intended coupling: one size ceiling per request, not two.
+    enabled: ${REQUEST_LIMIT_ENABLED:true}
+    max-body-bytes: ${REQUEST_MAX_BODY_BYTES:1048576}
+    # The stricter of the two rules wins where they overlap: RateLimitFilter runs first and answers
+    # the anonymous paths at 16 KB, so listing /api/** here does not loosen them.
+    paths: /api/**
   seed:
     # B4: OFF by default, on purpose. This used to be `true`, so a deployment that lost its
     # SPRING_PROFILES_ACTIVE fell back to a base configuration that provisions a host admin, a

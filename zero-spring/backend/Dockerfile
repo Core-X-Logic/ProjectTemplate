@@ -19,4 +19,27 @@ COPY --from=build /workspace/target/zero-platform-*.jar /app/app.jar
 USER zero
 
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+
+# PROD-R20. The image carried no profile, no heap ceiling and no healthcheck.
+#
+# Profile: with no SPRING_PROFILES_ACTIVE the base config applies — cache `simple`, an empty CORS
+# allowlist, springdoc closed, and no JWT secret at all, so PROD-R1 makes the container fail to start
+# rather than sign with a known key. Fail-closed is the right outcome, but "the image does not boot
+# unless the orchestrator remembers a variable" is not a deployment contract. Pinning prod here makes
+# the default correct and still overridable (`docker run -e SPRING_PROFILES_ACTIVE=dev`).
+ENV SPRING_PROFILES_ACTIVE=prod
+
+# Heap: the JVM sizes itself from the *container* limit only when told to. Without this it reads the
+# host's memory on some runtimes and gets OOM-killed under a limit it never saw.
+ENV JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"
+
+# Readiness, not liveness: /actuator/health/readiness reports the datasource and the migration state,
+# so a container that booted but cannot reach Postgres is reported unhealthy instead of receiving
+# traffic. Anonymous by design (SecurityConfig permits /actuator/health/**) — the probe holds no
+# credentials, and PROD-R17 deliberately did not widen its rule over this path.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
+    CMD wget -qO- http://localhost:8080/actuator/health/readiness || exit 1
+
+# Shell form so JAVA_OPTS expands; `exec` so the JVM stays PID 1 and receives SIGTERM for a graceful
+# shutdown instead of being killed after the stop timeout.
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/app.jar"]

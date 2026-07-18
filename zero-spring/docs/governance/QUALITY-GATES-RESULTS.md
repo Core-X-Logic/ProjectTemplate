@@ -152,4 +152,77 @@ idempotent izin-uzlaştırma + `RolePermissionReconciliationIT` (negatif kanıtl
 
 **F5 Slice A quality-gate: GEÇTİ.**
 
+---
+
+## F5 Slice B + Production Hardening — kapanış turu — 2026-07-18 ✅ (Lead doğruladı)
+
+> **Neden bu girdi geç yazıldı — kaydı düzeltme.** `CONTRACT-phase5` §"Slice B quality gate — canlı
+> smoke ZORUNLU" madde 3, sonuçların bu dosyaya PASS/FAIL olarak yazılmasını şart koşuyordu. Slice B
+> ve ardından gelen yedi sertleştirme turu boyunca **bu satır hiç yazılmadı**; dosyanın son girdisi
+> F5 Slice A'ydı. Sözleşmenin kendi kanıt kapısı yerine getirilmemişti ve bunu turu kapatan
+> bağımsız inceleme yakaladı. Aşağıdaki tablolar o boşluğu bu turun **gerçek ölçümleriyle** kapatıyor;
+> geçmişe dönük tahmin yok, her satır ya bir test adı ya bir canlı ölçümdür.
+
+### Mühendislik kapıları
+
+| Kapı | Eşik | Sonuç | Durum |
+|---|---|---|---|
+| Backend `clean verify` | yeşil | **326 test** (236 IT + 90 unit), 0 fail / 0 error / 0 skip — Lead elle koştu, `BUILD SUCCESS` | ✅ |
+| `clean` gerçekten koştu mu | zorunlu (E3) | `maven-clean-plugin` log'da; sıfırdan derleme, incremental değil | ✅ |
+| Build log `[ERROR]` satırı | 0 | **0** | ✅ |
+| JaCoCo coverage check | geçmeli | "All coverage checks have been met" | ✅ |
+| `ModularityTests` | döngü yok | geçti | ✅ |
+| Frontend | yeşil | **90/90** (F5 Slice A'dan beri değişmedi — bu turda backend sözleşmesi değişti, **yeniden doğrulanmadı**, artık risk olarak kayıtlı) | ⚠️ |
+| Açık kritik/yüksek **sömürülebilir** güvenlik bulgusu | 0 | 0 | ✅ |
+
+### Sözleşme kapısı — Slice B canlı smoke (CONTRACT-phase5 §Slice B)
+
+Ortam: **temiz değil, migrate edilmiş mevcut DB** (`zero-postgres:5433`, şema v6), dev profil, gerçek
+`java -jar` başlangıcı. Bu şart F5-R9'dan sonra konuldu: temiz-DB suite'i yeşilken çalışan kurulum bozuktu.
+
+| Kriter | Sonuç | Kanıt (canlı ölçüm) |
+|---|---|---|
+| Süresi geçmiş abonelik → GRACE / EXPIRED | **PASS** | `grace_day_count=0` → ACTIVE→**EXPIRED**; `=3` → ACTIVE→**GRACE**, `grace_end_at = period_end + 3g`. `subscription_events` id=10/11, `actor=lifecycle-job`. Log: `advanced 2 subscription(s)` |
+| Guard: EXPIRED tenant iş uçlarında 403 | **PASS** | `/api/users`, `/api/roles`, `/api/organization-units`, `/api/audit-logs` → **403 SUBSCRIPTION_INVALID** |
+| Guard self-lock **yok** | **PASS** | Aynı anda `/api/auth/login` **200**, `/api/auth/me` **200**, `/api/subscriptions/me` **200** (`status: EXPIRED`) — kullanıcı kilitlenip ödeme yapamaz duruma düşmüyor |
+| `@RequiresFeature` kapalı feature → 403 | **PASS** | `app.organizationUnits=false` → `/api/organization-units` **403 FORBIDDEN** (öncesinde 200) |
+| Feature değişiminden sonra cache **stale değil** | **PASS** | Kapat→**anında 403**, aç→**anında 200**. Bekleme/retry yok (F5-R2) |
+| `app.maxUserCount` aşımı → red | **PASS** | canlı=4, limit=4 → **400 VALIDATION**; limit=0 → **201** (0 = sınırsız). Limit yalnız `deleted=false` sayıyor — doğru |
+| Proration; dönem sonu **kaymıyor** | **PASS** | 100→300 MONTHLY upgrade: `prorationAmount 199.9988` = `(300-100) × 0.999994026284` (HALF_UP, scale 4). `period_end` öncesi/sonrası **birebir aynı** |
+| Migration dry-run (mevcut veri) | **PASS** | `Successfully validated 6 migrations`, `Schema public is up to date`. V4/V5/V6 **dolu** tablolar üzerine uygulanmış (history `installed_on` > veri `created_at`), `success=t`. Ayrıca boş DB'de V1→V6 temiz kurulum kanıtı |
+
+### Sertleştirme regresyon smoke'u (7 tur, canlı)
+
+| Kontrol | Sonuç |
+|---|---|
+| Rate limit + `Retry-After` | 1-10 → 401, **11+ → 429**, `Retry-After` 45→44 azalarak (refill doğru) |
+| Yol/medya-tipi bypass'ları (B1/B2/D1/D2) | `text/plain` **415**, `application/yaml` **415**, 20 KB login **413** (`maxBodyBytes=16384`) |
+| Kimlikli uç + sınır üstü gövde (F1) | 1.5 MB `/api/users` **413**; **`Transfer-Encoding: chunked` de 413** (header-only kontrol burada atlanırdı); WARN, stack trace yok |
+| Güvenlik başlıkları (PROD-R4/R5) | Düz HTTP'de HSTS **yok**; `X-Forwarded-Proto: https` ile **var**. CSP/Referrer/Permissions/`X-Frame-Options: DENY` her yanıtta |
+| CORS (PROD-R3) | Listeli origin **200 + ACAO**; `evil.example.com` **403**, ACAO yok |
+| `/v3/api-docs` (B6/C5) | dev **200**; **profilsiz boot 401** (fail-closed doğrulandı) |
+| Log bütçesi (E1/E4) | 12 bozuk istek → 415/404/400/400/413/400/200/405/401/400/400/400; **ERROR satırı 0**, 500 **yok**. Tüm smoke boyunca toplam ERROR: **0** |
+| Tenant izolasyonu (regresyon) | tenant→`POST /api/editions` **403**; host token + `X-Tenant` mismatch **403**; host `/me` **22 izin**, `tenantId=null` |
+| **Actuator (PROD-R17)** | anonim **401**, sıfır izinli tenant kullanıcısı **403**, host admin **200**, probe'lar anonim **200** |
+
+### Load smoke
+
+420 istek / 8 paralel worker / 3 uç. **p50 20.9 ms · p95 39.7 ms · p99 46.2 ms · max 52.9 ms**,
+throughput 343.5 req/s, **hata oranı %0.00 (0/420)**, Hikari leak/timeout uyarısı 0.
+*Uyarı:* ölçüm dev profilinde **Hibernate SQL DEBUG açıkken** alındı → gerçek prod performansının alt sınırı.
+
+### SQL / N+1 gözlemi
+
+Yöntem: her istek öncesi/sonrası `org.hibernate.SQL` ifade sayımı.
+`/api/subscriptions` sayfa boyutu 1 → 5 ifade, 5 → **5 ifade** (satırla büyümüyor, N+1 yok);
+`/api/users` roller join-fetch, kullanıcı başına sorgu yok; `/api/editions` 2 ifade.
+
+**Bulgu (bloke edici değil, açık):** `/api/users` **SQL'de sayfalamıyor** —
+`HHH90003004: firstResult/maxResults specified with collection fetch; applying in memory`.
+Sebep: `UserRepository:36-71`, dört sayfalanan sorguda `@EntityGraph("roles")` + `Page<User>`.
+5 kullanıcıda görünmez; tek tenant'ta 50k kullanıcıda **her sayfa isteği** tüm seti heap'e çeker.
+Feature freeze nedeniyle değiştirilmedi; **PROD-R21** olarak kaydedildi.
+
+**F5 Slice B + hardening quality-gate: GEÇTİ.**
+
 > Kural: bu tablo "yeşil" göstermeden hiçbir Faz 2 kalemi "Done" sayılmaz.

@@ -72,3 +72,44 @@ tenant override 25→**50** · tenant izinleri **14** · tenant edition create *
 
 F5 SAAS EXECUTION: **GO** — Slice A beş modülde 5 sütun tam, backend 89 + frontend 90 test, uçtan uca canlı
 smoke 10/10, açık kritik/yüksek güvenlik 0; Slice B/C sözleşmesi hazır.
+
+---
+
+## H) Slice B + Production Hardening kapanışı — 2026-07-18 (bu rapora ek)
+
+Slice A'nın **süreç öğrenimi** ("temiz-DB testleri mevcut-kurulum hatalarını göremez") bu turda
+sözleşmeye bir quality gate olarak girdi ve **karşılığını verdi**: canlı smoke, 326 yeşil testin
+görmediği iki kusur buldu — `/actuator/prometheus`'un sıfır izinli tenant kullanıcısına açık olması
+(PROD-R17) ve `/api/users`'ın bellekte sayfalaması (PROD-R21).
+
+**Ölçümler (Lead tarafından elle koşuldu):**
+
+| Kalem | Sonuç |
+|---|---|
+| `mvnw clean verify` | **326 test** (236 IT + 90 unit), 0 fail/error/skip, `BUILD SUCCESS`, 0 `[ERROR]` |
+| Canlı smoke (mevcut migrate edilmiş DB) | **14/14 PASS**, backend log'unda **0 ERROR** satırı |
+| Load smoke | 420 istek / 8 worker → p95 **39.7 ms**, hata oranı **%0.00** |
+| Migration dry-run | 6 migration validate, drift yok; V4/V5/V6 **dolu** tablolar üzerine uygulanmış |
+| Açık kritik/yüksek **sömürülebilir** güvenlik | **0** |
+
+**Tur sayısı ve şiddet eğrisi (dürüst kayıt).** Sertleştirme 8 tur sürdü ve **her tur yeni bulgu
+çıkardı** — yani "bulgu yok" bir eşik olarak hiç gerçekleşmedi. Anlamlı olan şiddetin yönü:
+turlar 1-4 sömürülebilir yetki/rate-limit bypass'larıydı (B1-B3, C4, D1); turlar 5-7
+availability/log bütünlüğü (C3, D3, E1); kapanış turu ise **deployment katmanında mitigasyonu olan**
+maddeler (F1, PROD-R17..R20). Karar bu yüzden "sıfır bulgu"ya değil, şu üç kritere bağlandı:
+açık **Kritik/Yüksek + sömürülebilir + mitigasyonsuz** bulgu yok, canlı smoke geçti, verify yeşil.
+
+**Tekrar eden hata deseni ve karşılığı.** Dört kez, raporlanan *yazımı* düzeltmek bir sonraki
+varyantı açık bıraktı (415 → wildcard → `application/yaml` → sort'un üçüncü şekli). Her seferinde
+doğru cevap sınıfı kapatmaktı: medya tipleri uygulamanın kendi converter'larından **türetildi**,
+HTTP durumu istisnanın kendisinden (`ErrorResponse`) **soruldu**, log bütçesi isim listesi yerine
+**özellik** olarak ifade edildi. Aynı desen yönetişimde de çıktı — register "PROD-R12 gate CI'ya
+eklendi" diyordu, gate yoktu; iddia doğrulanmadan kapalı yazılmıştı.
+
+**Issue #1 durumu:** hâlâ **açık** ve freeze kapsamı dışı. Tenant self-registration'ın ön koşulu
+olduğu için Slice C'nin ilk maddesi olarak kalıyor.
+
+---
+
+PRODUCTION READINESS FOR F5-B: **GO** — koşullu; deployment ön koşulları §1.3-I/J ve artık risk
+tablosu (PROD-R6, R16, R21 + frontend yeniden doğrulaması) kabul edilmek kaydıyla.

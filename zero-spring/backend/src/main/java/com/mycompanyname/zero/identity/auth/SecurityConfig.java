@@ -5,6 +5,9 @@ import com.mycompanyname.zero.config.CorsProperties;
 import com.mycompanyname.zero.config.JwtProperties;
 import com.mycompanyname.zero.config.RateLimitFilter;
 import com.mycompanyname.zero.config.RateLimitProperties;
+import com.mycompanyname.zero.config.RequestLimitProperties;
+import com.mycompanyname.zero.config.RequestSizeLimitFilter;
+import com.mycompanyname.zero.identity.domain.AppPermissions;
 import com.mycompanyname.zero.tenancy.AuthenticatedTenantFilter;
 import com.mycompanyname.zero.tenancy.TenantAccessCheck;
 import com.mycompanyname.zero.tenancy.TenantRepository;
@@ -63,6 +66,7 @@ public class SecurityConfig {
                                                    TenantResolverFilter tenantResolverFilter,
                                                    AuthenticatedTenantFilter authenticatedTenantFilter,
                                                    RateLimitFilter rateLimitFilter,
+                                                   RequestSizeLimitFilter requestSizeLimitFilter,
                                                    JwtDecoder jwtDecoder,
                                                    JwtAuthenticationConverter jwtAuthenticationConverter,
                                                    Environment environment,
@@ -98,7 +102,23 @@ public class SecurityConfig {
                             .requestMatchers("/api/account/forgot-password", "/api/account/reset-password",
                                     "/api/account/confirm-email").permitAll()
                             .requestMatchers("/api/localization/**").permitAll()
-                            .requestMatchers("/actuator/health/**").permitAll();
+                            .requestMatchers("/actuator/health/**").permitAll()
+                            // PROD-R17. Everything else under /actuator was reachable by *any*
+                            // authenticated caller, because it fell through to anyRequest().authenticated()
+                            // and nothing narrower ever claimed it. Confirmed live: anonymous 401, but a
+                            // tenant user holding zero permissions read /actuator/prometheus and got 200 —
+                            // heap and JVM state, every route name, request counters, and a derivable
+                            // tenant count. management.endpoints.web.exposure.include lists
+                            // health,info,metrics,prometheus in the *base* config with no prod override,
+                            // so this was production behaviour, not a dev-only artefact.
+                            //
+                            // No new permission was minted for it. settings.host.manage is already
+                            // host-only, is already the "operate the installation" authority, and no
+                            // tenant role can hold it — which is exactly the boundary being drawn.
+                            // Scraping is an operational concern, not an authorization hole: see
+                            // RELEASE-RUNBOOK 1.3-J for the two supported answers (host service account,
+                            // or a management port bound off the public interface).
+                            .requestMatchers("/actuator/**").hasAuthority(AppPermissions.SETTINGS_HOST);
                     // B6. The API description was anonymously readable on every profile: GET
                     // /v3/api-docs answered 200 and enumerated every route, parameter and DTO before
                     // a single credential was presented. In prod that is reconnaissance with no
@@ -130,6 +150,12 @@ public class SecurityConfig {
                 // itself) never spends an allowance. Ahead of tenant resolution so a flood is refused
                 // before it reaches the database.
                 .addFilterAfter(rateLimitFilter, CorsFilter.class)
+                // F1. After the limiter, not before, and the order is load-bearing in two directions.
+                // The five anonymous paths are bounded at 16 KB by RateLimitFilter — 64x stricter than
+                // this filter's 1 MB — so running ahead of it would raise their bound and hand B2 back
+                // its 20 KB pad. And C4 requires a refusal to still spend the sender's IP allowance,
+                // which only happens if the limiter sees the request first. See RequestSizeLimitFilter.
+                .addFilterAfter(requestSizeLimitFilter, RateLimitFilter.class)
                 // stage 1: header -> TenantContext (needed by permitAll login/refresh)
                 .addFilterBefore(tenantResolverFilter, BearerTokenAuthenticationFilter.class)
                 // stage 2: JWT 'tenant' claim is authoritative for authenticated requests
@@ -182,6 +208,27 @@ public class SecurityConfig {
     @Bean
     public FilterRegistrationBean<RateLimitFilter> rateLimitFilterRegistration(RateLimitFilter filter) {
         FilterRegistrationBean<RateLimitFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    /**
+     * F1. The application-wide body bound. {@link RateLimitProperties} is injected alongside its own
+     * properties for the trusted-proxy depth alone — see {@code RequestSizeLimitFilter}'s constructor
+     * for why that is read rather than duplicated.
+     */
+    @Bean
+    public RequestSizeLimitFilter requestSizeLimitFilter(RequestLimitProperties properties,
+                                                         RateLimitProperties rateLimitProperties,
+                                                         ObjectMapper objectMapper) {
+        return new RequestSizeLimitFilter(properties, rateLimitProperties, objectMapper);
+    }
+
+    /** Same reason as {@link #rateLimitFilterRegistration}: placed in the chain, not by Boot. */
+    @Bean
+    public FilterRegistrationBean<RequestSizeLimitFilter> requestSizeLimitFilterRegistration(
+            RequestSizeLimitFilter filter) {
+        FilterRegistrationBean<RequestSizeLimitFilter> registration = new FilterRegistrationBean<>(filter);
         registration.setEnabled(false);
         return registration;
     }

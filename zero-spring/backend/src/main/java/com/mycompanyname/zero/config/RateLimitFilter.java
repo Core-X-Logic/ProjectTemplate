@@ -22,10 +22,7 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.net.URI;
 import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
@@ -178,7 +175,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         // maximum, so an oversized body on an unauthenticated endpoint cannot be turned into a
         // memory-exhaustion primitive. One extra byte is requested purely to detect there is more.
         int maxBodyBytes = properties.getMaxBodyBytes();
-        byte[] body = readAtMost(request.getInputStream(), maxBodyBytes + 1);
+        byte[] body = BoundedBodyReader.readOneByteBeyond(request.getInputStream(), maxBodyBytes);
         if (body.length > maxBodyBytes) {
             // B2. This used to forward the request with username extraction skipped, on the reasoning
             // that "the IP limit still applies". It did not: pairing an oversized body with a rotating
@@ -355,20 +352,6 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
     }
 
-    /** Reads up to {@code limit} bytes; returns fewer only when the stream ends first. */
-    private static byte[] readAtMost(InputStream source, int limit) throws IOException {
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream(Math.min(limit, 1024));
-        byte[] chunk = new byte[1024];
-        while (buffer.size() < limit) {
-            int read = source.read(chunk, 0, Math.min(chunk.length, limit - buffer.size()));
-            if (read == -1) {
-                break;
-            }
-            buffer.write(chunk, 0, read);
-        }
-        return buffer.toByteArray();
-    }
-
     /**
      * Normalised to lower case so {@code Admin} and {@code admin} share one allowance — the lookups
      * these endpoints perform are case-insensitive, so treating them separately would hand an
@@ -414,13 +397,13 @@ public class RateLimitFilter extends OncePerRequestFilter {
         log.warn("Rate limit exceeded on {} ({} dimension), client={}, retry after {}s",
                 path, dimension, client, retryAfterSeconds);
 
-        ProblemDetail problem = problemFor(HttpStatus.TOO_MANY_REQUESTS, path,
+        ProblemDetail problem = FilterProblemWriter.problem(HttpStatus.TOO_MANY_REQUESTS, path,
                 ErrorCode.TOO_MANY_REQUESTS,
                 "Too many requests. Try again in " + retryAfterSeconds + " second(s).");
         problem.setProperty("retryAfterSeconds", retryAfterSeconds);
 
         response.setHeader(HttpHeaders.RETRY_AFTER, String.valueOf(retryAfterSeconds));
-        write(response, HttpStatus.TOO_MANY_REQUESTS, problem);
+        FilterProblemWriter.write(response, objectMapper, HttpStatus.TOO_MANY_REQUESTS, problem);
     }
 
     /**
@@ -453,11 +436,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
                     + "client={}", rawContentType, path, client);
         }
 
-        ProblemDetail problem = problemFor(HttpStatus.UNSUPPORTED_MEDIA_TYPE, path,
+        ProblemDetail problem = FilterProblemWriter.problem(HttpStatus.UNSUPPORTED_MEDIA_TYPE, path,
                 ErrorCode.UNSUPPORTED_MEDIA_TYPE,
                 "This endpoint accepts a JSON request body.");
 
-        write(response, HttpStatus.UNSUPPORTED_MEDIA_TYPE, problem);
+        FilterProblemWriter.write(response, objectMapper, HttpStatus.UNSUPPORTED_MEDIA_TYPE, problem);
     }
 
     /**
@@ -471,29 +454,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
         log.warn("Refused an oversized body on the throttled path {} (limit {} bytes), client={}",
                 path, maxBodyBytes, client);
 
-        ProblemDetail problem = problemFor(HttpStatus.PAYLOAD_TOO_LARGE, path,
+        ProblemDetail problem = FilterProblemWriter.problem(HttpStatus.PAYLOAD_TOO_LARGE, path,
                 ErrorCode.PAYLOAD_TOO_LARGE,
                 "Request body exceeds the " + maxBodyBytes + " byte limit for this endpoint.");
         problem.setProperty("maxBodyBytes", maxBodyBytes);
 
-        write(response, HttpStatus.PAYLOAD_TOO_LARGE, problem);
-    }
-
-    private static ProblemDetail problemFor(HttpStatus status, String path, ErrorCode code, String detail) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
-        problem.setTitle(code.name());
-        problem.setType(URI.create("about:blank"));
-        problem.setInstance(URI.create(path));
-        problem.setProperty("code", code.name());
-        return problem;
-    }
-
-    private void write(HttpServletResponse response, HttpStatus status, ProblemDetail problem)
-            throws IOException {
-        response.setStatus(status.value());
-        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
-        response.setCharacterEncoding("UTF-8");
-        objectMapper.writeValue(response.getOutputStream(), problem);
+        FilterProblemWriter.write(response, objectMapper, HttpStatus.PAYLOAD_TOO_LARGE, problem);
     }
 
     /** A bucket plus the last time it was touched, so idle entries can be swept. */

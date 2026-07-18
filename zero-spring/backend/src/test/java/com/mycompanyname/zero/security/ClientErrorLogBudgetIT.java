@@ -54,6 +54,13 @@ class ClientErrorLogBudgetIT extends AbstractIntegrationIT {
     /** No {@code boundary} parameter — malformed by construction. */
     private static final String BOUNDARYLESS_MULTIPART = "multipart/form-data";
 
+    /**
+     * F1. Over {@code zero.request.max-body-bytes} (1 MB) and under Tomcat's {@code maxSwallowSize}
+     * (2 MB), so the connection survives to deliver the 413 rather than being reset mid-write.
+     */
+    private static final String OVERSIZED_BODY =
+            "{\"username\":\"pad\",\"pad\":\"" + "A".repeat(1024 * 1024 + 512 * 1024) + "\"}";
+
     @LocalServerPort
     private int port;
 
@@ -190,9 +197,15 @@ class ClientErrorLogBudgetIT extends AbstractIntegrationIT {
             expectClientError(HttpMethod.GET, "/api/audit-logs?minDuration=abc", auth, null);
             // Malformed JSON body.
             expectClientError(HttpMethod.POST, "/api/users", auth, "{ not json");
+            // F1. An oversized body. Until the global bound existed this was not a client error at
+            // all — the body was buffered and deserialized in full, and what the caller got back
+            // depended only on how much heap was left. It belongs in this sweep because it is the
+            // cheapest ERROR line in the application to produce: no permission, no valid data, just
+            // a longer string.
+            expectClientError(HttpMethod.POST, "/api/users", auth, OVERSIZED_BODY);
         }
 
-        assertLogBudgetSpent("30 requests from a caller holding nothing but a valid token");
+        assertLogBudgetSpent("33 requests from a caller holding nothing but a valid token");
     }
 
     /**

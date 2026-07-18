@@ -144,6 +144,31 @@ Bu noktadan sonra **yalnız** şunlar üzerinde çalışılır:
 **Kanıt kuralı:** her düzeltme için **test + (uygulanabilirse) canlı smoke + risk durumu + gate sonucu** zorunlu.
 **GO kuralı:** tüm P0'lar kapanmadan ve **canlı smoke geçmeden GO verilmez.**
 
+#### ✅ Freeze kapanışı — 2026-07-18
+
+Freeze **8 turda** kapandı: P0 turu (PROD-R1..R16) + adversaryal turlar B, C, D, E + F1 (gövde sınırı)
++ kapanış turu (PROD-R17..R21). Her tur bir öncekinin *düzeltmesini* saldırgan gözüyle yeniden inceledi.
+
+| Kapı | Durum |
+|---|---|
+| `clean verify` | ✅ **326 test** (236 IT + 90 unit), `BUILD SUCCESS`, 0 `[ERROR]` satırı |
+| Canlı smoke (madde 1–2) | ✅ mevcut migrate edilmiş DB üzerinde, **14/14 PASS** |
+| Sonuçların yazılması (madde 3) | ✅ `governance/QUALITY-GATES-RESULTS.md` → "F5 Slice B + Production Hardening" girdisi |
+| Smoke bulgularına pozitif test (madde 4) | ✅ F5-R9 → `RolePermissionReconciliationIT`; PROD-R17 → `ActuatorExposureIT` |
+| PROD-R1..R16 | ✅ 14 Closed, 2 **Mitigating** (R6 çok-instance rate limit, R16 `kid`/revocation) |
+
+**Freeze kuralının bir kez genişletildiği yer — açık kayıt.** Kapsam "yalnız PROD-R1..R16 + F5-R9"
+idi. Canlı smoke, listede olmayan beş kalem ortaya çıkardı (PROD-R17..R21). Dördü kapatıldı; hepsi
+**config/deployment katmanı** ya da güvenlik kuralı, hiçbiri yeni ürün özelliği değil ve dördü de
+P0 paketlerinden birinin (operasyonel güvenlik / config checklist) tanımına giriyor. PROD-R21
+(`/api/users` bellekte sayfalama) bir **repository/sorgu tasarımı** değişikliği gerektirdiği için
+bilinçli olarak **açık bırakıldı** — freeze'in koruduğu şey tam olarak budur.
+
+**Madde 2'nin canlı doğrulanamayan tek kalemi:** "süresi geçmiş abonelik → job sonrası
+GRACE/EXPIRED" — bu **canlı doğrulandı** (`grace_day_count=0` → EXPIRED, `=3` → GRACE,
+`subscription_events` id=10/11). Downgrade dalı tetiklenmedi çünkü `expiringEditionId` null'dı;
+o dal yalnız `SubscriptionLifecycleIT` (6) ile kapsanıyor.
+
 ## Slice F5-C — Billing provider (Stripe) + Webhook + Invoice
 
 **Kapsam:** `payments`, `invoices`, `webhook_events` tabloları; `StripeBillingProvider` (**Prices API**,
