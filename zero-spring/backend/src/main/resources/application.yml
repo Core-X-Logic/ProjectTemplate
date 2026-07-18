@@ -173,3 +173,27 @@ zero:
 management:
   endpoints.web.exposure.include: health,info,metrics,prometheus
   endpoint.health.probes.enabled: true
+  # PROD-R29. Iki ayri sorun, ayni kok: hangi bagimliligin trafigi kesecegi hic secilmemisti.
+  #
+  # (a) Mail health indicator KAPALI. Actuator'un mail kontrolu her cagrida SMTP'ye gercek bir
+  #     baglanti acar. Bir probe 10 saniyede bir kosarsa bu, relay'e gunde ~8600 baglanti demektir;
+  #     SES/SendGrid gibi saglayicilar bunu throttle eder ya da IP'yi engeller — yani kontrolun
+  #     kendisi arizayi uretir. Ustelik e-posta, istek servis etmek icin gerekli DEGIL: SMTP
+  #     erisilemezken uygulama her ucu normal cevaplar. Bu ayar kapali degilken /actuator/health
+  #     mailpit ayakta olmayan HER ortamda 503 donuyordu; CI'da uc test bu yuzden kirmiziya dustu
+  #     (ProdApiDocsExposureIT, DefaultProfileApiDocsExposureIT, ActuatorExposureIT). Testler
+  #     yanlis degildi — gelistiricinin makinesinde mailpit calistigi icin yesil goruyorlardi.
+  #     Mail erisilebilirligi RELEASE-RUNBOOK §3.6 forgot-password smoke'u ile dogrulanir.
+  #
+  # (b) readiness grubu ACIKCA yaziliyor. Spring Boot'un varsayilani yalnizca `readinessState`tir,
+  #     yani veritabani ERISILEMEZ durumdayken bile pod READY raporlar ve trafik alir — her istek
+  #     500 doner. Ters yondeki hata da ayni olcude kotu: mail/redis gibi tali bagimliliklari
+  #     readiness'a koymak, calisan bir uygulamayi rotasyondan cikarir. Dogru ayrim:
+  #       liveness  = JVM ayakta mi
+  #       readiness = istek servis edebilir miyim  -> readinessState + db
+  #       /health   = tam tablo (izleme icin; tali bir bagimlilik dustugunde DOWN gorunebilir)
+  #     Redis bilerek DISARIDA: PROD-R13'teki CacheErrorHandler Redis kesintisinde cache'i bypass
+  #     edip WARN yaziyor, uygulama servis etmeye devam ediyor — o hâlde trafigi kesmemeli.
+  health:
+    mail.enabled: false
+  endpoint.health.group.readiness.include: readinessState,db

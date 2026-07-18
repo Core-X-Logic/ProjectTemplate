@@ -217,6 +217,29 @@ taşıp **boş gövde** döndürüyordu (her chunked isteği sessizce boşaltan 
 | PROD-R27 | **Dockerfile'ı hiçbir otomasyon build etmiyor.** `docker-compose.yml`'de `build:` yok, CI'da `docker build` yok; tek referans RELEASE-RUNBOOK. Yani PROD-R20'nin sertleştirmeleri (prod profili, heap tavanı, HEALTHCHECK) hiçbir kapıda doğrulanmıyor | `grep -rn "docker build"` → yalnız runbook | Orta | **Open** — bilinçli sıralama: ilk CI koşusunun **yeşil olduğu kanıtlanmadan** yavaş ve denenmemiş bir adım eklemek, "yol yeniden yazımı mı bozuk, docker build mi bozuk" ayrımını imkânsızlaştırır. Baseline yeşil olunca `release` gate'ine eklenecek |
 | PROD-R28 | `dependabot.yml`, `CODEOWNERS`, `renovate.json` **hiç yok** (yanlış yerde değil — mevcut değil). `npm audit --audit-level=high` kapısı var ama bağımlılığı güncelleyecek otomasyon yok; CODEOWNERS yokluğu PROD-R23 ile birleşince zorunlu inceleme sıfır | `git ls-files` → 0 eşleşme | Düşük | **Open** — eksik kontrol, ölü kontrol değil |
 
+### İlk CI koşusunun bulduğu — PROD-R29 (2026-07-19)
+
+> CI ilk kez koştu ve **ilk koşusunda ürün kusuru buldu.** `backend` gate'i düştü, sonraki beş gate
+> `skipped` oldu — yani "hata sonrakileri bloke eder" mekanizması da aynı anda ilk kez kanıtlandı.
+
+Üç test **503 SERVICE_UNAVAILABLE** ile düştü (401/403 değil — güvenlik kuralı doğruydu):
+`ProdApiDocsExposureIT.healthRemainsAnonymousInProduction`,
+`DefaultProfileApiDocsExposureIT.healthAndLoginRemainAnonymous`,
+`ActuatorExposureIT.theProbesStayAnonymous`.
+Kök neden: `MailHealthIndicator` → `Couldn't connect to host, port: localhost, 1025` → toplam health DOWN.
+
+| ID | Bulgu | Şiddet | Durum |
+|---|---|---|---|
+| PROD-R29a | **Trafiği kesmemesi gereken bağımlılık kesiyordu.** Mail health indicator her çağrıda gerçek SMTP bağlantısı açıyor; 10 sn'lik bir probe relay'e günde ~8.600 bağlantı demek — SES/SendGrid bunu throttle eder ya da IP'yi engeller, yani **kontrolün kendisi arızayı üretir**. E-posta istek servis etmek için gerekli değil, ama `/actuator/health` onun yüzünden 503 dönüyordu | Yüksek | **Closed** — `management.health.mail.enabled: false`; mail erişilebilirliği runbook §3.6 smoke'u ile doğrulanıyor |
+| PROD-R29b | **Trafiği kesmesi gereken bağımlılık kesmiyordu.** Spring Boot'un varsayılan readiness grubu yalnızca `readinessState` — yani **veritabanı erişilemezken pod READY raporlar**, trafik alır ve her isteğe 500 döner. Suite'te hiçbir şey grubun içeriğini iddia etmediği için görünmüyordu | Yüksek | **Closed** — `readiness.include: readinessState,db`. Redis bilerek dışarıda (PROD-R13 CacheErrorHandler kesintide bypass ediyor, uygulama servis etmeye devam ediyor) |
+| PROD-R29c | **Test kalitesi:** üç test `/actuator/health` 200 iddia ediyordu ve yalnızca geliştiricinin makinesinde mailpit ayakta olduğu için yeşildi. Testler yanlış değildi — geliştiricinin `docker-compose`'unu ölçüyorlardı. R-19'un aynası: false-green değil, **environment-dependent green** | Orta | **Closed** — `HealthProbeContractIT` (4): mail **kasten ölü porta** (`spring.mail.port=1`) yönlendirilmiş durumda health 200 olmalı; ayrıca readiness/liveness grup üyelikleri doğrudan `HealthEndpointGroups` üzerinden iddia ediliyor |
+
+**Neden grup üyeliği ayrıca test ediliyor:** yalnızca "endpoint 200 dönüyor" demek, biri
+`readiness.include`'ı varsayılana geri alsa da, `mail`'i gruba eklese de yeşil kalırdı — DB erişilebilir
+olduğu sürece iki durum birbirinden ayırt edilemez. Grup bir **konfigürasyon kararı**, o yüzden
+konfigürasyon olarak test ediliyor. `liveness`'ın `db` içermediği de iddia ediliyor: veritabanı
+kesintisi JVM'i öldürmek için sebep değildir, aksi hâlde kesinti bir crash-loop'a dönüşür.
+
 **Doğrulanan iyi durumlar (bu turda ölçüldü):** `.gitattributes` `zero-spring/` altında ama alt-dizinden
 aşağı özyinelemeli uygulandığı için **etkili** — `git check-attr` ile doğrulandı (`mvnw: eol=lf`,
 `mvnw.cmd: eol=crlf`), BOM içerik olarak da temiz (R-22 gerçekten kapalı);

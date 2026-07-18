@@ -33,10 +33,13 @@ ENV SPRING_PROFILES_ACTIVE=prod
 # host's memory on some runtimes and gets OOM-killed under a limit it never saw.
 ENV JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"
 
-# Readiness, not liveness: /actuator/health/readiness reports the datasource and the migration state,
-# so a container that booted but cannot reach Postgres is reported unhealthy instead of receiving
-# traffic. Anonymous by design (SecurityConfig permits /actuator/health/**) — the probe holds no
-# credentials, and PROD-R17 deliberately did not widen its rule over this path.
+# Readiness, not liveness: readiness is readinessState + db (PROD-R29 pins the group explicitly —
+# Boot's default is readinessState alone, which reports READY while Postgres is unreachable), so a
+# container that booted but cannot reach the database is held out of rotation instead of answering
+# every request with a 500. Deliberately NOT /actuator/health: that one aggregates every indicator,
+# so a secondary dependency being down would fail the container while it can still serve traffic.
+# Anonymous by design (SecurityConfig permits /actuator/health/**) — the probe holds no credentials,
+# and PROD-R17 deliberately did not widen its rule over this path.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
     CMD wget -qO- http://localhost:8080/actuator/health/readiness || exit 1
 

@@ -305,11 +305,29 @@ Beklenen: 60 sn içinde `READY`. Gelmiyorsa → §5.
 Her adım **beklenen sonucu** ile birlikte; biri kırmızıysa §4 rollback kararına git.
 
 ### 3.1 Liveness / readiness
+
+**Üç ucun rolü ayrıdır — LB/probe'u yanlış olana bağlamak kesinti üretir (PROD-R29).**
+
+| Uç | Ne sorar | İçerik | Nereye bağlanır |
+|---|---|---|---|
+| `/actuator/health` | Tam tablo | **tüm** indicator'lar (db, redis, disk…) | İzleme/alarm. **LB'ye BAĞLAMAYIN** — tali bir bağımlılık düştüğünde 503 döner ve çalışan uygulamayı rotasyondan çıkarır |
+| `/actuator/health/readiness` | İstek servis edebilir miyim | `readinessState` + **`db`** | **k8s readinessProbe, LB health check, Dockerfile HEALTHCHECK** |
+| `/actuator/health/liveness` | Süreç öldürülmeli mi | `livenessState` | k8s livenessProbe. `db` **bilerek yok**: DB kesintisi restart sebebi değildir, crash-loop üretir |
+
 ```bash
-curl -s localhost:8080/actuator/health | jq .
+# Trafik kapisi (LB/probe bunu kullanmali)
+curl -s -o /dev/null -w 'readiness=%{http_code}\n' localhost:8080/actuator/health/readiness
+# Tam tablo (izleme icin; host admin token'i ile detay)
+curl -s -H "Authorization: Bearer $HOST_TOKEN" localhost:8080/actuator/health | jq .
 ```
-Beklenen: `{"status":"UP", "components":{"db":{"status":"UP"}, "redis":{"status":"UP"}, ...}}`
-`redis` DOWN ise → §5.2. `db` DOWN ise → §5.1.
+Beklenen: `readiness=200`; tam tabloda `{"status":"UP","components":{"db":{"status":"UP"},"redis":{"status":"UP"},…}}`.
+`redis` DOWN ise → §5.2 (uygulama servis etmeye **devam eder**, cache bypass + WARN — PROD-R13).
+`db` DOWN ise → §5.1 (readiness de DOWN olur, pod rotasyondan çıkar — istenen davranış).
+
+**`mail` bu listede yok, kasıtlı:** health indicator'ı kapalı (`management.health.mail.enabled: false`).
+Açık olsaydı her probe SMTP'ye bağlantı açardı — 10 sn'lik bir probe relay'e günde ~8.600 bağlantı
+demektir ve sağlayıcılar bunu throttle eder/engeller. SMTP erişilebilirliği **§3.6 forgot-password
+smoke'u** ile doğrulanır.
 
 ### 3.2 Profil doğrulaması (dev secret sızıntısı kontrolü)
 ```bash
