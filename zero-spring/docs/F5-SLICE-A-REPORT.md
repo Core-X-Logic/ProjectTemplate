@@ -62,8 +62,11 @@ tenant override 25→**50** · tenant izinleri **14** · tenant edition create *
 - **Tasarım borcu (ADR-0015):** SaaS'ta `@Filter` güvenlik ağı yok; her yeni uç için negatif yetki testi
   zorunlu, ArchUnit kuralı Slice B adayı.
 - **Süreç öğrenimi:** temiz-DB testleri mevcut-kurulum hatalarını göremez → **her faz için canlı smoke zorunlu**.
-- **Not (kapsam dışı bulgu):** `POST /api/tenants` ile açılan tenant'lara `Admin` rolü/kullanıcısı
-  oluşturulmuyor (Faz 1'den beri). Kaynak sistemde `CreateWithAdminUserAsync` bunu yapıyordu — ayrı ticket.
+- **Kapsam dışı bulgu → ticket açıldı:** `POST /api/tenants` ile açılan tenant'lara `Admin` rolü/kullanıcısı
+  oluşturulmuyor (Faz 1'den beri); tenant giriş yapılamaz halde kalıyor ve izin uzlaştırması onu atlıyor.
+  Kaynak sistemde `TenantManager.CreateWithAdminUserAsync` bunu tek akışta yapıyordu.
+  **[Issue #1 — Tenant creation does not bootstrap an Admin role or admin user](https://github.com/Core-X-Logic/ProjectTemplate/issues/1)**
+  (F5 kapsamı dışı; Slice C tenant self-registration'ın ön koşulu).
 
 ---
 

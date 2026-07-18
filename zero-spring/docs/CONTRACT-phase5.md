@@ -107,6 +107,25 @@ abonelik geçerlilik kapısı (`SubscriptionGuard` → `TenantResolverFilter`); 
 **Test:** `SubscriptionLifecycleIT` (zaman ileri alma), `ShedLockIT` (iki tetikleme tek çalışma), `FeatureEnforcementIT`,
 `MaxUserCountIT`, `ProrationCalculationTest` (birim, kaynak formülü + ay-sonu clamp), `SubscriptionGuardIT`; FE: subscription-me sayfası + upgrade akışı testleri.
 
+### Slice B quality gate — **canlı smoke ZORUNLU** (yeni)
+
+Slice A'da öğrenildi: Testcontainers her koşuda **temiz DB** kullandığı için "mevcut kurulum" hataları
+testlerde görünmez (F5-R9: yeni izinler statik Admin rollerine eklenmiyordu → host admin 17/22, `/api/editions`
+403; suite yine de yeşildi — **false-green**). Bu yüzden Slice B, aşağıdaki kapı geçilmeden **kapanmaz**:
+
+1. **Mevcut (migrate edilmiş) veritabanı** üzerinde backend `dev` profiliyle ayağa kaldırılır — temiz DB değil,
+   önceki slice'ın verisini taşıyan gerçek şema.
+2. Slice B'nin **her kabul kriteri** canlı HTTP çağrılarıyla doğrulanır; en az:
+   - süresi geçmiş abonelik → job sonrası `GRACE`/`EXPIRED`/downgrade (durum canlı okunur)
+   - `@RequiresFeature` kapalı feature → **403**; `app.maxUserCount` aşımı → kullanıcı oluşturma reddi
+   - `EXPIRED` tenant → iş ucunda **403**, abonelik ekranında erişim
+   - feature değeri değişiminden sonra **cache stale değil** (yeni değer okunur)
+3. Bu adımlar **PASS/FAIL** olarak raporlanır ve `governance/QUALITY-GATES-RESULTS.md`'ye kanıtla yazılır.
+4. Smoke sırasında bulunan her hata için: düzeltme + **pozitif test** (boşluğu gerçekten kanıtlayan) eklenir.
+
+**Kural:** "verify yeşil" tek başına done kanıtı değildir; canlı smoke geçmeden Slice B modülleri
+parity matrisinde kapanmaz.
+
 ---
 
 ## Slice F5-C — Billing provider (Stripe) + Webhook + Invoice
@@ -128,6 +147,9 @@ FE: billing ekranları + davranış testleri.
 ## Ortak kurallar (tüm slice'lar)
 
 - **Kanıtsız done yok:** her modül backend IT + frontend davranış testi + parity satırı dolmadan kapanmaz.
+- **Canlı smoke zorunlu (tüm slice'lar):** temiz-DB testleri "mevcut kurulum" hatalarını göremez (F5-R9).
+  Her slice, mevcut/migrate edilmiş DB üzerinde çalışan backend'e karşı HTTP smoke ile doğrulanır ve sonuç
+  `QUALITY-GATES-RESULTS.md`'ye PASS/FAIL olarak yazılır.
 - Modulith: `saas` çekirdeği `identity`'ye bağlanmaz; `tenancy`'ye `saas` bağımlılığı eklenmez (event).
 - Para: `BigDecimal` + `numeric(19,4)` + currency; tarih: `java.time`, UTC.
 - Güvenlik: tüm SaaS yazma uçları `Side.HOST`; tenant escalation negatif testi zorunlu.
