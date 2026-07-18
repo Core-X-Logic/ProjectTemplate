@@ -244,4 +244,42 @@ cümlesi bu plan altında doğru değildir.
 
 **Bu bölümün kapanışı, ilk gerçek CI koşusunun sonucuna bağlıdır — YAML'in parse olması kanıt değildir.**
 
+---
+
+## CI release gate — ilk gerçek koşular — 2026-07-19 ✅
+
+Beş koşu sürdü. Her koşu, bir öncekinin **göremediği** katmanı açtı; hiçbiri "boşuna" değildi.
+
+| # | Commit | Nereye kadar | Düşme sebebi | Sınıf |
+|---|---|---|---|---|
+| 1 | `af57984` | `backend` | `MailHealthIndicator` SMTP'ye ulaşamayınca aggregate health DOWN → 3 test 503 | **Ürün** (PROD-R29a) |
+| 2 | `d65bdf8` | `typed-client-drift` (wait) | Hazır-olma kontrolü aggregate `/actuator/health`'a bakıyordu; job'da Redis yok | **CI** (PROD-R29 türevi) |
+| 3 | `a371034` | `typed-client-drift` (drift) | **Gate amacını yaptı:** typed client bayattı | **Ürün** (PROD-R31) |
+| 4 | `1248d1a` | **tamamı** | — | ✅ |
+| 5 | `24322eb` | **tamamı** | — (bloklayıcı gitleaks ile) | ✅ |
+
+### Koşu 4-5: sekiz job da yeşil — ve "vakum yeşili" olmadığı ayrıca doğrulandı
+
+| Gate | Yeşil olduğu için değil, ŞU kanıtla kabul edildi |
+|---|---|
+| `build` | jar artifact'ı (94,7 MB) üretildi ve sonraki 4 gate onu **yeniden derlemeden** kullandı |
+| `backend` | 240 IT + 90 unit, JaCoCo geçti |
+| `frontend` | 19 dosya / 90 test |
+| `typed-client-drift` | `/v3/api-docs`'tan şema yeniden üretilip commit'liyle **byte-byte** karşılaştırıldı |
+| `migration-drift` | `oldset` → **V1..V6** (yani `have_base=true` dalı koştu), önceki set uygulandı (`now at version v6`), `Successfully validated 6 migrations` (checksum drift), ikinci migrate `No migration necessary` (idempotent), jar **yükseltilmiş şemaya** karşı `ddl-auto=validate` ile boot etti |
+| `live-smoke` | backend log artifact'ı üretildi; login → `/me` → editions → tenant mismatch 403 → tenant escalation 403 assertion'ları koştu |
+| `security-checks` | `Secret pattern scan clean` · `npm audit: 0 vulnerabilities` · gitleaks **21 commit**, `no leaks found` (bloklayıcı) |
+| `release` | zincirin son halkası; `needs: security-checks` |
+
+> **Neden bu tablo var:** `migration-drift`'in sessiz-yeşil modunu gate'i yazarken kendim
+> işaretlemiştim — `have_base=false` olsaydı yalnız `::warning::` basıp **hiçbir şey
+> doğrulamadan** yeşil dönerdi. "Yeşil" ile "doğruladı" aynı şey olmadığı için log'dan teyit
+> edildi.
+
+**CI release gate quality-gate: GEÇTİ** (koşu 4 ve 5, ardışık).
+
+**Kapanmayan (kodla kapatılamaz):** PROD-R23 — bu planda branch protection kurulamıyor
+(private repo + ücretsiz plan → 403). Zincir yeşil/kırmızı doğru raporluyor ama **kırmızı bir
+check push'u engellemiyor**; blokaj insan disiplinine bağlı.
+
 > Kural: bu tablo "yeşil" göstermeden hiçbir Faz 2 kalemi "Done" sayılmaz.
