@@ -26,6 +26,13 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     long countByRolesId(Long roleId);
 
+    /**
+     * Live user count of a tenant, used to enforce {@code app.maxUserCount}. Soft-deleted rows are
+     * excluded automatically by the {@code @SQLRestriction("deleted = false")} on {@code User}, so a
+     * tenant that deletes a user regains a seat.
+     */
+    long countByTenantId(Long tenantId);
+
     @EntityGraph(attributePaths = "roles")
     Page<User> findAllByTenantId(Long tenantId, Pageable pageable);
 

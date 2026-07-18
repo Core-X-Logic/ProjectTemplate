@@ -95,6 +95,15 @@ abstract class AbstractSaasIT extends AbstractIntegrationIT {
         return createEdition(editionBody(uniqueEditionName(prefix), monthly, annual, "USD", trialDays, graceDays));
     }
 
+    /** A paid edition that falls back to {@code expiringEditionId} (which must be free) when it expires. */
+    protected long createPaidEditionExpiringInto(String prefix, String monthly, int graceDays,
+                                                 long expiringEditionId) {
+        Map<String, Object> body =
+                editionBody(uniqueEditionName(prefix), monthly, null, "USD", 0, graceDays);
+        body.put("expiringEditionId", expiringEditionId);
+        return createEdition(body);
+    }
+
     /** Uses a LinkedHashMap because null values (an unpriced edition) are illegal in {@code Map.of}. */
     protected Map<String, Object> editionBody(String name, String monthly, String annual, String currency,
                                               int trialDays, int graceDays) {

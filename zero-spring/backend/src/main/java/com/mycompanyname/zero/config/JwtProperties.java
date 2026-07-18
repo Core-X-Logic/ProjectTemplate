@@ -19,4 +19,11 @@ public class JwtProperties {
     private Duration refreshTokenTtl;
 
     private String issuer;
+
+    /**
+     * PROD-R16. Every access token carries this as its {@code aud} claim and the decoder rejects a
+     * token that does not. Without it, any token signed with the same secret — a sibling service
+     * sharing the key, a token minted for a different deployment — is accepted here.
+     */
+    private String audience;
 }

@@ -37,6 +37,10 @@ public class DomainException extends RuntimeException {
         return new DomainException(ErrorCode.CONFLICT, message);
     }
 
+    public static DomainException subscriptionInvalid(String message) {
+        return new DomainException(ErrorCode.SUBSCRIPTION_INVALID, message);
+    }
+
     public static DomainException tenantUnknown(String message) {
         return new DomainException(ErrorCode.TENANT_UNKNOWN, message);
     }

@@ -28,6 +28,15 @@ public enum BillingPeriod {
         return from.atOffset(ZoneOffset.UTC).plus(period).toInstant();
     }
 
+    /**
+     * {@code from} moved back by exactly one billing period, in UTC — the start of the period that
+     * ends at {@code from}. Used by proration, which needs the length of the current period and
+     * cannot assume 30/365 days (ADR-0013).
+     */
+    public Instant rewind(Instant from) {
+        return from.atOffset(ZoneOffset.UTC).minus(period).toInstant();
+    }
+
     /** Parses a client-supplied value; {@code null}/blank means "no period" (free edition). */
     public static BillingPeriod parseOrNull(String raw) {
         if (raw == null || raw.isBlank()) {

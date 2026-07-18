@@ -5,3 +5,27 @@ management:
   health:
     redis:
       enabled: false
+zero:
+  jwt:
+    # Test-only signing key (base64, 79 bytes). Distinct from the dev key and from the leaked
+    # default that PROD-R1 flagged; all three are rejected under the 'prod' profile.
+    secret: emVyby1wbGF0Zm9ybS1BVVRPTUFURUQtVEVTVC1PTkxZLXNpZ25pbmcta2V5LW5ldmVyLWRlcGxveWVkLTAxMjM0NTY3ODlhYmNkZWZnaA==
+  seed:
+    # B4: base is now `false`, so the suite has to ask for seeding. Every IT logs in as the seeded
+    # admin, so this is load-bearing rather than decorative.
+    enabled: true
+    host-admin-password: Admin123!
+  cors:
+    # CorsPolicyIT drives a preflight from this origin and asserts an unlisted one is refused.
+    allowed-origins: https://app.test.example.com
+  ratelimit:
+    # Left ENABLED so the whole suite runs through the filter and proves it is transparent, but
+    # raised far above what the suite generates. RateLimitIT lowers it in its own context.
+    enabled: true
+    capacity: 10000
+  saas:
+    lifecycle:
+      # The suite drives the lifecycle explicitly; pushing the schedule far out keeps the job from
+      # racing the assertions. ShedLockIT still calls the locked method directly.
+      initial-delay: PT24H
+      interval: PT24H

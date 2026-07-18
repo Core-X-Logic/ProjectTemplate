@@ -13,6 +13,8 @@ import com.mycompanyname.zero.notification.NotificationLevel;
 import com.mycompanyname.zero.notification.NotificationService;
 import com.mycompanyname.zero.notification.email.EmailSender;
 import com.mycompanyname.zero.notification.email.EmailTemplateService;
+import com.mycompanyname.zero.saas.api.FeatureChecker;
+import com.mycompanyname.zero.saas.api.SaasFeatures;
 import com.mycompanyname.zero.shared.domain.DomainException;
 import com.mycompanyname.zero.shared.domain.ErrorCode;
 import com.mycompanyname.zero.shared.tenant.TenantContext;
@@ -55,9 +57,11 @@ public class UserService {
     private final EmailTemplateService emailTemplateService;
     private final NotificationService notificationService;
     private final MessageSource messageSource;
+    private final FeatureChecker featureChecker;
 
     public UserDto createUser(CreateUserRequest request) {
         Long tenantId = TenantContext.getTenantId();
+        enforceMaxUserCount(tenantId);
         boolean usernameTaken = tenantId == null
                 ? userRepository.existsByUsernameIgnoreCaseAndTenantIdIsNull(request.username())
                 : userRepository.existsByTenantIdAndUsernameIgnoreCase(tenantId, request.username());
@@ -211,6 +215,31 @@ public class UserService {
             return out.toByteArray();
         } catch (IOException e) {
             throw new DomainException(ErrorCode.INTERNAL, "Failed to generate the user export");
+        }
+    }
+
+    /**
+     * Enforces the {@code app.maxUserCount} feature of the tenant's package.
+     *
+     * <p>Two semantics are carried over from the source system deliberately: {@code 0} means
+     * <em>unlimited</em> (not "no users allowed"), and host-scope users are not governed by a tenant
+     * feature at all. The limit is a numeric one, so it cannot be expressed with
+     * {@code @RequiresFeature} — it needs the current usage, which is why the check is programmatic
+     * (F5-ARCHITECTURE §6).
+     */
+    private void enforceMaxUserCount(Long tenantId) {
+        if (tenantId == null) {
+            return;
+        }
+        int maxUserCount = featureChecker.intValue(SaasFeatures.MAX_USER_COUNT);
+        if (maxUserCount <= 0) {
+            return;
+        }
+        long currentUserCount = userRepository.countByTenantId(tenantId);
+        if (currentUserCount >= maxUserCount) {
+            throw new DomainException(ErrorCode.VALIDATION,
+                    "The tenant has reached the maximum number of users allowed by its package ("
+                            + maxUserCount + ")");
         }
     }
 

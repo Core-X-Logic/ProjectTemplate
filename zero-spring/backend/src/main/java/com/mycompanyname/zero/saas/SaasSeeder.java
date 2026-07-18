@@ -8,6 +8,7 @@ import com.mycompanyname.zero.tenancy.Tenant;
 import com.mycompanyname.zero.tenancy.TenantRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,13 +31,29 @@ public class SaasSeeder {
     public static final String DEFAULT_EDITION_NAME = "Standard";
     private static final String DEFAULT_TENANT_NAME = "default";
 
+    /**
+     * Must match {@code DataSeeder.SEED_ADVISORY_LOCK_KEY}. Duplicated rather than imported because
+     * the module boundary forbids {@code saas -> seed}; the two values are asserted equal by
+     * {@code SaasSeederIdempotencyIT}.
+     */
+    static final long SEED_ADVISORY_LOCK_KEY = 8_274_411_903_551_233_001L;
+
     private final EditionRepository editionRepository;
     private final SubscriptionRepository subscriptionRepository;
     private final SubscriptionService subscriptionService;
     private final TenantRepository tenantRepository;
+    private final JdbcTemplate jdbcTemplate;
 
+    /**
+     * <p>PROD-R15a: the "does it already exist?" checks below are read-then-write, so two replicas
+     * booting together can both read "absent" and both insert. The advisory lock serialises them.
+     * It is transaction-scoped, so PostgreSQL releases it at commit or rollback. When called from
+     * {@code DataSeeder} this joins that transaction and re-acquires the same key, which is a no-op
+     * for the holding session.
+     */
     @Transactional
     public void seedDefaults() {
+        jdbcTemplate.query("select pg_advisory_xact_lock(?)", resultSet -> null, SEED_ADVISORY_LOCK_KEY);
         seedStandardEdition();
         seedDefaultTenantSubscription();
     }

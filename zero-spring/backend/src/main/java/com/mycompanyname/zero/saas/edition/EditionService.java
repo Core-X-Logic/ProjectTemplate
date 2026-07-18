@@ -1,5 +1,6 @@
 package com.mycompanyname.zero.saas.edition;
 
+import com.mycompanyname.zero.saas.SaasCaches;
 import com.mycompanyname.zero.saas.edition.web.dto.CreateEditionRequest;
 import com.mycompanyname.zero.saas.edition.web.dto.EditionDetailDto;
 import com.mycompanyname.zero.saas.edition.web.dto.EditionDto;
@@ -10,6 +11,7 @@ import com.mycompanyname.zero.saas.feature.web.dto.FeatureValueDto;
 import com.mycompanyname.zero.saas.subscription.SubscriptionRepository;
 import com.mycompanyname.zero.shared.domain.DomainException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -75,6 +77,7 @@ public class EditionService {
         return toDetailDto(editionRepository.save(edition));
     }
 
+    @CacheEvict(cacheNames = SaasCaches.FEATURES, allEntries = true)
     public void delete(Long id) {
         Edition edition = requireEdition(id);
 
@@ -97,7 +100,11 @@ public class EditionService {
      * Batch write of the edition's feature values. Entries with a {@code null}/blank value remove the
      * edition-level override so resolution falls through to the definition default; unknown feature
      * names and type-incompatible values are rejected with VALIDATION.
+     *
+     * <p>Evicts the feature cache in full (F5-R2): the edition is inherited by every tenant
+     * subscribed to it, and the subscriber set is not part of this call.
      */
+    @CacheEvict(cacheNames = SaasCaches.FEATURES, allEntries = true)
     public EditionDetailDto setFeatures(Long id, List<FeatureValueDto> values) {
         Edition edition = requireEdition(id);
         if (values == null) {

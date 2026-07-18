@@ -4,13 +4,32 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/zero}
     username: ${DB_USER:zero}
     password: ${DB_PASSWORD:zero}
+    # PROD-R9: an unsized pool defaults to 10 connections / 30 s timeout, which turns a slow query
+    # into a cascade failure (every worker parks on connection acquisition). The timeout is kept
+    # deliberately short so the request fails fast instead of holding a Tomcat thread hostage.
+    hikari:
+      pool-name: zero-pool
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
+      minimum-idle: ${DB_POOL_MIN_IDLE:5}
+      connection-timeout: ${DB_POOL_CONNECTION_TIMEOUT_MS:10000}
+      validation-timeout: 5000
+      idle-timeout: 600000
+      # Must stay below the database/proxy side idle cutoff, otherwise Hikari hands out a socket
+      # the server already closed.
+      max-lifetime: ${DB_POOL_MAX_LIFETIME_MS:1800000}
+      # Report (do not close) connections held longer than this: a leak shows up in the log as a
+      # stack trace pointing at the borrower.
+      leak-detection-threshold: ${DB_POOL_LEAK_DETECTION_MS:20000}
   jpa:
     hibernate.ddl-auto: validate
     open-in-view: false
   flyway.enabled: true
   cache:
-    type: simple
-    cache-names: settings,permission-tree
+    # dev/test default: in-memory. Prod switches to redis (application-prod.yml, F5-ARCHITECTURE §6).
+    type: ${CACHE_TYPE:simple}
+    # PROD-R8: must list exactly the caches CacheConfig/@Cacheable use, otherwise the simple cache
+    # manager cannot resolve the name at runtime and the call 500s.
+    cache-names: settings,features,subscription-validity
   mail:
     host: ${MAIL_HOST:}          # boşsa LoggingEmailSender
     port: ${MAIL_PORT:1025}
@@ -27,17 +46,86 @@ spring:
       pageable:
         default-page-size: 20
         max-page-size: 100
+server:
+  # PROD-R4: behind a TLS-terminating proxy the request reaches Tomcat over plain HTTP, so
+  # request.isSecure() is false and Spring Security silently drops the HSTS header. Honouring
+  # X-Forwarded-* restores it (and gives the rate limiter the real client IP).
+  # Trust boundary: only deploy behind a proxy that strips client-supplied X-Forwarded-* headers.
+  forward-headers-strategy: framework
 zero:
   multitenancy.header: X-Tenant
   jwt:
-    # dev-only secret (base64, >=64 bytes) — MUST be overridden via JWT_SECRET env in prod
-    secret: ${JWT_SECRET:ZGV2LW9ubHktc2VjcmV0LWtleS1jaGFuZ2UtaW4tcHJvZC1taW4tNjQtYnl0ZXMtbG9uZy1wbGVhc2UtY2hhbmdlLW1lLW5vdy0hIQ==}
+    # PROD-R1: no default on purpose. A committed dev secret means a profile mishap silently signs
+    # tokens with a key that is public in the repository history. Dev/test values live in
+    # application-dev.yml / application-test.yml; every other environment must supply JWT_SECRET.
+    secret: ${JWT_SECRET}
     access-token-ttl: 15m
     refresh-token-ttl: 7d
     issuer: zero-platform
+    # PROD-R16: tokens are bound to this audience and the decoder rejects anything else, so a token
+    # minted for another service that happens to share the secret cannot be replayed here.
+    audience: ${JWT_AUDIENCE:zero-platform-api}
+  cors:
+    # PROD-R3: empty by default — a deployment must name its SPA origins explicitly. An empty list
+    # means every cross-origin request is rejected, which is the safe failure mode.
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+  security:
+    # PROD-R5: strict for a pure JSON API — it serves no HTML, so nothing may be loaded at all.
+    # Relaxed in dev (application-dev.yml) so Swagger UI stays usable.
+    content-security-policy: "default-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    permissions-policy: "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
+  ratelimit:
+    # PROD-R6: IP + username throttle on the unauthenticated endpoints. Complements (does not
+    # replace) the per-account lockout in AuthService.
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    capacity: ${RATE_LIMIT_CAPACITY:10}
+    refill-period: PT1M
+    # D3: every permitAll endpoint that takes a @RequestBody belongs here — those are the ones an
+    # anonymous caller can drive into bcrypt, the database, or the mail sender. /api/account/confirm-email
+    # was missing: live, eight of eight requests from one address were served, giving unmetered
+    # database load and a free channel for guessing confirmation codes. The list is checked against
+    # SecurityConfig's permitAll rules by RateLimitMediaTypeFailClosedIT.everyAnonymousBodyEndpointIsThrottled,
+    # so adding a permitAll POST without adding it here now fails the build.
+    # /api/auth/logout is deliberately absent: it requires authentication, so it is already bounded
+    # by holding a valid token, and throttling it per IP would penalise everyone behind one NAT.
+    paths: /api/auth/login,/api/auth/refresh,/api/account/forgot-password,/api/account/reset-password,/api/account/confirm-email
+    # D4: the largest request body accepted on any path above, in bytes. Previously this existed only
+    # as a default inside RateLimitProperties, which made a load-bearing security parameter invisible
+    # to whoever operates the deployment. A body over this is refused with 413 rather than forwarded
+    # uninspected, because a body the limiter cannot read is one whose username bucket it cannot
+    # charge (B2). These endpoints take a handful of short strings; 16 KB is already far above any
+    # legitimate request, and raising it widens the window the limiter has to buffer per request.
+    max-body-bytes: ${RATE_LIMIT_MAX_BODY_BYTES:16384}
   seed:
-    enabled: true
-    host-admin-password: ${SEED_ADMIN_PASSWORD:Admin123!}
+    # B4: OFF by default, on purpose. This used to be `true`, so a deployment that lost its
+    # SPRING_PROFILES_ACTIVE fell back to a base configuration that provisions a host admin, a
+    # `default` tenant and a tenant admin — against whatever database it was pointed at. Every other
+    # dangerous default in this file already fails closed on a profile mishap; this one did the
+    # opposite. dev and test switch it back on explicitly (application-dev.yml / application-test.yml),
+    # which is where seeding is actually wanted.
+    enabled: ${SEED_ENABLED:false}
+    # PROD-R2: blank by default. DataSeeder refuses to seed with a blank or dev-default password on
+    # ANY profile, so a missing SPRING_PROFILES_ACTIVE can no longer ship a known credential.
+    host-admin-password: ${SEED_ADMIN_PASSWORD:}
+    # F5-R9: permission reconciliation is NOT seeding. It has to run in prod, where seeding is off,
+    # otherwise permissions added by a later release never reach the static Admin roles.
+    reconcile-permissions: ${SEED_RECONCILE_PERMISSIONS:true}
+  saas:
+    lifecycle:
+      # Trial/period/grace/downgrade taraması. ShedLock ile çok-instance'ta tek çalışır.
+      interval: PT1H
+      initial-delay: PT1M
+      # Lock, iş bittikten sonra da kısa süre tutulur: saatleri hafif kaymış iki node'un
+      # arka arkaya tetiklemesini engeller.
+      lock-at-least-for: PT30S
+      lock-at-most-for: PT10M
+    proration:
+      # Kaynak: MinimumUpgradePaymentAmount = 1M. Altındaysa ödeme istenmez, edition anında değişir.
+      minimum-amount: 1.00
+    subscription-gate:
+      # Boş bırakılırsa SubscriptionAccessCheck.DEFAULT_EXEMPT_PATHS geçerlidir
+      # (auth, account, localization, /api/subscriptions/me, actuator, swagger).
+      exempt-paths: ""
 management:
   endpoints.web.exposure.include: health,info,metrics,prometheus
   endpoint.health.probes.enabled: true

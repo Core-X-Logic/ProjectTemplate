@@ -22,6 +22,8 @@
         <spring-modulith.version>1.4.5</spring-modulith.version>
         <springdoc.version>2.8.5</springdoc.version>
         <logstash-logback-encoder.version>8.0</logstash-logback-encoder.version>
+        <shedlock.version>5.16.0</shedlock.version>
+        <bucket4j.version>8.10.1</bucket4j.version>
     </properties>
 
     <dependencyManagement>
@@ -81,6 +83,26 @@
         <dependency>
             <groupId>org.springframework.modulith</groupId>
             <artifactId>spring-modulith-starter-core</artifactId>
+        </dependency>
+
+        <!-- F5 Slice B: distributed lock for the scheduled lifecycle job (K10) -->
+        <dependency>
+            <groupId>net.javacrumbs.shedlock</groupId>
+            <artifactId>shedlock-spring</artifactId>
+            <version>${shedlock.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>net.javacrumbs.shedlock</groupId>
+            <artifactId>shedlock-provider-jdbc-template</artifactId>
+            <version>${shedlock.version}</version>
+        </dependency>
+
+        <!-- F5-B PROD-R6: token-bucket rate limiting for the unauthenticated endpoints.
+             Core only — no Redis/Hazelcast backend, the buckets are per-instance (see RateLimitFilter). -->
+        <dependency>
+            <groupId>com.bucket4j</groupId>
+            <artifactId>bucket4j-core</artifactId>
+            <version>${bucket4j.version}</version>
         </dependency>
 
         <!-- Phase 2: Mail / Templating / Excel / Password policy -->

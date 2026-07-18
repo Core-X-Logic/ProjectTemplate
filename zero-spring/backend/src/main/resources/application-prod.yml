@@ -1,18 +1,48 @@
 # JSON logging is activated by the "prod" springProfile in logback-spring.xml
+springdoc:
+  # B6: the API description is not published in production. Anonymous GET /v3/api-docs returned 200
+  # and enumerated all 54 /api/ routes with their parameters and DTO shapes — a free reconnaissance
+  # pass, handed out before authentication. It buys prod nothing either: the strict
+  # `default-src 'none'` CSP already stops Swagger UI from running there, so the endpoint was pure
+  # attack surface. SecurityConfig drops the matching permitAll under this profile as well, so the
+  # paths are unauthenticated-inaccessible even if springdoc is ever re-enabled by mistake.
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
 zero:
   jwt:
     # no default on purpose: JWT_SECRET env is mandatory in prod
     secret: ${JWT_SECRET}
+  cors:
+    # PROD-R3: no default on purpose. A wildcard here would let any site drive the API with the
+    # user's Authorization header, so the deployment must name its origins.
+    allowed-origins: ${CORS_ALLOWED_ORIGINS}
   seed:
     # prod default: seeding is OFF. If explicitly enabled (SEED_ENABLED=true), a strong
     # SEED_ADMIN_PASSWORD is mandatory — DataSeeder fails fast on a blank/dev-default password.
     enabled: ${SEED_ENABLED:false}
     host-admin-password: ${SEED_ADMIN_PASSWORD:}
+    # F5-R9: stays ON while seeding is off — this is exactly the environment where the drift bites.
+    reconcile-permissions: ${SEED_RECONCILE_PERMISSIONS:true}
 logging:
   level:
     root: INFO
     com.mycompanyname.zero: INFO
 spring:
+  # Feature/abonelik çözümlemesi Redis'te paylaşılır: çok-instance'ta bir node'un evict'i
+  # diğerlerini de etkiler (F5-ARCHITECTURE §6, F5-R2).
+  cache:
+    type: ${CACHE_TYPE:redis}
+  datasource:
+    # PROD-R9: sized for a multi-instance deployment. Keep (instances x maximum-pool-size) below the
+    # database's max_connections, PgBouncer included.
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:20}
+      minimum-idle: ${DB_POOL_MIN_IDLE:5}
+      connection-timeout: ${DB_POOL_CONNECTION_TIMEOUT_MS:10000}
+      max-lifetime: ${DB_POOL_MAX_LIFETIME_MS:1800000}
+      leak-detection-threshold: ${DB_POOL_LEAK_DETECTION_MS:20000}
   jpa:
     properties:
       hibernate:

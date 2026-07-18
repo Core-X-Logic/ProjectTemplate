@@ -5,6 +5,8 @@ import com.mycompanyname.zero.identity.ou.web.dto.CreateOuRequest;
 import com.mycompanyname.zero.identity.ou.web.dto.MoveOuRequest;
 import com.mycompanyname.zero.identity.ou.web.dto.OuDto;
 import com.mycompanyname.zero.identity.ou.web.dto.UpdateOuRequest;
+import com.mycompanyname.zero.saas.api.RequiresFeature;
+import com.mycompanyname.zero.saas.api.SaasFeatures;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -21,9 +23,19 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/**
+ * Organization-unit hierarchy.
+ *
+ * <p>The whole controller sits behind the {@code app.organizationUnits} feature: the permission
+ * decides <em>who</em> in a tenant may manage the hierarchy, the feature decides whether the
+ * tenant's package includes it at all. A tenant whose edition switches the feature off receives 403
+ * on every route here, while a host administrator (no tenant context) always resolves the definition
+ * default and is never locked out.
+ */
 @RestController
 @RequestMapping("/api/organization-units")
 @RequiredArgsConstructor
+@RequiresFeature(SaasFeatures.ORGANIZATION_UNITS)
 public class OrganizationUnitController {
 
     private final OrganizationUnitService organizationUnitService;

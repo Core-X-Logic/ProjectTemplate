@@ -1,8 +1,11 @@
 package com.mycompanyname.zero.saas.subscription;
 
+import com.mycompanyname.zero.saas.EvictsSaasCaches;
 import com.mycompanyname.zero.saas.edition.Edition;
 import com.mycompanyname.zero.saas.edition.EditionRepository;
 import com.mycompanyname.zero.saas.subscription.web.dto.AssignEditionRequest;
+import com.mycompanyname.zero.saas.subscription.web.dto.ChangeEditionRequest;
+import com.mycompanyname.zero.saas.subscription.web.dto.EditionChangeDto;
 import com.mycompanyname.zero.saas.subscription.web.dto.SubscriptionDetailDto;
 import com.mycompanyname.zero.saas.subscription.web.dto.SubscriptionDto;
 import com.mycompanyname.zero.saas.subscription.web.dto.SubscriptionEventDto;
@@ -17,11 +20,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -31,12 +36,18 @@ import java.util.Optional;
  *   <li><b>Provisioning</b> ({@link #assignEdition}, {@link #provisionDefaultSubscription}) — rows
  *       S1-S3 of the state table, which have no source state. Selling a package computes the
  *       resulting status from the edition itself, so no transition guard applies.</li>
- *   <li><b>Transitions</b> ({@link #transition}, {@link #activate}, {@link #cancel}) — rows S4-S12,
- *       guarded by {@link SubscriptionStatus#canTransitionTo}. An illegal transition raises
+ *   <li><b>Transitions</b> ({@link #transition}, {@link #activate}, {@link #cancel},
+ *       {@link #downgradeToExpiringEdition}) — rows S4-S12, guarded by
+ *       {@link SubscriptionStatus#canTransitionTo}. An illegal transition raises
  *       {@code DomainException(VALIDATION)} instead of being silently ignored (K11).</li>
  * </ul>
  *
- * <p>Every successful status change appends a {@link SubscriptionEvent}.
+ * <p>Every successful status change appends a {@link SubscriptionEvent}. Every mutating method
+ * evicts the SaaS caches: a package change alters resolved feature values, and a status change
+ * alters the answer {@code SubscriptionGuard} gives the tenant filter (F5-R2).
+ *
+ * <p>Time is read from the injected {@link Clock}, never from {@code Instant.now()}, so the
+ * lifecycle can be exercised deterministically.
  */
 @Service
 @RequiredArgsConstructor
@@ -46,14 +57,18 @@ public class SubscriptionService {
 
     private static final String REASON_PROVISIONED = "PROVISIONED";
     private static final String REASON_EDITION_ASSIGNED = "EDITION_ASSIGNED";
+    private static final String REASON_EDITION_CHANGED = "EDITION_CHANGED";
     private static final String REASON_ACTIVATED = "ACTIVATED";
     private static final String REASON_CANCELLED = "CANCELLED";
+    private static final String REASON_DOWNGRADED = "DOWNGRADED";
     private static final String SYSTEM_ACTOR = "system";
 
     private final SubscriptionRepository subscriptionRepository;
     private final SubscriptionEventRepository subscriptionEventRepository;
     private final EditionRepository editionRepository;
     private final TenantRepository tenantRepository;
+    private final ProrationCalculator prorationCalculator;
+    private final Clock clock;
 
     // --- reads ---
 
@@ -91,6 +106,7 @@ public class SubscriptionService {
      * yet. The price of the chosen period is snapshotted onto the subscription so later edits to the
      * edition never change what this tenant pays (ADR-0012, rule 4).
      */
+    @EvictsSaasCaches
     public SubscriptionDetailDto assignEdition(Long tenantId, AssignEditionRequest request, String actor) {
         requireTenant(tenantId);
         Edition edition = editionRepository.findById(request.editionId())
@@ -135,6 +151,7 @@ public class SubscriptionService {
      * already has a subscription is left untouched, which is what makes the seeder and the
      * {@code TenantCreatedEvent} listener safe to run repeatedly.
      */
+    @EvictsSaasCaches
     public void provisionDefaultSubscription(Long tenantId) {
         if (subscriptionRepository.findByTenantId(tenantId).isPresent()) {
             return;
@@ -158,14 +175,16 @@ public class SubscriptionService {
     // --- transitions ---
 
     /** S4/S5/S10/S11: the subscription becomes usable and its period is extended. */
+    @EvictsSaasCaches
     public SubscriptionDetailDto activate(Long tenantId, String actor) {
-        transition(tenantId, SubscriptionStatus.ACTIVE, REASON_ACTIVATED, actor);
+        applyTransition(requireSubscription(tenantId), SubscriptionStatus.ACTIVE, REASON_ACTIVATED, actor);
         return getByTenantId(tenantId);
     }
 
     /** S12: access is retained until {@code currentPeriodEndAt}, which is therefore preserved. */
+    @EvictsSaasCaches
     public SubscriptionDetailDto cancel(Long tenantId, String actor) {
-        transition(tenantId, SubscriptionStatus.CANCELLED, REASON_CANCELLED, actor);
+        applyTransition(requireSubscription(tenantId), SubscriptionStatus.CANCELLED, REASON_CANCELLED, actor);
         return getByTenantId(tenantId);
     }
 
@@ -173,18 +192,148 @@ public class SubscriptionService {
      * Guarded state change. Rejects any transition the state table does not allow — for example
      * {@code EXPIRED -> TRIALING} (a trial can never be re-entered) or anything out of the terminal
      * {@code CANCELLED} state.
+     *
+     * <p>This is the single entry point the lifecycle job uses: the job decides <em>which</em>
+     * subscriptions are due, never what their status becomes.
      */
+    @EvictsSaasCaches
     public Subscription transition(Long tenantId, SubscriptionStatus target, String reason, String actor) {
+        return applyTransition(requireSubscription(tenantId), target, reason, actor);
+    }
+
+    /**
+     * S10: an expired subscription falls back to its edition's {@code expiringEditionId} (which the
+     * catalogue guarantees is free) and becomes {@code ACTIVE} again on that package.
+     *
+     * @return the downgraded subscription, or empty when the edition defines no downgrade target —
+     *         in which case the tenant stays {@code EXPIRED}, exactly as the source system did
+     */
+    @EvictsSaasCaches
+    public Optional<Subscription> downgradeToExpiringEdition(Long tenantId, String actor) {
         Subscription subscription = requireSubscription(tenantId);
+        if (subscription.getStatus() != SubscriptionStatus.EXPIRED) {
+            throw DomainException.validation("Only an EXPIRED subscription can be downgraded, but tenant "
+                    + tenantId + " is " + subscription.getStatus());
+        }
+        Edition current = requireEdition(subscription.getEditionId());
+        Long targetId = current.getExpiringEditionId();
+        if (targetId == null) {
+            return Optional.empty();
+        }
+        Edition target = requireEdition(targetId);
+        if (!target.isFree()) {
+            // The catalogue enforces this on write; re-checking here keeps a hand-edited database
+            // from silently moving a tenant onto something billable without a payment.
+            throw DomainException.validation("The expiring edition of '" + current.getName()
+                    + "' must be free, but '" + target.getName() + "' is priced");
+        }
+
+        subscription.setEditionId(target.getId());
+        subscription.setBillingPeriod(null);
+        subscription.setPriceAmount(null);
+        subscription.setPriceCurrency(null);
+        subscription.setTrialEndAt(null);
+        // Going through applyTransition keeps the guard and the event trail identical to every other
+        // transition; with a null billing period it also resets currentPeriodEndAt (a free package
+        // never expires).
+        return Optional.of(applyTransition(subscription, SubscriptionStatus.ACTIVE, REASON_DOWNGRADED, actor));
+    }
+
+    /**
+     * S13: upgrade or downgrade an {@code ACTIVE} subscription.
+     *
+     * <p>Two source rules are preserved deliberately. The billing period end is <b>not</b> shifted —
+     * the pro-rated amount already prices the unused remainder, so moving the date too would charge
+     * for it twice. And when the amount stays below
+     * {@code zero.saas.proration.minimum-amount}, no payment is requested at all and the edition
+     * changes immediately.
+     *
+     * <p>Slice B has no billing provider: the amount is computed, logged and returned, and Slice C
+     * turns it into a checkout.
+     */
+    @EvictsSaasCaches
+    public EditionChangeDto changeEdition(Long tenantId, ChangeEditionRequest request, String actor) {
+        Subscription subscription = requireSubscription(tenantId);
+        if (subscription.getStatus() != SubscriptionStatus.ACTIVE) {
+            throw DomainException.validation("Only an ACTIVE subscription can change edition, but tenant "
+                    + tenantId + " is " + subscription.getStatus()
+                    + "; assign the package instead");
+        }
+        Edition target = requireEdition(request.editionId());
+        if (Objects.equals(target.getId(), subscription.getEditionId())) {
+            throw DomainException.validation(
+                    "The subscription is already on edition '" + target.getName() + "'");
+        }
+
+        BillingPeriod requested = BillingPeriod.parseOrNull(request.billingPeriod());
+        BillingPeriod period = target.isFree()
+                ? null
+                : (requested != null ? requested : subscription.getBillingPeriod());
+        if (!target.isFree() && period == null) {
+            throw DomainException.validation("Edition '" + target.getName()
+                    + "' is priced and requires a billing period");
+        }
+        BigDecimal targetPrice = period == null ? null : target.priceFor(period.name());
+        if (period != null && targetPrice == null) {
+            throw DomainException.validation("Edition '" + target.getName()
+                    + "' has no " + period + " price");
+        }
+
+        Instant now = clock.instant();
+        Instant periodEnd = subscription.getCurrentPeriodEndAt();
+        // The period start is not persisted, so it is reconstructed from its end. BillingPeriod uses
+        // java.time.Period, so the length is the real calendar distance (ADR-0013), not 30/365 days.
+        Instant periodStart = (periodEnd == null || subscription.getBillingPeriod() == null)
+                ? null
+                : subscription.getBillingPeriod().rewind(periodEnd);
+
+        ProrationResult proration = prorationCalculator.calculate(
+                subscription.getPriceAmount(), targetPrice, periodStart, periodEnd, now);
+
+        subscription.setEditionId(target.getId());
+        subscription.setBillingPeriod(period);
+        subscription.setPriceAmount(targetPrice);
+        subscription.setPriceCurrency(period == null ? null : target.getCurrency());
+        if (period == null) {
+            subscription.setCurrentPeriodEndAt(null);       // moved onto a free package: never expires
+        } else if (periodEnd == null) {
+            subscription.setCurrentPeriodEndAt(period.advance(now)); // was unlimited: a period starts now
+        }
+        // else: the period end stays exactly where it was (S13).
+
+        Subscription saved = subscriptionRepository.save(subscription);
+        recordEvent(saved, SubscriptionStatus.ACTIVE, SubscriptionStatus.ACTIVE, REASON_EDITION_CHANGED, actor);
+
+        String currency = period == null ? null : target.getCurrency();
+        log.info("Tenant {} moved to edition '{}': proration {} {} (payment required: {}, minimum {})",
+                tenantId, target.getName(), proration.amount(), currency,
+                proration.paymentRequired(), prorationCalculator.minimumAmount());
+
+        return new EditionChangeDto(
+                toDto(saved),
+                proration.amount(),
+                currency,
+                proration.remainingRatio(),
+                proration.paymentRequired(),
+                prorationCalculator.minimumAmount());
+    }
+
+    // --- internals ---
+
+    /**
+     * The one place a status is written. Kept private and shared by every public transition method so
+     * the guard, the side effects and the event trail can never drift apart.
+     */
+    private Subscription applyTransition(Subscription subscription, SubscriptionStatus target,
+                                         String reason, String actor) {
         SubscriptionStatus from = subscription.getStatus();
         if (!from.canTransitionTo(target)) {
-            throw DomainException.validation(
-                    "Illegal subscription transition " + from + " -> " + target + " for tenant " + tenantId);
+            throw DomainException.validation("Illegal subscription transition " + from + " -> " + target
+                    + " for tenant " + subscription.getTenantId());
         }
-        Edition edition = editionRepository.findById(subscription.getEditionId())
-                .orElseThrow(() -> DomainException.notFound("Edition not found: " + subscription.getEditionId()));
+        Edition edition = requireEdition(subscription.getEditionId());
 
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         subscription.setStatus(target);
         switch (target) {
             case ACTIVE -> {
@@ -210,11 +359,9 @@ public class SubscriptionService {
         return saved;
     }
 
-    // --- internals ---
-
     /** Computes status + snapshot for the edition being sold (state-table rows S1-S3). */
     private void applyPackage(Subscription subscription, Edition edition, BillingPeriod period, boolean trial) {
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         subscription.setEditionId(edition.getId());
         subscription.setBillingPeriod(period);
         subscription.setPriceAmount(period == null ? null : edition.priceFor(period.name()));
@@ -247,7 +394,7 @@ public class SubscriptionService {
         event.setFromStatus(from);
         event.setToStatus(to);
         event.setReason(reason);
-        event.setOccurredAt(Instant.now());
+        event.setOccurredAt(clock.instant());
         event.setActor(actor == null || actor.isBlank() ? SYSTEM_ACTOR : actor);
         subscriptionEventRepository.save(event);
     }
@@ -255,6 +402,11 @@ public class SubscriptionService {
     private Subscription requireSubscription(Long tenantId) {
         return subscriptionRepository.findByTenantId(tenantId)
                 .orElseThrow(() -> DomainException.notFound("No subscription for tenant: " + tenantId));
+    }
+
+    private Edition requireEdition(Long editionId) {
+        return editionRepository.findById(editionId)
+                .orElseThrow(() -> DomainException.notFound("Edition not found: " + editionId));
     }
 
     private void requireTenant(Long tenantId) {

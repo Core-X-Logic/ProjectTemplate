@@ -1,10 +1,12 @@
 package com.mycompanyname.zero.saas.feature;
 
+import com.mycompanyname.zero.saas.SaasCaches;
 import com.mycompanyname.zero.saas.feature.web.dto.FeatureValueDto;
 import com.mycompanyname.zero.saas.feature.web.dto.TenantFeatureDto;
 import com.mycompanyname.zero.shared.domain.DomainException;
 import com.mycompanyname.zero.tenancy.TenantRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,7 +36,11 @@ public class TenantFeatureService {
     /**
      * Batch upsert of tenant overrides. A {@code null}/blank value deletes the override so the
      * tenant falls back to its edition; unknown names and type-incompatible values are rejected.
+     *
+     * <p>Evicts the whole feature cache (F5-R2): a single override can be masked or unmasked at any
+     * level of the chain, so per-key invalidation would have to guess which entries went stale.
      */
+    @CacheEvict(cacheNames = SaasCaches.FEATURES, allEntries = true)
     public List<TenantFeatureDto> setValues(Long tenantId, List<FeatureValueDto> updates) {
         requireTenant(tenantId);
         if (updates == null) {

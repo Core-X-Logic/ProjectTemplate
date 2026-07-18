@@ -13,3 +13,31 @@ spring:
     properties:
       hibernate:
         format_sql: true
+zero:
+  jwt:
+    # PROD-R1: local-only signing key. It is committed, therefore public, therefore listed in
+    # JwtSecretValidator.NON_PRODUCTION_SECRETS — booting with the 'prod' profile on this value
+    # fails fast instead of signing production tokens with a key anyone can read.
+    secret: ${JWT_SECRET:emVyby1wbGF0Zm9ybS1MT0NBTC1ERVYtT05MWS1zaWduaW5nLWtleS1ub3QtdmFsaWQtaW4tcHJvZHVjdGlvbi0wMTIzNDU2Nzg5YWJjZGVm}
+  seed:
+    # B4: the base configuration seeds nothing, so a profile mishap cannot provision anything.
+    # A laptop wants the opposite, and says so explicitly.
+    enabled: ${SEED_ENABLED:true}
+    # Local convenience credential. Same rule: never accepted once 'prod' is active.
+    host-admin-password: ${SEED_ADMIN_PASSWORD:Admin123!}
+  cors:
+    # Vite dev server (frontend/app).
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+  ratelimit:
+    # C6. The base default is 1, which describes the documented prod shape: one TLS-terminating
+    # proxy that appends the address it saw, so the rightmost X-Forwarded-For entry is trustworthy.
+    # A laptop and a CI runner have no proxy in front of them at all, and inheriting that default
+    # there means the header is honoured on a directly exposed listener — every caller then picks
+    # its own bucket just by rotating it. Live-proven: six unthrottled login attempts with a
+    # rotating rightmost entry, the IP limit gone entirely. 0 means "no proxy": ignore the header
+    # and charge the transport peer.
+    trusted-proxy-count: ${RATE_LIMIT_TRUSTED_PROXY_COUNT:0}
+  security:
+    # Swagger UI is served by this application in dev and needs its own scripts/styles/images.
+    # Prod keeps the strict "default-src 'none'" policy from application.yml.
+    content-security-policy: "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"

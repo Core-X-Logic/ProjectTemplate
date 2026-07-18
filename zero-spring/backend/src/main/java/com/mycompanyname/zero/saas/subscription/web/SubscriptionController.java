@@ -3,6 +3,8 @@ package com.mycompanyname.zero.saas.subscription.web;
 import com.mycompanyname.zero.saas.SaasPermissions;
 import com.mycompanyname.zero.saas.subscription.SubscriptionService;
 import com.mycompanyname.zero.saas.subscription.web.dto.AssignEditionRequest;
+import com.mycompanyname.zero.saas.subscription.web.dto.ChangeEditionRequest;
+import com.mycompanyname.zero.saas.subscription.web.dto.EditionChangeDto;
 import com.mycompanyname.zero.saas.subscription.web.dto.SubscriptionDetailDto;
 import com.mycompanyname.zero.saas.subscription.web.dto.SubscriptionDto;
 import jakarta.validation.Valid;
@@ -60,6 +62,19 @@ public class SubscriptionController {
                                                @Valid @RequestBody AssignEditionRequest request,
                                                @AuthenticationPrincipal Jwt jwt) {
         return subscriptionService.assignEdition(tenantId, request, actor(jwt));
+    }
+
+    /**
+     * Upgrade/downgrade (S13). Host-only like every other write: a tenant requesting an upgrade goes
+     * through this route on its behalf, and the tenant can never move itself onto a package it has
+     * not paid for (F5-R3). The pro-rated amount is returned; collecting it is Slice C.
+     */
+    @PostMapping("/{tenantId}/change-edition")
+    @PreAuthorize("hasAuthority('" + SaasPermissions.SUBSCRIPTIONS_MANAGE + "')")
+    public EditionChangeDto changeEdition(@PathVariable Long tenantId,
+                                          @Valid @RequestBody ChangeEditionRequest request,
+                                          @AuthenticationPrincipal Jwt jwt) {
+        return subscriptionService.changeEdition(tenantId, request, actor(jwt));
     }
 
     @PostMapping("/{tenantId}/activate")

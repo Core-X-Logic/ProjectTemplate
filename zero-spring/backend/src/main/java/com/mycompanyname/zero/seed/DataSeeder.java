@@ -17,6 +17,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,10 +30,19 @@ import java.util.Set;
 @Slf4j
 public class DataSeeder implements ApplicationRunner {
 
+    /**
+     * Advisory lock key that serialises startup provisioning across replicas (PROD-R15a). Any
+     * arbitrary but stable 64-bit constant works; it is shared with {@link SaasSeeder} so identity
+     * and SaaS provisioning cannot interleave.
+     */
+    public static final long SEED_ADVISORY_LOCK_KEY = 8_274_411_903_551_233_001L;
+
     private static final String ADMIN_USERNAME = "admin";
     private static final String ADMIN_ROLE_NAME = "Admin";
     private static final String DEFAULT_TENANT_NAME = "default";
-    private static final String DEV_DEFAULT_PASSWORD = "Admin123!";
+
+    /** The credential that used to be the committed default for {@code SEED_ADMIN_PASSWORD}. */
+    static final String DEV_DEFAULT_PASSWORD = "Admin123!";
 
     private final TenantRepository tenantRepository;
     private final UserRepository userRepository;
@@ -40,7 +50,9 @@ public class DataSeeder implements ApplicationRunner {
     private final PasswordEncoder passwordEncoder;
     private final Environment environment;
     private final SaasSeeder saasSeeder;
+    private final JdbcTemplate jdbcTemplate;
     private final boolean seedEnabled;
+    private final boolean reconcilePermissions;
     private final String hostAdminPassword;
 
     public DataSeeder(TenantRepository tenantRepository,
@@ -49,50 +61,91 @@ public class DataSeeder implements ApplicationRunner {
                       PasswordEncoder passwordEncoder,
                       Environment environment,
                       SaasSeeder saasSeeder,
-                      @Value("${zero.seed.enabled:true}") boolean seedEnabled,
-                      @Value("${zero.seed.host-admin-password:Admin123!}") String hostAdminPassword) {
+                      JdbcTemplate jdbcTemplate,
+                      // B4: the fallback is `false` to match application.yml. A `true` here would
+                      // quietly restore the profile-escape even after the YAML was fixed, since a
+                      // deployment that overrides the property away entirely lands on this value.
+                      @Value("${zero.seed.enabled:false}") boolean seedEnabled,
+                      @Value("${zero.seed.reconcile-permissions:true}") boolean reconcilePermissions,
+                      @Value("${zero.seed.host-admin-password:}") String hostAdminPassword) {
         this.tenantRepository = tenantRepository;
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.environment = environment;
         this.saasSeeder = saasSeeder;
+        this.jdbcTemplate = jdbcTemplate;
         this.seedEnabled = seedEnabled;
+        this.reconcilePermissions = reconcilePermissions;
         this.hostAdminPassword = hostAdminPassword;
     }
 
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
-        if (!seedEnabled) {
-            log.info("Data seeding skipped (zero.seed.enabled=false)");
-            return;
+        if (seedEnabled) {
+            requireUsableHostAdminPassword();
         }
-        // Fail fast: seeding in prod with a missing or dev-default admin password would ship a
-        // publicly known credential. Either set a strong SEED_ADMIN_PASSWORD or disable seeding.
-        if (environment.acceptsProfiles(Profiles.of("prod"))
-                && (hostAdminPassword == null
-                    || hostAdminPassword.isBlank()
-                    || DEV_DEFAULT_PASSWORD.equals(hostAdminPassword))) {
-            throw new IllegalStateException(
-                    "Seeding is enabled with the 'prod' profile but SEED_ADMIN_PASSWORD is missing, blank, "
-                            + "or still the dev default. Set a strong SEED_ADMIN_PASSWORD or disable seeding "
-                            + "(SEED_ENABLED=false).");
-        }
+        // PROD-R15a: replicas boot simultaneously and each one runs this. Without serialisation two
+        // nodes can both pass the "does the admin exist?" check and race into the insert, where one
+        // dies on the unique constraint and takes the application down with it. The advisory lock is
+        // transaction-scoped, so it is released by the commit or rollback below — no cleanup path can
+        // leak it, unlike a row-based flag.
+        acquireSeedLock();
         TenantContext.clear();
         try {
-            seedIdentity();
-            // Separate, independently idempotent step: it keys on the static Admin roles' *contents*,
-            // not on the host admin above, so an already-provisioned database picks up permissions
-            // that were added after it was first seeded.
+            if (seedEnabled) {
+                seedIdentity();
+            } else {
+                log.info("Data seeding skipped (zero.seed.enabled=false)");
+            }
+            // Independent of seeding on purpose (F5-R9): keyed on the static Admin roles' *contents*,
+            // not on the host admin, so an already-provisioned database picks up permissions added by
+            // a later release. Prod runs with seeding off, which is exactly where that drift appears.
             reconcileStaticRolePermissions();
-            // Separate, independently idempotent step: it keys on the edition's existence, not on the
-            // host admin above, so an already-provisioned database still receives the SaaS baseline.
-            saasSeeder.seedDefaults();
-            log.info("Data seeding completed");
+            if (seedEnabled) {
+                // Separate, independently idempotent step: it keys on the edition's existence, not on
+                // the host admin above, so an already-provisioned database still receives the SaaS
+                // baseline.
+                saasSeeder.seedDefaults();
+                log.info("Data seeding completed");
+            }
         } finally {
             TenantContext.clear();
         }
+    }
+
+    /**
+     * PROD-R2. This check used to be conditional on the {@code prod} profile, which meant the one
+     * failure mode it was written for — {@code SPRING_PROFILES_ACTIVE} unset or misspelled, so the
+     * base config's defaults apply — slipped straight past it and seeded a host admin whose password
+     * is published in this repository. The profile is no longer consulted: a blank or dev-default
+     * password is refused everywhere. Dev and test supply {@code Admin123!} explicitly through their
+     * own profile configuration, which is what keeps them working.
+     */
+    private void requireUsableHostAdminPassword() {
+        boolean unusable = hostAdminPassword == null
+                || hostAdminPassword.isBlank()
+                || DEV_DEFAULT_PASSWORD.equals(hostAdminPassword);
+        if (!unusable) {
+            return;
+        }
+        if (environment.acceptsProfiles(Profiles.of("dev", "test"))
+                && DEV_DEFAULT_PASSWORD.equals(hostAdminPassword)) {
+            return;
+        }
+        throw new IllegalStateException(
+                "Seeding is enabled but zero.seed.host-admin-password is missing, blank, or still the "
+                        + "dev default. Set a strong SEED_ADMIN_PASSWORD or disable seeding "
+                        + "(SEED_ENABLED=false).");
+    }
+
+    /**
+     * Blocks until any other replica's seeding transaction has committed. Held for the remainder of
+     * this transaction; PostgreSQL releases it automatically at commit/rollback.
+     */
+    private void acquireSeedLock() {
+        jdbcTemplate.query("select pg_advisory_xact_lock(?)", resultSet -> null, SEED_ADVISORY_LOCK_KEY);
     }
 
     /**
@@ -116,13 +169,21 @@ public class DataSeeder implements ApplicationRunner {
      *       UPDATE and produces no audit noise.</li>
      * </ul>
      *
+     * <p><b>Why its own flag (F5-R9, prod fix).</b> This used to be gated on
+     * {@code zero.seed.enabled}. Prod ships with seeding off — that is the whole point of
+     * {@code SEED_ENABLED=false} — so reconciliation never ran in the one environment whose database
+     * is old enough to have drifted, while every clean-database test suite passed. It is now gated on
+     * {@code zero.seed.reconcile-permissions} (default true, prod included), because reconciling an
+     * existing role's permissions is not seeding: it creates nothing and touches only roles marked
+     * static.
+     *
      * <p>Public so the reconciliation can be exercised on its own (see
      * {@code RolePermissionReconciliationIT}) without re-running the whole {@link ApplicationRunner}.
      */
     @Transactional
     public void reconcileStaticRolePermissions() {
-        if (!seedEnabled) {
-            log.info("Static role permission reconciliation skipped (zero.seed.enabled=false)");
+        if (!reconcilePermissions) {
+            log.info("Static role permission reconciliation skipped (zero.seed.reconcile-permissions=false)");
             return;
         }
         TenantContext.clear();

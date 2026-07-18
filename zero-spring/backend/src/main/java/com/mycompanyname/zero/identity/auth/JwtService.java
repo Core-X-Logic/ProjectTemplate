@@ -49,6 +49,8 @@ public class JwtService {
         Instant now = Instant.now();
         JwtClaimsSet.Builder claims = JwtClaimsSet.builder()
                 .issuer(properties.getIssuer())
+                // PROD-R16: binds the token to this API. JwtAudienceValidator enforces the other half.
+                .audience(List.of(properties.getAudience()))
                 .subject(String.valueOf(user.getId()))
                 .issuedAt(now)
                 .expiresAt(now.plus(properties.getAccessTokenTtl()))
