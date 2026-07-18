@@ -268,9 +268,14 @@ jobs:
           name: backend-jar
           path: zero-spring/dist
 
-      # Redis GEREKMEZ: dev profilinde de spring.cache.type=simple (base'den miras)
+      # Redis servisi GEREKMEZ: dev profilinde de spring.cache.type=simple (base'den miras)
       # ve ImpersonationTokenStore in-memory. Lettuce bağlantısı lazy olduğu için
       # boot sırasında Redis'e hiç dokunulmaz.
+      #
+      # DİKKAT (PROD-R29): bu, "boot" için doğru; `/actuator/health` için DEĞİL. Aggregate
+      # health endpoint'i redis indicator'ını AKTİF OLARAK yoklar, bağlantı reddedilir ve
+      # uç 503 döner — uygulama her isteği normal cevaplarken. Bu yüzden hazır-olma kontrolü
+      # `/actuator/health/readiness`e bakar (readinessState + db); aşağıya bakın.
       - name: Start backend
         run: |
           set -euo pipefail
@@ -283,17 +288,22 @@ jobs:
           nohup java -jar "${JAR}" > backend.log 2>&1 &
           echo $! > backend.pid
 
+      # Adımın adı hep "readiness"ti ama aggregate `/actuator/health`'ı yokluyordu — yani
+      # kendi adıyla çelişiyordu. Aggregate, trafiği servis etmek için gerekmeyen her
+      # bağımlılığı da içerir (burada: redis servisi yok → 503 → 60 sn timeout → gate düşer).
+      # `readiness` tam olarak "istek servis edebilir miyim" sorusudur ve Dockerfile
+      # HEALTHCHECK'i ile k8s probe'unun kullandığı uçtur; CI'ın da onu kullanması gerekir.
       - name: Wait for readiness
         run: |
           set -euo pipefail
           for i in $(seq 1 60); do
-            if curl -sf http://localhost:8080/actuator/health > /dev/null; then
-              echo "Backend is up after ${i}s"
+            if curl -sf http://localhost:8080/actuator/health/readiness > /dev/null; then
+              echo "Backend is ready after ${i}s"
               exit 0
             fi
             sleep 1
           done
-          echo "::error::Backend did not become healthy within 60s"
+          echo "::error::Backend did not become ready within 60s"
           tail -n 200 backend.log
           exit 1
 
@@ -549,17 +559,19 @@ jobs:
           nohup java -jar "${JAR}" > backend.log 2>&1 &
           echo $! > backend.pid
 
+      # PROD-R29: aggregate `/actuator/health` DEĞİL — bu job'da da redis servisi yok ve
+      # aggregate onu aktif olarak yokladığı için 503 döner. `readiness` = readinessState + db.
       - name: Wait for readiness
         run: |
           set -euo pipefail
           for i in $(seq 1 60); do
-            if curl -sf http://localhost:8080/actuator/health > /dev/null; then
-              echo "Backend is up after ${i}s"
+            if curl -sf http://localhost:8080/actuator/health/readiness > /dev/null; then
+              echo "Backend is ready after ${i}s"
               exit 0
             fi
             sleep 1
           done
-          echo "::error::Backend did not become healthy within 60s"
+          echo "::error::Backend did not become ready within 60s"
           tail -n 200 backend.log
           exit 1
 
