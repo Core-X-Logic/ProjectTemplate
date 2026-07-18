@@ -1,9 +1,11 @@
 import { auditMessagesTr } from '@/features/audit/messages';
+import { editionsMessages } from '@/features/editions/messages';
 import { impersonationTr } from '@/features/impersonation/messages';
 import { notificationsTr } from '@/features/notifications/messages';
 import { organizationUnitsMessages } from '@/features/organization-units/messages';
 import { rolesMessages } from '@/features/roles/messages';
 import { settingsTr } from '@/features/settings/messages';
+import { subscriptionsMessages } from '@/features/subscriptions/messages';
 import { usersMessagesTr } from '@/features/users/messages';
 
 /**
@@ -39,6 +41,9 @@ const tr: Record<string, string> = {
   'nav.notifications': 'Bildirimler',
   'nav.audit': 'Denetim',
   'nav.settings': 'Ayarlar',
+  'nav.saas': 'Saas',
+  'nav.editions': 'Paketler',
+  'nav.subscriptions': 'Abonelikler',
 
   // Common actions
   'common.save': 'Kaydet',
@@ -74,7 +79,7 @@ const tr: Record<string, string> = {
   'dashboard.comingSoonSlice':
     'Özellik modülleri bir sonraki dikey dilimde gelecek.',
 
-  // Feature catalogues (slice B + C) — namespaced, no key collisions
+  // Feature catalogues (slice B + C + F5-A) — namespaced, no key collisions
   ...usersMessagesTr,
   ...rolesMessages.tr,
   ...organizationUnitsMessages.tr,
@@ -82,6 +87,8 @@ const tr: Record<string, string> = {
   ...auditMessagesTr,
   ...impersonationTr,
   ...settingsTr,
+  ...editionsMessages.tr,
+  ...subscriptionsMessages.tr,
 };
 
 export default tr;

@@ -2,10 +2,13 @@ import { useMemo } from 'react';
 import {
   Bell,
   Building2,
+  CreditCard,
   LayoutGrid,
+  Package,
   ScrollText,
   Settings,
   ShieldCheck,
+  Store,
   Users,
 } from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
@@ -52,6 +55,27 @@ export const MENU_SIDEBAR: MenuConfig = [
     icon: ScrollText,
     path: '/audit',
     permission: 'auditlogs.read',
+  },
+  {
+    // SaaS group (F5 slice A). It has no path of its own, so
+    // `filterMenuByPermission` drops the whole group once a user can see
+    // neither child — a tenant operator never sees a "Saas" heading.
+    title: 'nav.saas',
+    icon: Store,
+    children: [
+      {
+        title: 'nav.editions',
+        icon: Package,
+        path: '/editions',
+        permission: 'editions.read',
+      },
+      {
+        title: 'nav.subscriptions',
+        icon: CreditCard,
+        path: '/subscriptions',
+        permission: 'subscriptions.read',
+      },
+    ],
   },
   {
     title: 'nav.settings',

@@ -12,6 +12,9 @@ import { NotificationsPage } from '@/features/notifications/pages/notifications'
 import { AuditLogsPage } from '@/features/audit/pages/audit-logs';
 import { EntityHistoryPage } from '@/features/audit/pages/entity-history';
 import { SettingsPage } from '@/features/settings/pages/settings';
+import { EditionsListPage } from '@/features/editions/pages/editions-list';
+import { EditionFormPage } from '@/features/editions/pages/edition-form';
+import { SubscriptionsListPage } from '@/features/subscriptions/pages/subscriptions-list';
 import { NotFoundPage } from '@/routing/not-found';
 
 /**
@@ -104,6 +107,44 @@ export function AppRoutes() {
                 anyPermission={['settings.tenant.manage', 'settings.host.manage']}
               >
                 <SettingsPage />
+              </RequireAuth>
+            }
+          />
+
+          {/* SaaS (F5 slice A) — host-side commercial layer. Read guards the
+              screen; every write is additionally `<Can>`-gated and enforced by
+              the backend with `Side.HOST` + `editions|subscriptions.manage`.
+              The edition form shares one page across `/editions/new` (create)
+              and `/editions/:id` (edit), same as the role form. */}
+          <Route
+            path="editions"
+            element={
+              <RequireAuth permission="editions.read">
+                <EditionsListPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="editions/new"
+            element={
+              <RequireAuth permission="editions.read">
+                <EditionFormPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="editions/:id"
+            element={
+              <RequireAuth permission="editions.read">
+                <EditionFormPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="subscriptions"
+            element={
+              <RequireAuth permission="subscriptions.read">
+                <SubscriptionsListPage />
               </RequireAuth>
             }
           />

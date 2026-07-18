@@ -1,9 +1,11 @@
 import { auditMessagesEn } from '@/features/audit/messages';
+import { editionsMessages } from '@/features/editions/messages';
 import { impersonationEn } from '@/features/impersonation/messages';
 import { notificationsEn } from '@/features/notifications/messages';
 import { organizationUnitsMessages } from '@/features/organization-units/messages';
 import { rolesMessages } from '@/features/roles/messages';
 import { settingsEn } from '@/features/settings/messages';
+import { subscriptionsMessages } from '@/features/subscriptions/messages';
 import { usersMessagesEn } from '@/features/users/messages';
 
 /**
@@ -41,6 +43,9 @@ const en: Record<string, string> = {
   'nav.notifications': 'Notifications',
   'nav.audit': 'Audit',
   'nav.settings': 'Settings',
+  'nav.saas': 'Saas',
+  'nav.editions': 'Editions',
+  'nav.subscriptions': 'Subscriptions',
 
   // Common actions
   'common.save': 'Save',
@@ -77,7 +82,7 @@ const en: Record<string, string> = {
   'dashboard.comingSoonSlice':
     'Feature modules land in the next vertical slice.',
 
-  // Feature catalogues (slice B + C) — namespaced, no key collisions
+  // Feature catalogues (slice B + C + F5-A) — namespaced, no key collisions
   ...usersMessagesEn,
   ...rolesMessages.en,
   ...organizationUnitsMessages.en,
@@ -85,6 +90,8 @@ const en: Record<string, string> = {
   ...auditMessagesEn,
   ...impersonationEn,
   ...settingsEn,
+  ...editionsMessages.en,
+  ...subscriptionsMessages.en,
 };
 
 export default en;

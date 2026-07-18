@@ -84,6 +84,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/tenant-features/{tenantId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["tenantFeatures"];
+        put: operations["updateTenantFeatures"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/subscriptions/{tenantId}/edition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["assignEdition"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings/tenant": {
         parameters: {
             query?: never;
@@ -212,6 +244,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/editions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getById_2"];
+        put: operations["update_4"];
+        post?: never;
+        delete: operations["delete_3"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/editions/{id}/features": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["setFeatures"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/users": {
         parameters: {
             query?: never;
@@ -292,6 +356,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/subscriptions/{tenantId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["cancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/subscriptions/{tenantId}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["activate_2"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/roles": {
         parameters: {
             query?: never;
@@ -350,6 +446,22 @@ export interface paths {
         get: operations["tree"];
         put?: never;
         post: operations["create_3"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/editions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_3"];
+        put?: never;
+        post: operations["create_4"];
         delete?: never;
         options?: never;
         head?: never;
@@ -516,6 +628,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_4"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/subscriptions/{tenantId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getByTenantId"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/subscriptions/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["me"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings/client": {
         parameters: {
             query?: never;
@@ -612,6 +772,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/features/definitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["definitions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/entity-changes": {
         parameters: {
             query?: never;
@@ -635,7 +811,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["me"];
+        get: operations["me_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -651,7 +827,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_3"];
+        get: operations["list_5"];
         put?: never;
         post?: never;
         delete?: never;
@@ -717,6 +893,61 @@ export interface components {
             /** Format: date-time */
             createdAt?: string;
         };
+        FeatureValueDto: {
+            name?: string;
+            value?: string;
+        };
+        TenantFeatureDto: {
+            name?: string;
+            type?: string;
+            value?: string;
+            overrideValue?: string;
+            editionValue?: string;
+            defaultValue?: string;
+        };
+        AssignEditionRequest: {
+            /** Format: int64 */
+            editionId: number;
+            billingPeriod?: string;
+            trial?: boolean;
+        };
+        SubscriptionDetailDto: {
+            subscription?: components["schemas"]["SubscriptionDto"];
+            events?: components["schemas"]["SubscriptionEventDto"][];
+        };
+        SubscriptionDto: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            tenantId?: number;
+            tenantName?: string;
+            /** Format: int64 */
+            editionId?: number;
+            editionName?: string;
+            editionDisplayName?: string;
+            status?: string;
+            billingPeriod?: string;
+            priceAmount?: number;
+            priceCurrency?: string;
+            /** Format: date-time */
+            trialEndAt?: string;
+            /** Format: date-time */
+            currentPeriodEndAt?: string;
+            /** Format: date-time */
+            graceEndAt?: string;
+            /** Format: date-time */
+            cancelledAt?: string;
+        };
+        SubscriptionEventDto: {
+            /** Format: int64 */
+            id?: number;
+            fromStatus?: string;
+            toStatus?: string;
+            reason?: string;
+            /** Format: date-time */
+            occurredAt?: string;
+            actor?: string;
+        };
         SettingDto: {
             name?: string;
             value?: string;
@@ -772,6 +1003,46 @@ export interface components {
             /** Format: int64 */
             newParentId?: number;
         };
+        UpdateEditionRequest: {
+            displayName: string;
+            description?: string;
+            monthlyPrice?: number;
+            annualPrice?: number;
+            currency?: string;
+            /** Format: int32 */
+            trialDayCount?: number;
+            /** Format: int32 */
+            graceDayCount?: number;
+            /** Format: int64 */
+            expiringEditionId?: number;
+            active?: boolean;
+            /** Format: int32 */
+            sortOrder?: number;
+        };
+        EditionDetailDto: {
+            edition?: components["schemas"]["EditionDto"];
+            features?: components["schemas"]["FeatureValueDto"][];
+        };
+        EditionDto: {
+            /** Format: int64 */
+            id?: number;
+            name?: string;
+            displayName?: string;
+            description?: string;
+            monthlyPrice?: number;
+            annualPrice?: number;
+            currency?: string;
+            /** Format: int32 */
+            trialDayCount?: number;
+            /** Format: int32 */
+            graceDayCount?: number;
+            /** Format: int64 */
+            expiringEditionId?: number;
+            active?: boolean;
+            /** Format: int32 */
+            sortOrder?: number;
+            free?: boolean;
+        };
         CreateUserRequest: {
             username: string;
             email: string;
@@ -800,6 +1071,23 @@ export interface components {
             displayName: string;
             /** Format: int64 */
             parentId?: number;
+        };
+        CreateEditionRequest: {
+            name: string;
+            displayName: string;
+            description?: string;
+            monthlyPrice?: number;
+            annualPrice?: number;
+            currency?: string;
+            /** Format: int32 */
+            trialDayCount?: number;
+            /** Format: int32 */
+            graceDayCount?: number;
+            /** Format: int64 */
+            expiringEditionId?: number;
+            active?: boolean;
+            /** Format: int32 */
+            sortOrder?: number;
         };
         RefreshRequest: {
             refreshToken: string;
@@ -849,51 +1137,69 @@ export interface components {
             totalElements?: number;
             /** Format: int32 */
             totalPages?: number;
-            /** Format: int32 */
-            numberOfElements?: number;
+            first?: boolean;
+            last?: boolean;
             /** Format: int32 */
             size?: number;
             content?: components["schemas"]["UserDto"][];
             /** Format: int32 */
             number?: number;
             sort?: components["schemas"]["SortObject"];
+            /** Format: int32 */
+            numberOfElements?: number;
             pageable?: components["schemas"]["PageableObject"];
-            first?: boolean;
-            last?: boolean;
             empty?: boolean;
         };
         PageableObject: {
+            unpaged?: boolean;
             /** Format: int64 */
             offset?: number;
             sort?: components["schemas"]["SortObject"];
-            paged?: boolean;
             /** Format: int32 */
             pageSize?: number;
             /** Format: int32 */
             pageNumber?: number;
-            unpaged?: boolean;
+            paged?: boolean;
         };
         SortObject: {
+            unsorted?: boolean;
             empty?: boolean;
             sorted?: boolean;
-            unsorted?: boolean;
+        };
+        PageSubscriptionDto: {
+            /** Format: int64 */
+            totalElements?: number;
+            /** Format: int32 */
+            totalPages?: number;
+            first?: boolean;
+            last?: boolean;
+            /** Format: int32 */
+            size?: number;
+            content?: components["schemas"]["SubscriptionDto"][];
+            /** Format: int32 */
+            number?: number;
+            sort?: components["schemas"]["SortObject"];
+            /** Format: int32 */
+            numberOfElements?: number;
+            pageable?: components["schemas"]["PageableObject"];
+            empty?: boolean;
         };
         PageRoleDto: {
             /** Format: int64 */
             totalElements?: number;
             /** Format: int32 */
             totalPages?: number;
-            /** Format: int32 */
-            numberOfElements?: number;
+            first?: boolean;
+            last?: boolean;
             /** Format: int32 */
             size?: number;
             content?: components["schemas"]["RoleDto"][];
             /** Format: int32 */
             number?: number;
             sort?: components["schemas"]["SortObject"];
+            /** Format: int32 */
+            numberOfElements?: number;
             pageable?: components["schemas"]["PageableObject"];
-            first?: boolean;
-            last?: boolean;
             empty?: boolean;
         };
         RoleDto: {
@@ -930,22 +1236,29 @@ export interface components {
             totalElements?: number;
             /** Format: int32 */
             totalPages?: number;
-            /** Format: int32 */
-            numberOfElements?: number;
+            first?: boolean;
+            last?: boolean;
             /** Format: int32 */
             size?: number;
             content?: components["schemas"]["NotificationDto"][];
             /** Format: int32 */
             number?: number;
             sort?: components["schemas"]["SortObject"];
+            /** Format: int32 */
+            numberOfElements?: number;
             pageable?: components["schemas"]["PageableObject"];
-            first?: boolean;
-            last?: boolean;
             empty?: boolean;
         };
         LanguageDto: {
             name?: string;
             displayName?: string;
+        };
+        FeatureDefinitionDto: {
+            name?: string;
+            displayNameKey?: string;
+            type?: string;
+            defaultValue?: string;
+            visibleOnPricingTable?: boolean;
         };
         EntityChangeDto: {
             /** Format: int64 */
@@ -971,17 +1284,35 @@ export interface components {
             totalElements?: number;
             /** Format: int32 */
             totalPages?: number;
-            /** Format: int32 */
-            numberOfElements?: number;
+            first?: boolean;
+            last?: boolean;
             /** Format: int32 */
             size?: number;
             content?: components["schemas"]["EntityChangeDto"][];
             /** Format: int32 */
             number?: number;
             sort?: components["schemas"]["SortObject"];
+            /** Format: int32 */
+            numberOfElements?: number;
             pageable?: components["schemas"]["PageableObject"];
+            empty?: boolean;
+        };
+        PageEditionDto: {
+            /** Format: int64 */
+            totalElements?: number;
+            /** Format: int32 */
+            totalPages?: number;
             first?: boolean;
             last?: boolean;
+            /** Format: int32 */
+            size?: number;
+            content?: components["schemas"]["EditionDto"][];
+            /** Format: int32 */
+            number?: number;
+            sort?: components["schemas"]["SortObject"];
+            /** Format: int32 */
+            numberOfElements?: number;
+            pageable?: components["schemas"]["PageableObject"];
             empty?: boolean;
         };
         MeDto: {
@@ -1023,17 +1354,17 @@ export interface components {
             totalElements?: number;
             /** Format: int32 */
             totalPages?: number;
-            /** Format: int32 */
-            numberOfElements?: number;
+            first?: boolean;
+            last?: boolean;
             /** Format: int32 */
             size?: number;
             content?: components["schemas"]["AuditLogDto"][];
             /** Format: int32 */
             number?: number;
             sort?: components["schemas"]["SortObject"];
+            /** Format: int32 */
+            numberOfElements?: number;
             pageable?: components["schemas"]["PageableObject"];
-            first?: boolean;
-            last?: boolean;
             empty?: boolean;
         };
     };
@@ -1205,6 +1536,80 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["TenantDto"];
+                };
+            };
+        };
+    };
+    tenantFeatures: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["TenantFeatureDto"][];
+                };
+            };
+        };
+    };
+    updateTenantFeatures: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeatureValueDto"][];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["TenantFeatureDto"][];
+                };
+            };
+        };
+    };
+    assignEdition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignEditionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["SubscriptionDetailDto"];
                 };
             };
         };
@@ -1519,6 +1924,100 @@ export interface operations {
             };
         };
     };
+    getById_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["EditionDetailDto"];
+                };
+            };
+        };
+    };
+    update_4: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateEditionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["EditionDetailDto"];
+                };
+            };
+        };
+    };
+    delete_3: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    setFeatures: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeatureValueDto"][];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["EditionDetailDto"];
+                };
+            };
+        };
+    };
     list: {
         parameters: {
             query: {
@@ -1676,6 +2175,50 @@ export interface operations {
             };
         };
     };
+    cancel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["SubscriptionDetailDto"];
+                };
+            };
+        };
+    };
+    activate_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["SubscriptionDetailDto"];
+                };
+            };
+        };
+    };
     list_2: {
         parameters: {
             query: {
@@ -1806,6 +2349,52 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["OuDto"];
+                };
+            };
+        };
+    };
+    list_3: {
+        parameters: {
+            query: {
+                pageable: components["schemas"]["Pageable"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["PageEditionDto"];
+                };
+            };
+        };
+    };
+    create_4: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateEditionRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["EditionDetailDto"];
                 };
             };
         };
@@ -2034,6 +2623,70 @@ export interface operations {
             };
         };
     };
+    list_4: {
+        parameters: {
+            query: {
+                pageable: components["schemas"]["Pageable"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["PageSubscriptionDto"];
+                };
+            };
+        };
+    };
+    getByTenantId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["SubscriptionDetailDto"];
+                };
+            };
+        };
+    };
+    me: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["SubscriptionDto"];
+                };
+            };
+        };
+    };
     clientSettings: {
         parameters: {
             query?: never;
@@ -2164,6 +2817,26 @@ export interface operations {
             };
         };
     };
+    definitions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["FeatureDefinitionDto"][];
+                };
+            };
+        };
+    };
     entityChanges: {
         parameters: {
             query: {
@@ -2188,7 +2861,7 @@ export interface operations {
             };
         };
     };
-    me: {
+    me_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -2208,7 +2881,7 @@ export interface operations {
             };
         };
     };
-    list_3: {
+    list_5: {
         parameters: {
             query: {
                 userName?: string;
