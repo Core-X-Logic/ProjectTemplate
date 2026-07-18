@@ -802,7 +802,16 @@ jobs:
           fi
           echo "Secret pattern scan clean."
 
-      # BLOKLAYICI DEĞİL (yukarıdaki gerekçe). Rapor artifact olarak yayınlanır.
+      # ARTIK BLOKLAYICI. Advisory bırakmanın gerekçesi "gürültü üretebilir"di; ölçüldü:
+      # düzeltildikten sonraki ilk gerçek taraması 20 commit gezip 3 bulgu verdi, üçü de
+      # TEST-ONLY JWT anahtarıydı ve `.gitleaks.toml` ile (tam base64 değerleriyle, yol bazlı
+      # DEĞİL) susturuldu → şu an geçmiş temiz, "no leaks found". Temiz ve çalışan bir taramayı
+      # advisory bırakmak, gelecekteki GERÇEK bir sızıntının da yok sayılması demekti — PROD-R24'ün
+      # üç katmanlı fail-open'ının aynısı, bu kez bilerek yapılmış hâli.
+      #
+      # `--config` AÇIKÇA veriliyor: otomatik keşfe güvenilmiyor. Ayrıca gitleaks v8.18.4 yanlış
+      # config sözdizimini SESSİZCE yok sayar (hata vermez, config yokmuş gibi davranır), bu
+      # yüzden config'in etkili olduğu bulgu sayısıyla ölçülerek doğrulandı (3 → 0).
       #
       # `${GITHUB_WORKSPACE}` mount ediliyor, `${PWD}` DEĞİL. Bu adım `defaults.run.working-directory`
       # yüzünden `zero-spring/` içinde koşuyor ve orada `.git` yok — `.git` workspace kökünde.
@@ -812,15 +821,17 @@ jobs:
       # `if-no-files-found: ignore`, ve adımın advisory olması. Sonuç: `fetch-depth: 0`'ın maliyeti
       # ödenip faydası hiç alınmadan **yeşil** görünen bir secret taraması. Rapor yolu da mount ile
       # birlikte hareket etmek zorunda, yoksa upload adımı boşa bakar.
-      - name: gitleaks full-history scan (advisory)
+      - name: gitleaks full-history scan (blocking)
         id: gitleaks
-        continue-on-error: true
         run: |
           set -uo pipefail
-          docker run --rm -v "${GITHUB_WORKSPACE}:/repo" -w /repo \
+          if ! docker run --rm -v "${GITHUB_WORKSPACE}:/repo" -w /repo \
             zricethezav/gitleaks:v8.18.4 detect \
-            --source=/repo --redact --exit-code=1 \
-            --report-format=sarif --report-path=/repo/zero-spring/gitleaks.sarif
+            --source=/repo --config=/repo/.gitleaks.toml --redact --exit-code=1 \
+            --report-format=sarif --report-path=/repo/zero-spring/gitleaks.sarif; then
+            echo "::error::gitleaks: geçmişte sızmış secret bulundu. Rapor artifact'ta (gitleaks-report). Gerçekten secret ise ROTASYON şart — dosyadan silmek yeterli değil, değer git geçmişinde kalır."
+            exit 1
+          fi
 
       - name: Upload gitleaks report
         if: always()

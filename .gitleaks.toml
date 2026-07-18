@@ -1,0 +1,49 @@
+# gitleaks yapılandırması — repo kökünde, çünkü gitleaks --source kökünde arar.
+#
+# NEDEN VAR: gitleaks CI'da uzun süre HİÇ koşmadı (PROD-R24: `${PWD}` mount ediliyordu ve orada
+# `.git` yoktu; hata `continue-on-error` + `if-no-files-found: ignore` ile üç kez yutuluyordu).
+# Düzeltilir düzeltilmez ilk gerçek taraması 20 commit gezdi ve 3 bulgu raporladı. Üçü de
+# TEST-ONLY JWT imza anahtarı: gerçek kimlik bilgisi değil, ama "secret şeklinde" oldukları için
+# doğru şekilde eşleşiyorlar.
+#
+# Bunları susturuyoruz çünkü KALICI bulgu, taramanın kendisini işe yaramaz hale getirir —
+# 3 bilinen bulguyu her koşuda gören biri, 4.'yü fark etmez. Bu, PROD-R30 (flaky gate) ve
+# E4 (log bütçesi) ile aynı ilke: sinyali kullanılabilir tut.
+#
+# NEDEN GÜVENLİ: bu anahtarların prod'da kabul edilmemesi bir yorum değil, test edilmiş bir
+# kontrol — `JwtSecretValidator` repoda commit'li HER anahtarı `prod` profilinde reddeder
+# (`JwtSecretValidatorTest`, 5 test). Yani sızmaları bir yetki değil, yalnızca gürültü üretir.
+#
+# ALLOWLIST DAR TUTULDU — bilerek yol bazlı DEĞİL: bu dosyalara gerçek bir secret eklenirse
+# yine yakalanmalı. O yüzden tam olarak bu üç base64 değerinin kendisi listelendi. Anahtarlar
+# değişirse tarama yeniden kırmızıya döner, ki istenen budur.
+
+title = "zero-platform gitleaks config"
+
+[extend]
+useDefault = true
+
+# NOT: gitleaks v8.18.4 TEKİL `[allowlist]` tablosunu okur; çoğul `[[allowlists]]` daha sonraki
+# sürümlerde geldi. Yanlış sözdizimi sessizce yok sayılır — config alınmamış gibi davranır ve
+# tarama "3 bulgu" demeye devam eder, yani hata görünmez. Ampirik olarak doğrulandı: çoğul
+# biçimle 3 bulgu, tekil biçimle 0. Sürüm yükseltilirse bu blok yeniden doğrulanmalı.
+[allowlist]
+description = """
+Test-only JWT imza anahtarları + vendor referansı.
+
+Anahtarların üçü de yalnızca test scaffolding'i; hiçbiri kullanılabilir token üretmiyor ve
+JwtSecretValidator prod profilinde repoda commit'li HER anahtarı reddediyor.
+"""
+regexTarget = "match"
+regexes = [
+  # application-test.yml — base64: "zero-platform-AUTOMATED-TEST-ONLY-signing-key-never-deployed-..."
+  '''emVyby1wbGF0Zm9ybS1BVVRPTUFURUQtVEVTVC1PTkxZ''',
+  # DefaultProfileApiDocsExposureIT — base64: "default-profile-assertion-key-not-used-by-any-deployment-..."
+  '''ZGVmYXVsdC1wcm9maWxlLWFzc2VydGlvbi1rZXktbm90LXVzZWQtYnktYW55LWRlcGxve''',
+  # ProdApiDocsExposureIT — base64: "prod-profile-assertion-key-not-used-by-any-deployment-..."
+  '''cHJvZC1wcm9maWxlLWFzc2VydGlvbi1rZXktbm90LXVzZWQtYnktYW55LWRlcGxveW1lbnQtMDE''',
+]
+# Vendor referansı: takip edilmiyor ve ürün kodu değil.
+paths = [
+  '''^Asp\.NET Zero/''',
+]

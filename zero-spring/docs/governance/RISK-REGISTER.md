@@ -256,6 +256,24 @@ olmayan gate'ten **kötüdür**. "Yeniden koştur" refleksini öğretir; o refle
 için var olduğu gerçek drift'in (PROD-R31 — tam da bu koşuda yakalanan) görmezden gelinmesini
 öğretir. Diff'i "sıralamayı yok say" diye gevşetmek, gate'i zayıflatarak semptomu gizlerdi.
 
+### CI koşusu 4 — zincir uçtan uca YEŞİL, ve gitleaks ilk kez konuştu (PROD-R33)
+
+Koşu 4'te **sekiz job da geçti** (`build → backend/frontend → typed-client-drift →
+migration-drift → live-smoke → security-checks → release`). "Yeşil" ile "gerçekten doğruladı"
+aynı şey olmadığı için her gate'in *vakum yeşili* olmadığı ayrıca log'dan doğrulandı:
+
+| Gate | Gerçekten ne yaptığının kanıtı |
+|---|---|
+| `migration-drift` | `oldset`'ten **V1..V6 çıktı** (`have_base=true` dalı), önceki set uygulandı (`now at version v6`), `Successfully validated 6 migrations` (checksum drift kontrolü koştu), ikinci migrate `No migration necessary` (idempotent), jar yükseltilmiş şemaya karşı boot etti |
+| `security-checks` | `Secret pattern scan clean`, `npm audit: found 0 vulnerabilities`, gitleaks **20 commit** taradı |
+| `live-smoke` | backend log artifact'ı üretildi (7.440 bayt) |
+
+| ID | Bulgu | Şiddet | Durum |
+|---|---|---|---|
+| PROD-R33 | **gitleaks çalışır çalışmaz 3 bulgu verdi.** Üçü de test-only JWT imza anahtarı (`application-test.yml:12`, `DefaultProfileApiDocsExposureIT:42`, `ProdApiDocsExposureIT:36`). Gerçek kimlik bilgisi değil — `JwtSecretValidator` repoda commit'li her anahtarı prod'da reddediyor (`JwtSecretValidatorTest`, 5) — ama **kalıcı** bulgu bırakmak taramayı işe yaramaz kılar: 3 bilinen bulguyu her koşuda gören, 4.'yü fark etmez | Düşük (gürültü) / Orta (dikkat) | **Closed** — kök `.gitleaks.toml`, tam base64 değerleriyle **yol bazlı DEĞİL** (o dosyalara gerçek bir secret eklenirse yine yakalanır). Ölçüldü: 3 → **`no leaks found`** |
+| PROD-R34 | **gitleaks yanlış config sözdizimini SESSİZCE yok sayıyor.** v8.18.4 tekil `[allowlist]` okur; çoğul `[[allowlists]]` (sonraki sürümlerin biçimi) hata vermeden yok sayılır ve config hiç verilmemiş gibi davranır. Yalnızca bulgu sayısı ölçüldüğü için fark edildi | Düşük | **Closed** — tekil biçim + `--config` açıkça geçiliyor (otomatik keşfe güvenilmiyor); gerekçe hem `.gitleaks.toml` hem `ci.yml` içinde yazılı. Sürüm yükseltmesinde yeniden doğrulanmalı |
+| PROD-R35 | gitleaks **advisory** bırakılmıştı (`continue-on-error`). Tarama artık çalıştığına ve geçmiş temiz olduğuna göre, advisory kalması gelecekteki **gerçek** bir sızıntının da yok sayılması demekti — PROD-R24'ün üç katmanlı fail-open'ının bilerek yapılmış hâli | Orta | **Closed** — **bloklayıcı** yapıldı; hata mesajı "dosyadan silmek yetmez, rotasyon şart" uyarısını taşıyor |
+
 ### Actions maliyeti — PROD-R32
 
 | ID | Bulgu | Şiddet | Durum |
