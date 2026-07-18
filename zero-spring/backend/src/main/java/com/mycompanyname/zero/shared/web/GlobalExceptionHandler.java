@@ -2,11 +2,18 @@ package com.mycompanyname.zero.shared.web;
 
 import com.mycompanyname.zero.shared.domain.DomainException;
 import com.mycompanyname.zero.shared.domain.ErrorCode;
+import jakarta.servlet.http.HttpServletRequest;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
+import org.hibernate.query.sqm.PathElementException;
+import org.springframework.beans.ConversionNotSupportedException;
+import org.springframework.beans.TypeMismatchException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.InvalidDataAccessApiUsageException;
+import org.springframework.data.mapping.PropertyReferenceException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -26,6 +33,55 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MultipartException;
 
+/**
+ * <b>E2 — the sweep behind this class, recorded so the next round does not repeat it.</b>
+ *
+ * <p>C3, D2 and D3 each closed one exception that had fallen through {@link #handleUnexpected} and
+ * become a 500 with a full stack trace at {@code ERROR}; E1 found another ({@code sort}). Rather than
+ * fix that one and wait for the next report, every exception family reachable from client input was
+ * enumerated and given an explicit verdict. The ones that stay 500 matter as much as the ones that
+ * moved — a wrong 4xx hides a real fault, which is a worse bug than the one being fixed.
+ *
+ * <table border="1">
+ *   <caption>Verdicts</caption>
+ *   <tr><th>Exception</th><th>Verdict</th></tr>
+ *   <tr><td>{@code PropertyReferenceException}</td>
+ *       <td><b>400</b>, gated — {@link #handleSortResolutionFailure}. E1's trigger.</td></tr>
+ *   <tr><td>{@code InvalidDataAccessApiUsageException}</td>
+ *       <td><b>400 only when it is a sort failure the caller asked for</b>, otherwise unchanged 500.
+ *       The class also means "this application misused the persistence API", which must stay loud.</td></tr>
+ *   <tr><td>{@code TypeMismatchException} family</td>
+ *       <td><b>400</b> — {@link #handleTypeMismatch}, less {@code ConversionNotSupportedException},
+ *       which is a misconfiguration here and keeps its 500.</td></tr>
+ *   <tr><td>{@code MultipartException}</td>
+ *       <td><b>400</b> — {@link #handleMultipart}; {@code MaxUploadSizeExceededException} keeps 413.</td></tr>
+ *   <tr><td>{@code DataIntegrityViolationException}</td>
+ *       <td><b>409</b> already — {@link #handleDataIntegrityViolation}. Verified, unchanged.</td></tr>
+ *   <tr><td>Everything implementing {@code ErrorResponse}</td>
+ *       <td><b>Its own status</b> when 4xx — the D3 rule in {@link #handleUnexpected}. Covers Jackson's
+ *       parse and mapping failures, which reach here wrapped in {@code HttpMessageNotReadableException}
+ *       and never as themselves.</td></tr>
+ *   <tr><td>{@code ConstraintViolationException} (jakarta)</td>
+ *       <td><b>Not reachable, deliberately not handled.</b> Method validation needs {@code @Validated},
+ *       which no bean here carries, and no entity declares a constraint — so nothing can throw it and a
+ *       handler for it could not be tested. Bean validation runs on request DTOs, where it surfaces as
+ *       {@code MethodArgumentNotValidException} and is already a 400 with field detail. If either is
+ *       introduced, this row is the thing to revisit.</td></tr>
+ *   <tr><td>Jackson used directly ({@code RateLimitFilter}, the tenant filters)</td>
+ *       <td><b>Already contained</b> at the call site — the one call that parses client bytes,
+ *       {@code RateLimitFilter.extractUsername}, catches {@code IOException} itself, so a malformed body
+ *       never reaches this class from there.</td></tr>
+ *   <tr><td>{@code HttpMessageNotWritableException}, {@code ConversionNotSupportedException},
+ *       {@code MissingPathVariableException}, any {@code ErrorResponse} carrying 5xx</td>
+ *       <td><b>Stays 500 with its stack trace.</b> Every one means this application is broken, not the
+ *       request. Pinned by tests so a later round cannot quietly downgrade them.</td></tr>
+ * </table>
+ *
+ * <p>Page size needs no handler: {@code spring.data.web.pageable.max-page-size} is set to 100, and
+ * Spring Data clamps rather than throwing — {@code ?size=999999} was driven live and answered 200 with
+ * a capped page. {@code ?page=abc} and {@code ?size=abc} likewise fall back to the default instead of
+ * failing.
+ */
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
@@ -36,6 +92,18 @@ public class GlobalExceptionHandler {
      * the message rather than on the exception type.
      */
     private static final String WILDCARD_CONTENT_TYPE_REJECTION = "Content-Type cannot contain wildcard";
+
+    /**
+     * The fragment Spring Data JPA's {@code QueryUtils.checkSortExpression} puts in the
+     * {@code InvalidDataAccessApiUsageException} it raises for a sort property containing punctuation.
+     * That exception carries no cause, so there is nothing else to key on. See {@link
+     * #handleSortResolutionFailure}; {@code GlobalExceptionHandlerSortTest} provokes the real
+     * {@code QueryUtils} so a rewording breaks the build rather than reopening the fault.
+     */
+    private static final String UNSAFE_SORT_REJECTION = "must only contain property references";
+
+    /** Spring Data's {@code Pageable} sort parameter; the default name, and this app does not rename it. */
+    private static final String SORT_PARAMETER = "sort";
 
     @ExceptionHandler(DomainException.class)
     public ProblemDetail handleDomainException(DomainException ex) {
@@ -220,21 +288,116 @@ public class GlobalExceptionHandler {
      * tenant can produce one on any {@code @PathVariable}/{@code @RequestParam} endpoint in the
      * application.
      *
-     * <p>Needs naming explicitly because {@code MethodArgumentTypeMismatchException} extends {@code
-     * TypeMismatchException} and is not an {@code ErrorResponse}. Handling {@code
-     * TypeMismatchException} wholesale would be wrong in the same way a blanket {@code
-     * IllegalArgumentException} handler is (see {@link #handleIllegalArgument}): its other subclass,
-     * {@code ConversionNotSupportedException}, means this application is misconfigured and has to stay
-     * a 500 with a trace.
+     * <p>Needs naming explicitly because {@code TypeMismatchException} is not an {@code ErrorResponse}
+     * and so cannot be reached by the general rule in {@link #handleUnexpected}.
+     *
+     * <p><b>E2 — why the whole family, less one.</b> This handler was originally bound to {@code
+     * MethodArgumentTypeMismatchException} alone, which is the subclass the reported trigger happened
+     * to produce. That is the enumeration mistake D3 was written to stop making: the parent is thrown
+     * by {@code WebDataBinder} for the same reason (a value the binder cannot convert) and would have
+     * fallen through to the 500 fallback. The carve-out is the one sibling that is genuinely <em>not</em>
+     * a client fault — {@code ConversionNotSupportedException} means no converter is registered for a
+     * type this application binds, i.e. this application is misconfigured, and it has to keep its 500
+     * and its stack trace. Handling the family wholesale without that carve-out would be wrong in the
+     * same way a blanket {@code IllegalArgumentException} handler is (see {@link #handleIllegalArgument}).
      *
      * <p>The rejected value is logged but deliberately kept out of the response body — it is client
      * input, the client already has it, and reflecting it buys nothing.
      */
-    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
-    public ProblemDetail handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
-        log.warn("Rejected an unconvertible value for '{}': {}", ex.getName(), ex.getValue());
+    @ExceptionHandler(TypeMismatchException.class)
+    public ProblemDetail handleTypeMismatch(TypeMismatchException ex) throws Exception {
+        if (ex instanceof ConversionNotSupportedException) {
+            return handleUnexpected(ex);
+        }
+        String name = ex instanceof MethodArgumentTypeMismatchException mismatch
+                ? mismatch.getName()
+                : ex.getPropertyName();
+        log.warn("Rejected an unconvertible value for '{}': {}", name, ex.getValue());
         return problem(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION,
                 "A request parameter has a value of the wrong type");
+    }
+
+    /**
+     * E1/E2. {@code GET /api/notifications?sort=;drop} answered {@code 500 {"code":"INTERNAL"}} with a
+     * 233-frame stack trace at {@code ERROR} — 29,554 bytes of log per request, and reachable by any
+     * authenticated user holding <em>zero</em> permissions, on every paged endpoint in the application.
+     * It is the same defect D3 closed for Spring MVC, one layer down: Spring Data validates the sort
+     * property (so this is not an injection), it simply reports the rejection as an exception that
+     * carries no HTTP status, and the fallback therefore called it a server fault.
+     *
+     * <p><b>Three shapes, one cause.</b> Enumerating the reported one would have left the other two,
+     * so all three were driven against the live repositories first:
+     * <ul>
+     *   <li>derived queries ({@code findAllByTenantId}) throw {@code PropertyReferenceException}
+     *       directly — <em>"No property ';drop' found for type 'User'"</em>;</li>
+     *   <li>{@code @Query} methods with a punctuated property throw {@code
+     *       InvalidDataAccessApiUsageException} from {@code QueryUtils.checkSortExpression}, with no
+     *       cause at all — hence {@link #UNSAFE_SORT_REJECTION};</li>
+     *   <li>{@code @Query} methods with a merely unknown property get as far as Hibernate, which
+     *       raises {@code PathElementException} (<em>"Could not resolve attribute 'nosuchprop'"</em>)
+     *       wrapped in {@code InvalidDataAccessApiUsageException}. Live: {@code
+     *       GET /api/users?search=a&sort=nosuchprop}. Keying only on the first two would have left this
+     *       one a 500.</li>
+     * </ul>
+     *
+     * <p><b>Why the {@code sort} parameter is checked as well as the exception.</b>
+     * {@code InvalidDataAccessApiUsageException} is not inherently a client error — it is also what
+     * Spring raises when <em>this</em> code misuses the persistence API, and downgrading those to a
+     * quiet 400 would use this fix to hide the faults it exists to expose. The exception signature
+     * alone is not enough either: a typo in a {@code @Query} produces the same {@code
+     * PathElementException} and is a bug here, not in the caller. So the rule is the narrowest true
+     * statement available — <em>a sort that the client did not ask for cannot be the client's
+     * fault</em> — and anything failing either half is handed back to {@link #handleUnexpected} with
+     * its 500 and its stack trace intact.
+     *
+     * <p>Requiring both halves also closes the obvious abuse of the request-side check on its own:
+     * appending {@code &sort=id} to an unrelated failing request would otherwise let a caller suppress
+     * the {@code ERROR} record of a genuine server fault.
+     *
+     * <p>The property the client asked for goes to the log, not to the response body — the same
+     * convention as {@link #handleTypeMismatch} and {@link #handleMediaTypeNotSupported}.
+     */
+    @ExceptionHandler({PropertyReferenceException.class, InvalidDataAccessApiUsageException.class})
+    public ProblemDetail handleSortResolutionFailure(Exception ex, HttpServletRequest request)
+            throws Exception {
+        if (!clientAskedToSort(request) || !isSortResolutionFailure(ex)) {
+            return handleUnexpected(ex);
+        }
+        log.warn("Rejected an unsortable property in sort={}: {}",
+                Arrays.toString(request.getParameterValues(SORT_PARAMETER)), ex.getMessage());
+        return problem(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION,
+                "The requested sort property is not valid for this resource");
+    }
+
+    /**
+     * True only if the request itself carried a non-blank {@code sort}. A {@code Pageable} default
+     * supplied by this application is not the caller's doing, so a failure to resolve it stays a 500.
+     */
+    private static boolean clientAskedToSort(HttpServletRequest request) {
+        String[] values = request.getParameterValues(SORT_PARAMETER);
+        if (values == null) {
+            return false;
+        }
+        return Arrays.stream(values).anyMatch(value -> value != null && !value.isBlank());
+    }
+
+    /**
+     * Walks the cause chain because only one of the three shapes arrives unwrapped. The message match
+     * is last and narrowest: it covers the one case Spring Data reports with no cause to inspect, and
+     * it fails <em>safe</em> — a future rewording sends that case back to the 500 it produces today
+     * rather than opening anything.
+     */
+    private static boolean isSortResolutionFailure(Throwable ex) {
+        for (Throwable cause = ex; cause != null && cause != cause.getCause(); cause = cause.getCause()) {
+            if (cause instanceof PropertyReferenceException || cause instanceof PathElementException) {
+                return true;
+            }
+            String message = cause.getMessage();
+            if (message != null && message.contains(UNSAFE_SORT_REJECTION)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)

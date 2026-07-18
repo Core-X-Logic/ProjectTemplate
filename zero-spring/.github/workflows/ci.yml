@@ -67,11 +67,17 @@ jobs:
 
       # Testler burada kasıtlı olarak atlanır; test çalıştırma GATE 2'nin işi.
       # Bu adım sadece "derleniyor mu + paketlenebiliyor mu" sorusunu yanıtlar.
+      #
+      # E3: `clean`, GATE 2a ile AYNI gerekçeyle burada da var (oradaki uzun nota
+      # bakın). Bu adımın ürettiği jar'ı typed-client-drift ve live-smoke
+      # yeniden derlemeden çalıştırıyor — yani buradaki bir stale .class, üç
+      # gate'i birden bu turun kodunu hiç görmemiş bir artifact üzerinde yeşile
+      # boyar. Temiz checkout'ta target/ zaten yok; maliyet sıfır, garanti mutlak.
       - name: Backend package (skip tests)
         working-directory: backend
         run: |
           chmod +x mvnw
-          ./mvnw -B -ntp -DskipTests package
+          ./mvnw -B -ntp -DskipTests clean package
 
       - name: Frontend install + build
         working-directory: frontend/app
@@ -93,6 +99,20 @@ jobs:
   # NEDEN zorunlu: `verify` surefire (unit) + failsafe (Testcontainers IT) +
   # jacoco check zincirini koşturur. Multi-tenant izolasyon, permission ve
   # subscription invariant'larının regresyona uğramadığını kanıtlayan tek yer.
+  #
+  # E3 — `clean` NEDEN ZORUNLU (false-green riski):
+  # Maven'in incremental compiler'ı "kaynak dosya .class'tan YENİ mi" diye bakar.
+  # Bu karşılaştırma mtime tabanlı, içerik tabanlı DEĞİL. Bir kaynak dosyanın
+  # LastWriteTime'ı GERİYE giderse — `Copy-Item`, `git stash pop`, bazı `checkout`
+  # ve rsync/artifact restore yolları bunu rutin olarak yapar — recompile ATLANIR
+  # ve `verify` bir önceki turun BYTECODE'unu test eder.
+  # Sonuç iki türlü de yanlıştır: kaldırılmış bir bug yüzünden yanlış KIRMIZI, ya
+  # da çok daha kötüsü, hiç derlenmemiş bir düzeltme için yanlış YEŞİL — yani bu
+  # gate'in tek işlevi olan "kod gerçekten test edildi" garantisi çöker.
+  # `clean` bunu tek hamlede imkânsız kılar: target/ yokken atlanacak bir .class
+  # da yoktur. Runner'lar zaten temiz checkout ile başladığı için ek maliyet
+  # pratikte sıfır; ~/.m2 cache'i `setup-java` tarafından korunduğundan bağımlılık
+  # indirmesi tekrarlanmaz.
   backend:
     name: backend
     runs-on: ubuntu-latest
@@ -112,7 +132,7 @@ jobs:
         working-directory: backend
         run: |
           chmod +x mvnw
-          ./mvnw -B -ntp verify
+          ./mvnw -B -ntp clean verify
 
       - name: Upload test reports
         if: always()
