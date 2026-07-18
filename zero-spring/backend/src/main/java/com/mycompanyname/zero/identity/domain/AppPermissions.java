@@ -25,6 +25,17 @@ public final class AppPermissions {
     public static final String SETTINGS_HOST = "settings.host.manage";   // HOST-ONLY
     public static final String LANGUAGES_MANAGE = "languages.manage";    // HOST-ONLY
 
+    // Phase 5 (SaaS) — all HOST-ONLY.
+    // The values are intentionally repeated here as plain string literals instead of importing
+    // com.mycompanyname.zero.saas.SaasPermissions: the saas module core must never depend on
+    // identity, and importing it the other way round would create the very cycle F5-R1 forbids.
+    // SaasPermissionsAlignmentTest fails the build if the two lists ever drift apart.
+    public static final String EDITIONS_READ = "editions.read";
+    public static final String EDITIONS_MANAGE = "editions.manage";
+    public static final String SUBSCRIPTIONS_READ = "subscriptions.read";
+    public static final String SUBSCRIPTIONS_MANAGE = "subscriptions.manage";
+    public static final String TENANT_FEATURES_MANAGE = "tenantfeatures.manage";
+
     private AppPermissions() {
     }
 
@@ -34,6 +45,9 @@ public final class AppPermissions {
                 ROLES_READ, ROLES_CREATE, ROLES_UPDATE, ROLES_DELETE, ROLES_MANAGE,
                 OU_MANAGE, AUDITLOGS_READ,
                 SETTINGS_TENANT, SETTINGS_HOST, LANGUAGES_MANAGE,
-                TENANTS_MANAGE);
+                TENANTS_MANAGE,
+                EDITIONS_READ, EDITIONS_MANAGE,
+                SUBSCRIPTIONS_READ, SUBSCRIPTIONS_MANAGE,
+                TENANT_FEATURES_MANAGE);
     }
 }

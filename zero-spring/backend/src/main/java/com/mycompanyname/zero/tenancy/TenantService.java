@@ -6,6 +6,7 @@ import com.mycompanyname.zero.tenancy.web.dto.TenantDto;
 import java.util.List;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class TenantService {
 
     private final TenantRepository tenantRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public TenantDto createTenant(CreateTenantRequest request) {
         String name = request.name().toLowerCase(Locale.ROOT);
@@ -25,7 +27,11 @@ public class TenantService {
         tenant.setName(name);
         tenant.setDisplayName(request.displayName());
         tenant.setActive(true);
-        return toDto(tenantRepository.save(tenant));
+        Tenant saved = tenantRepository.save(tenant);
+        // IDENTITY generation means the insert (and therefore the id) is already flushed here, so a
+        // synchronous listener may safely create rows referencing tenants(id) in the same transaction.
+        eventPublisher.publishEvent(new TenantCreatedEvent(saved.getId(), saved.getName()));
+        return toDto(saved);
     }
 
     public TenantDto setActive(Long id, boolean active) {

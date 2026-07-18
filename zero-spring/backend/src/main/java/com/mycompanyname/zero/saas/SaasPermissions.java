@@ -1,0 +1,32 @@
+package com.mycompanyname.zero.saas;
+
+import java.util.Set;
+
+/**
+ * SaaS permission constants. They live in the {@code saas} module (never in {@code identity}) so the
+ * module core stays free of an identity dependency — {@code saas} may not depend on {@code identity}
+ * (F5-ARCHITECTURE §1.1). Registration into the permission tree happens on the identity side, which
+ * repeats the same string values; {@code SaasPermissionsAlignmentTest} keeps both lists in sync.
+ *
+ * <p>Every SaaS permission is {@code Side.HOST}: a tenant can never raise its own limits (F5-R3).
+ */
+public final class SaasPermissions {
+
+    public static final String EDITIONS_READ = "editions.read";
+    public static final String EDITIONS_MANAGE = "editions.manage";
+    public static final String SUBSCRIPTIONS_READ = "subscriptions.read";
+    public static final String SUBSCRIPTIONS_MANAGE = "subscriptions.manage";
+    public static final String TENANT_FEATURES_MANAGE = "tenantfeatures.manage";
+
+    private SaasPermissions() {
+    }
+
+    public static Set<String> all() {
+        return Set.of(
+                EDITIONS_READ,
+                EDITIONS_MANAGE,
+                SUBSCRIPTIONS_READ,
+                SUBSCRIPTIONS_MANAGE,
+                TENANT_FEATURES_MANAGE);
+    }
+}
