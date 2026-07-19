@@ -1,6 +1,19 @@
 spring:
   cache:
     type: simple
+  jpa:
+    properties:
+      hibernate:
+        query:
+          # Q-03 sinif kapatmasi. ArchUnit Rule 1 yalniz `@EntityGraph` + `Pageable` seklini
+          # gorur; ayni bellekte-sayfalama hatasi `@Query("... join fetch ...")` + `Pageable`
+          # ile de uretilir ve kuraldan SESSIZCE gecer — yani kural goremedigi bir sekli
+          # onayliyor. Bu ayar Hibernate'i loglamak yerine FIRLATMAYA zorlar ve seklin
+          # tamamini yakalar.
+          #
+          # Yalnizca TEST profilinde: uretimde firlatmak, bir performans sorununu kesintiye
+          # cevirirdi. Testte ise gurultulu basarisizlik tam olarak istenen sey.
+          fail_on_pagination_over_collection_fetch: true
 management:
   health:
     redis:

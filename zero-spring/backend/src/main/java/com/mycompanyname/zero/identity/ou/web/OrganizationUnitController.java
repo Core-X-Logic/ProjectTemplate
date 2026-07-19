@@ -1,5 +1,6 @@
 package com.mycompanyname.zero.identity.ou.web;
 
+import com.mycompanyname.zero.identity.domain.AppPermissions;
 import com.mycompanyname.zero.identity.ou.OrganizationUnitService;
 import com.mycompanyname.zero.identity.ou.web.dto.CreateOuRequest;
 import com.mycompanyname.zero.identity.ou.web.dto.MoveOuRequest;
@@ -41,32 +42,32 @@ public class OrganizationUnitController {
     private final OrganizationUnitService organizationUnitService;
 
     @GetMapping
-    @PreAuthorize("hasAuthority('organizationunits.manage')")
+    @PreAuthorize("hasAuthority('" + AppPermissions.OU_MANAGE + "')")
     public List<OuDto> tree() {
         return organizationUnitService.tree();
     }
 
     @PostMapping
-    @PreAuthorize("hasAuthority('organizationunits.manage')")
+    @PreAuthorize("hasAuthority('" + AppPermissions.OU_MANAGE + "')")
     @ResponseStatus(HttpStatus.CREATED)
     public OuDto create(@Valid @RequestBody CreateOuRequest request) {
         return organizationUnitService.create(request);
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('organizationunits.manage')")
+    @PreAuthorize("hasAuthority('" + AppPermissions.OU_MANAGE + "')")
     public OuDto update(@PathVariable Long id, @Valid @RequestBody UpdateOuRequest request) {
         return organizationUnitService.update(id, request);
     }
 
     @PutMapping("/{id}/move")
-    @PreAuthorize("hasAuthority('organizationunits.manage')")
+    @PreAuthorize("hasAuthority('" + AppPermissions.OU_MANAGE + "')")
     public OuDto move(@PathVariable Long id, @Valid @RequestBody MoveOuRequest request) {
         return organizationUnitService.move(id, request);
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('organizationunits.manage')")
+    @PreAuthorize("hasAuthority('" + AppPermissions.OU_MANAGE + "')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long id) {
         organizationUnitService.delete(id);

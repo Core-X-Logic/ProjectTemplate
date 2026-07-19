@@ -1,5 +1,6 @@
 package com.mycompanyname.zero.identity.web;
 
+import com.mycompanyname.zero.identity.domain.AppPermissions;
 import com.mycompanyname.zero.identity.role.RoleService;
 import com.mycompanyname.zero.identity.web.dto.CreateRoleRequest;
 import com.mycompanyname.zero.identity.web.dto.RoleDetailDto;
@@ -29,39 +30,39 @@ public class RoleController {
     private final RoleService roleService;
 
     @GetMapping
-    @PreAuthorize("hasAuthority('roles.read')")
+    @PreAuthorize("hasAuthority('" + AppPermissions.ROLES_READ + "')")
     public Page<RoleDto> list(Pageable pageable) {
         return roleService.list(pageable);
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('roles.read')")
+    @PreAuthorize("hasAuthority('" + AppPermissions.ROLES_READ + "')")
     public RoleDetailDto getById(@PathVariable Long id) {
         return roleService.getById(id);
     }
 
     @PostMapping
-    @PreAuthorize("hasAuthority('roles.create')")
+    @PreAuthorize("hasAuthority('" + AppPermissions.ROLES_CREATE + "')")
     @ResponseStatus(HttpStatus.CREATED)
     public RoleDetailDto create(@Valid @RequestBody CreateRoleRequest request) {
         return roleService.create(request);
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('roles.update')")
+    @PreAuthorize("hasAuthority('" + AppPermissions.ROLES_UPDATE + "')")
     public RoleDetailDto update(@PathVariable Long id, @Valid @RequestBody UpdateRoleRequest request) {
         return roleService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('roles.delete')")
+    @PreAuthorize("hasAuthority('" + AppPermissions.ROLES_DELETE + "')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long id) {
         roleService.delete(id);
     }
 
     @PostMapping("/{id}/clone")
-    @PreAuthorize("hasAuthority('roles.create')")
+    @PreAuthorize("hasAuthority('" + AppPermissions.ROLES_CREATE + "')")
     @ResponseStatus(HttpStatus.CREATED)
     public RoleDetailDto clone(@PathVariable Long id) {
         return roleService.clone(id);

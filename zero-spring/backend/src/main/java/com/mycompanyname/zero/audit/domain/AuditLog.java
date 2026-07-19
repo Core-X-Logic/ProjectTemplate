@@ -9,14 +9,26 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.Filter;
 
 /**
  * One row per audited HTTP request (see {@code AuditLogInterceptor}). Not an
  * {@code AbstractAuditedEntity}: it carries its own execution metadata and has no created/updated
  * bookkeeping columns.
+ *
+ * <p><b>{@code tenantFilter} but deliberately NOT {@code hostFilter}.</b> A tenant must never read
+ * another tenant's audit trail, and {@code AuditLogService} already adds an explicit tenant
+ * predicate — but only on the two specifications it owns today. The filter is the second line of
+ * defence that also covers the next query someone writes without one. {@code hostFilter}
+ * ({@code tenant_id is null}) is a different matter: cross-tenant audit review IS the host feature
+ * ("show me what happened in tenant X"), so restricting host to host-scoped rows would break the
+ * product rather than protect it. {@code AuditLogService} expresses the same rule by adding no
+ * predicate at all when the caller is host. Both directions are pinned by
+ * {@code TenantFilterCoverageIT}.
  */
 @Entity
 @Table(name = "audit_logs")
+@Filter(name = "tenantFilter", condition = "tenant_id = :tenantId")
 @Getter
 @Setter
 public class AuditLog {

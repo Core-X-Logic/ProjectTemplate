@@ -1,5 +1,6 @@
 package com.mycompanyname.zero.tenancy.web;
 
+import com.mycompanyname.zero.tenancy.TenantPermissions;
 import com.mycompanyname.zero.tenancy.TenantService;
 import com.mycompanyname.zero.tenancy.web.dto.CreateTenantRequest;
 import com.mycompanyname.zero.tenancy.web.dto.TenantDto;
@@ -20,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/tenants")
 @RequiredArgsConstructor
-@PreAuthorize("hasAuthority('tenants.manage')")
+@PreAuthorize("hasAuthority('" + TenantPermissions.TENANTS_MANAGE + "')")
 public class TenantController {
 
     private final TenantService tenantService;

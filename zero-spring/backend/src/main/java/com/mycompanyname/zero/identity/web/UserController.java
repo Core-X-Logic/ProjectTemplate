@@ -1,5 +1,6 @@
 package com.mycompanyname.zero.identity.web;
 
+import com.mycompanyname.zero.identity.domain.AppPermissions;
 import com.mycompanyname.zero.identity.user.UserService;
 import com.mycompanyname.zero.identity.web.dto.AssignOuRequest;
 import com.mycompanyname.zero.identity.web.dto.AssignRolesRequest;
@@ -37,14 +38,14 @@ public class UserController {
     private final UserService userService;
 
     @GetMapping
-    @PreAuthorize("hasAuthority('users.read')")
+    @PreAuthorize("hasAuthority('" + AppPermissions.USERS_READ + "')")
     public Page<UserDto> list(Pageable pageable,
                               @RequestParam(required = false) String search) {
         return userService.list(pageable, search);
     }
 
     @GetMapping("/export")
-    @PreAuthorize("hasAuthority('users.read')")
+    @PreAuthorize("hasAuthority('" + AppPermissions.USERS_READ + "')")
     public ResponseEntity<byte[]> export() {
         byte[] data = userService.exportToExcel();
         return ResponseEntity.ok()
@@ -54,57 +55,57 @@ public class UserController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('users.read')")
+    @PreAuthorize("hasAuthority('" + AppPermissions.USERS_READ + "')")
     public UserDto getById(@PathVariable Long id) {
         return userService.getById(id);
     }
 
     @PostMapping
-    @PreAuthorize("hasAuthority('users.create')")
+    @PreAuthorize("hasAuthority('" + AppPermissions.USERS_CREATE + "')")
     @ResponseStatus(HttpStatus.CREATED)
     public UserDto create(@Valid @RequestBody CreateUserRequest request) {
         return userService.createUser(request);
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('users.update')")
+    @PreAuthorize("hasAuthority('" + AppPermissions.USERS_UPDATE + "')")
     public UserDto update(@PathVariable Long id, @Valid @RequestBody UpdateUserRequest request) {
         return userService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('users.delete')")
+    @PreAuthorize("hasAuthority('" + AppPermissions.USERS_DELETE + "')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long id) {
         userService.delete(id);
     }
 
     @PostMapping("/{id}/unlock")
-    @PreAuthorize("hasAuthority('users.unlock')")
+    @PreAuthorize("hasAuthority('" + AppPermissions.USERS_UNLOCK + "')")
     public UserDto unlock(@PathVariable Long id) {
         return userService.unlock(id);
     }
 
     @PutMapping("/{id}/roles")
-    @PreAuthorize("hasAuthority('users.update')")
+    @PreAuthorize("hasAuthority('" + AppPermissions.USERS_UPDATE + "')")
     public UserDto assignRoles(@PathVariable Long id, @RequestBody AssignRolesRequest request) {
         return userService.assignRoles(id, request.roleNames());
     }
 
     @PutMapping("/{id}/organization-units")
-    @PreAuthorize("hasAuthority('users.update')")
+    @PreAuthorize("hasAuthority('" + AppPermissions.USERS_UPDATE + "')")
     public UserDto assignOrganizationUnits(@PathVariable Long id, @RequestBody AssignOuRequest request) {
         return userService.assignOrganizationUnits(id, request.ouIds());
     }
 
     @PostMapping("/{id}/activate")
-    @PreAuthorize("hasAuthority('users.update')")
+    @PreAuthorize("hasAuthority('" + AppPermissions.USERS_UPDATE + "')")
     public UserDto activate(@PathVariable Long id) {
         return userService.activate(id);
     }
 
     @PostMapping("/{id}/deactivate")
-    @PreAuthorize("hasAuthority('users.update')")
+    @PreAuthorize("hasAuthority('" + AppPermissions.USERS_UPDATE + "')")
     public UserDto deactivate(@PathVariable Long id) {
         return userService.deactivate(id);
     }

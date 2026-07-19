@@ -1,6 +1,7 @@
 package com.mycompanyname.zero.audit.web;
 
 import com.mycompanyname.zero.audit.AuditLogService;
+import com.mycompanyname.zero.audit.AuditPermissions;
 import com.mycompanyname.zero.audit.web.dto.AuditLogDto;
 import com.mycompanyname.zero.audit.web.dto.EntityChangeDto;
 import com.mycompanyname.zero.shared.domain.DomainException;
@@ -29,7 +30,7 @@ public class AuditLogController {
     private final AuditLogService auditLogService;
 
     @GetMapping("/api/audit-logs")
-    @PreAuthorize("hasAuthority('auditlogs.read')")
+    @PreAuthorize("hasAuthority('" + AuditPermissions.AUDITLOGS_READ + "')")
     public Page<AuditLogDto> list(@RequestParam(required = false) String userName,
                                   @RequestParam(required = false) String startDate,
                                   @RequestParam(required = false) String endDate,
@@ -41,7 +42,7 @@ public class AuditLogController {
     }
 
     @GetMapping("/api/audit-logs/export")
-    @PreAuthorize("hasAuthority('auditlogs.read')")
+    @PreAuthorize("hasAuthority('" + AuditPermissions.AUDITLOGS_READ + "')")
     public ResponseEntity<byte[]> export(@RequestParam(required = false) String userName,
                                          @RequestParam(required = false) String startDate,
                                          @RequestParam(required = false) String endDate,
@@ -56,7 +57,7 @@ public class AuditLogController {
     }
 
     @GetMapping("/api/entity-changes")
-    @PreAuthorize("hasAuthority('auditlogs.read')")
+    @PreAuthorize("hasAuthority('" + AuditPermissions.AUDITLOGS_READ + "')")
     public Page<EntityChangeDto> entityChanges(@RequestParam(required = false) String entityTypeName,
                                                @RequestParam(required = false) String entityId,
                                                Pageable pageable) {

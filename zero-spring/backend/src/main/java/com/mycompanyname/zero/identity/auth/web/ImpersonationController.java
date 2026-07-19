@@ -4,6 +4,7 @@ import com.mycompanyname.zero.identity.auth.ImpersonationService;
 import com.mycompanyname.zero.identity.auth.web.dto.ImpersonateAuthRequest;
 import com.mycompanyname.zero.identity.auth.web.dto.ImpersonateRequest;
 import com.mycompanyname.zero.identity.auth.web.dto.ImpersonationTokenDto;
+import com.mycompanyname.zero.identity.domain.AppPermissions;
 import com.mycompanyname.zero.identity.web.dto.TokenPairDto;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -26,7 +27,7 @@ public class ImpersonationController {
     private final ImpersonationService impersonationService;
 
     @PostMapping("/impersonate")
-    @PreAuthorize("hasAuthority('users.impersonate')")
+    @PreAuthorize("hasAuthority('" + AppPermissions.USERS_IMPERSONATE + "')")
     public ImpersonationTokenDto impersonate(@Valid @RequestBody ImpersonateRequest request) {
         return impersonationService.start(request);
     }

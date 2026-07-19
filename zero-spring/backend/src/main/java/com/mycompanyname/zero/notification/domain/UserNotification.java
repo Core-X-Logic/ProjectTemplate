@@ -11,17 +11,32 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.Filter;
 
 import java.time.Instant;
 
 /**
- * A single in-app notification delivered to a user's inbox. Strictly user-scoped: {@code userId}
- * (a global {@code users.id}) is the isolation key, so no Hibernate tenant filter is needed. The
- * table maps one-to-one to the {@code user_notifications} DDL in {@code V3__notifications.sql};
- * schema validation (ddl-auto=validate) enforces that alignment.
+ * A single in-app notification delivered to a user's inbox. The table maps one-to-one to the
+ * {@code user_notifications} DDL in {@code V3__notifications.sql}; schema validation
+ * (ddl-auto=validate) enforces that alignment.
+ *
+ * <p><b>{@code tenantFilter} but deliberately NOT {@code hostFilter}.</b> This class used to claim
+ * that {@code userId} (a global {@code users.id}) being the isolation key made a tenant filter
+ * unnecessary. That is true of every read path written SO FAR and false as a guarantee: every query
+ * in {@code UserNotificationRepository} keys on {@code userId} alone, so nothing but the filter
+ * stands between a tenant session and a row tagged for another tenant — which is why
+ * {@code TenantFilterCoverageIT} fails on the pre-filter code.
+ *
+ * <p>{@code hostFilter} ({@code tenant_id is null}) is omitted for a reason specific to this
+ * entity: {@code NotificationService.publish(userId, tenantId, ...)} takes recipient and tenant tag
+ * independently, so a host recipient may legitimately hold a row tagged with the tenant the alert
+ * is ABOUT ("tenant acme's subscription expired"). Filtering host down to {@code tenant_id is null}
+ * would hide such a notification from its own recipient — a silent delivery failure — while buying
+ * nothing, since {@code userId} already isolates users completely.
  */
 @Entity
 @Table(name = "user_notifications")
+@Filter(name = "tenantFilter", condition = "tenant_id = :tenantId")
 @Getter
 @Setter
 public class UserNotification {

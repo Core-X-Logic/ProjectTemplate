@@ -1,0 +1,29 @@
+-- Q-02 tamamlayicisi: artik var olmayan `roles.manage` izin satirlarini temizle.
+--
+-- ARKA PLAN
+-- `roles.manage` `AppPermissions.all()` icinde tanimliydi ve seeder her Admin rolune veriyordu,
+-- ama:
+--   * `PermissionDefinitions` agacinda YOKTU  -> hicbir ekranda gorunmuyor, atanamiyor, geri
+--     alinamiyordu,
+--   * hicbir `@PreAuthorize` ona referans vermiyordu -> hicbir ucu korumuyordu,
+--   * her iki mesaj paketinde ve frontend'de karsiligi yoktu.
+-- Yani grant edilen ama hicbir sey ifade etmeyen, gorunmez ve silinemez bir satirdi. Sabit
+-- kaldirildi (R-31).
+--
+-- NEDEN BU MIGRATION GEREKLI
+-- Sabiti kaldirmak KODU duzeltir, VERIYI duzeltmez. `RoleService.sanitizePermissions` bilinmeyen
+-- bir izin gorunce `VALIDATION` hatasi firlatiyor. Statik roller (Admin) her acilista
+-- uzlastiriliyor, yani kendini onarir; ama API ya da dogrudan SQL ile `roles.manage` verilmis
+-- OZEL bir rol, bayat satiri tasimaya devam eder ve o rolu kaydetmeye calisan ilk istek
+--   400 VALIDATION "Unknown permission: roles.manage"
+-- dondurur — UI'da gosterilemeyen ve isareti kaldirilamayan bir deger yuzunden.
+--
+-- Bu, bu depoda daha once yasanmis "temiz DB yesil, mevcut kurulum bozuk" sinifinin ta kendisi:
+-- Testcontainers her kosuda bos bir semadan basladigi icin hicbir test bunu goremez.
+--
+-- GUVENLIK
+-- Silinen satir hicbir yetki tasimiyordu (hicbir uc onu kontrol etmiyordu), dolayisiyla bu
+-- temizlik hic kimsenin erisimini daraltmaz ya da genisletmez. Geri alinabilir: geri almak
+-- gerekirse satirlar yeniden eklenebilir, ama kodda karsiligi olmadigi icin yine ise yaramaz.
+
+delete from role_permissions where permission = 'roles.manage';

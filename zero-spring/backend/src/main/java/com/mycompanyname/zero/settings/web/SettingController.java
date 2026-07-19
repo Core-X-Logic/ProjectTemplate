@@ -1,6 +1,7 @@
 package com.mycompanyname.zero.settings.web;
 
 import com.mycompanyname.zero.settings.SettingManager;
+import com.mycompanyname.zero.settings.SettingsPermissions;
 import com.mycompanyname.zero.settings.domain.Scope;
 import com.mycompanyname.zero.settings.domain.SettingDefinition;
 import com.mycompanyname.zero.settings.domain.SettingDefinitions;
@@ -38,14 +39,14 @@ public class SettingController {
     // --- Tenant scope ---
 
     @GetMapping("/tenant")
-    @PreAuthorize("hasAuthority('settings.tenant.manage')")
+    @PreAuthorize("hasAuthority('" + SettingsPermissions.SETTINGS_TENANT + "')")
     public List<SettingDto> tenantSettings(@AuthenticationPrincipal Jwt jwt) {
         Long tenantId = requireTenantId(jwt);
         return resolve(SettingDefinitions.forScope(Scope.TENANT), tenantId, null);
     }
 
     @PutMapping("/tenant")
-    @PreAuthorize("hasAuthority('settings.tenant.manage')")
+    @PreAuthorize("hasAuthority('" + SettingsPermissions.SETTINGS_TENANT + "')")
     public List<SettingDto> updateTenantSettings(@AuthenticationPrincipal Jwt jwt,
                                                  @RequestBody List<SettingDto> updates) {
         Long tenantId = requireTenantId(jwt);
@@ -58,13 +59,13 @@ public class SettingController {
     // --- Host / application scope ---
 
     @GetMapping("/host")
-    @PreAuthorize("hasAuthority('settings.host.manage')")
+    @PreAuthorize("hasAuthority('" + SettingsPermissions.SETTINGS_HOST + "')")
     public List<SettingDto> hostSettings() {
         return resolve(SettingDefinitions.ALL, null, null);
     }
 
     @PutMapping("/host")
-    @PreAuthorize("hasAuthority('settings.host.manage')")
+    @PreAuthorize("hasAuthority('" + SettingsPermissions.SETTINGS_HOST + "')")
     public List<SettingDto> updateHostSettings(@RequestBody List<SettingDto> updates) {
         for (SettingDto update : updates) {
             settingManager.set(Scope.APPLICATION, null, update.name(), update.value());

@@ -26,6 +26,7 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -34,8 +35,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -145,16 +149,71 @@ public class UserService {
         return toDto(user);
     }
 
+    /**
+     * Q-03. Paged in TWO queries, on purpose.
+     *
+     * <p>The obvious single-query form — {@code @EntityGraph("roles")} on a method taking a
+     * {@code Pageable} — asks for a {@code LIMIT} over a join that multiplies rows, which SQL cannot
+     * express. Hibernate does not refuse it: it logs {@code HHH90003004}, reads EVERY matching row
+     * and paginates the list in Java. At demo scale the response is identical, so nothing catches it;
+     * at fifty thousand users every page request pulls the table through the heap and {@code size}
+     * stops bounding anything.
+     *
+     * <p>So: stage 1 pages the ids (no collection fetch, the database applies the limit), stage 2
+     * hydrates just those ids with their roles (no limit, the join is free to multiply).
+     * {@code totalElements} comes from stage 1, which counted the matching rows — not from the
+     * hydrated list, which only ever holds one page.
+     *
+     * <p>Between the two queries a row can be deleted by someone else; that id simply drops out of
+     * the page. Inherent to any two-query pagination, and preferable to failing the request.
+     */
     @Transactional(readOnly = true)
     public Page<UserDto> list(Pageable pageable, String search) {
         Long tenantId = TenantContext.getTenantId();
         // Normalize blank/whitespace-only input to null so the repository's (:search is null) branch
         // short-circuits the LIKE filter and returns the full tenant-scoped page.
         String term = (search == null || search.isBlank()) ? null : search.trim();
-        Page<User> page = tenantId == null
-                ? userRepository.searchByTenantIdIsNull(term, pageable)
-                : userRepository.searchByTenantId(tenantId, term, pageable);
-        return page.map(this::toDto);
+        Page<Long> idPage = tenantId == null
+                ? userRepository.searchIdsByTenantIdIsNull(term, pageable)
+                : userRepository.searchIdsByTenantId(tenantId, term, pageable);
+
+        List<Long> ids = idPage.getContent();
+        if (ids.isEmpty()) {
+            return new PageImpl<>(List.of(), pageable, idPage.getTotalElements());
+        }
+        List<UserDto> content = inOrderOf(ids, userRepository.findAllByIdIn(ids)).stream()
+                .map(this::toDto)
+                .toList();
+        return new PageImpl<>(content, pageable, idPage.getTotalElements());
+    }
+
+    /**
+     * Restores stage 1's ordering over stage 2's result, and is the whole reason the two-stage split
+     * is not a free lunch.
+     *
+     * <p>{@code where id in (:ids)} makes NO promise about row order — the database returns them in
+     * whatever order suits its plan, which is typically physical/insertion order and therefore
+     * usually <em>not</em> the {@code ORDER BY} the caller asked for. Drop this step and the page
+     * still holds exactly the right rows, in exactly the right number, with exactly the right
+     * totals; only the order is wrong. Every count-based assertion in the suite stays green and the
+     * user sees a sorted table that is not sorted, so this is pinned by a test of its own
+     * ({@code PagedListingIsNotSlicedInMemoryIT.theRequestedSortOrderSurvivesTheSecondQuery}).
+     *
+     * <p>The map also collapses the duplicate references a collection fetch join can produce.
+     */
+    static List<User> inOrderOf(List<Long> ids, List<User> rows) {
+        Map<Long, User> byId = new HashMap<>();
+        for (User row : rows) {
+            byId.put(row.getId(), row);
+        }
+        List<User> ordered = new ArrayList<>(ids.size());
+        for (Long id : ids) {
+            User row = byId.get(id);
+            if (row != null) {
+                ordered.add(row);
+            }
+        }
+        return ordered;
     }
 
     @Transactional(readOnly = true)
@@ -182,9 +241,12 @@ public class UserService {
     @Transactional(readOnly = true)
     public byte[] exportToExcel() {
         Long tenantId = TenantContext.getTenantId();
-        List<User> users = (tenantId == null
-                ? userRepository.findAllByTenantIdIsNull(Pageable.unpaged())
-                : userRepository.findAllByTenantId(tenantId, Pageable.unpaged())).getContent();
+        // Unpaginated by intent: the export is the whole scope. The repository says so in its
+        // signature rather than by passing Pageable.unpaged(), so no caller can turn it back into a
+        // paginated collection fetch by accident.
+        List<User> users = tenantId == null
+                ? userRepository.findAllByTenantIdIsNull()
+                : userRepository.findAllByTenantId(tenantId);
 
         try (Workbook workbook = new XSSFWorkbook();
              ByteArrayOutputStream out = new ByteArrayOutputStream()) {
