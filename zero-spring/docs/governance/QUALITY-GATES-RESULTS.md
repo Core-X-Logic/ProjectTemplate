@@ -17,6 +17,27 @@ Eşikler `../QUALITY-GATES.md`'de. Bu dosya **ölçümleri** tutar.
 | ArchUnit cırcırı | 5 kural aktif, donmuş ihlal **58 → 18** |
 | Typed client drift | yok — controller imzaları ve DTO'lar değişmedi (bağımsız doğrulandı) |
 
+### CI zinciri — `849e881`, workflow_dispatch, **7/7 yeşil**
+
+"Geçti" bir ölçüm değil. Her kapının **vakum-yeşil olmadığını** gösteren log satırı:
+
+| Gate | Vakum-yeşil riski | Log kanıtı |
+|---|---|---|
+| `build` | — | jar artifact'ı üretildi, sonraki 4 gate onu **yeniden derlemeden** kullandı |
+| `backend` | bayat bytecode | `clean:3.4.1:clean` **koştu** · `124` unit + `252` IT · `All coverage checks have been met` |
+| `frontend` | `test` typecheck yapmaz | `tsc -b && vite build` · `24 dosya / 123 test` |
+| `typed-client-drift` | şema üretilmeden geçmek | `openapi-typescript → schema.generated.d.ts [739.9ms]`, sonra commit'liyle `diff -u` |
+| **`migration-drift`** | `have_base=false` → **boş sette yeşil** | `oldset` = **V1..V6** · `applied 6 migrations, now at v6` · `validated 7 migrations` (drift yok) · **`applied 1 migration, now at v7`** — V7 **boş olmayan** şemaya uygulandı · `No migration necessary` (idempotent) |
+| `live-smoke` | assertion koşmadan geçmek | **11 PASS**, içinde **5 negatif**: tenant mismatch `403` · tenant→subscriptions `403` · tenant→editions `403` · anonim `/me` `401` · bilinmeyen tenant `400` |
+| `security-checks` | gitleaks `.git` bulamayıp hatayı yutmak | **`45 commits scanned`** · **`no leaks found`** · 5 desen PASS · `application-prod.yml secrets are env-referenced` · `npm audit: 0 vulnerabilities` — üçü de **blocking** |
+
+`release` **skipped**, başarısız değil: `if: github.event_name == 'push' && ref == main`;
+`workflow_dispatch` ile koşulduğu için koşul false — doğru davranış.
+
+**Lokal ↔ CI tutarlılığı:** backend 376/376 · frontend 123/123 · coverage geçti/geçti. **Sapma yok.**
+Bu ölçüm önemli: bu depoda iki kez lokal-yeşil/CI-kırmızı yaşandı (mail health indicator, readiness
+grubu) ve ikisi de ortama bağlı testlerdi.
+
 ### ArchUnit donmuş ihlaller
 
 | Kural | Önce | Sonra | Not |
