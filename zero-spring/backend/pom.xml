@@ -22,7 +22,7 @@
         <spring-modulith.version>1.4.5</spring-modulith.version>
         <springdoc.version>2.8.5</springdoc.version>
         <logstash-logback-encoder.version>8.0</logstash-logback-encoder.version>
-        <shedlock.version>5.16.0</shedlock.version>
+        <shedlock.version>7.7.0</shedlock.version>
         <bucket4j.version>8.10.1</bucket4j.version>
     </properties>
 
