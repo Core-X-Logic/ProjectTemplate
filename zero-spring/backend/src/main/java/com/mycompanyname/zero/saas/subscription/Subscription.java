@@ -20,8 +20,8 @@ import java.time.Instant;
  * when the package was assigned, so later edits to the edition's price never change what an existing
  * subscriber pays (ADR-0012).
  *
- * <p>{@code legacy*} columns exist for F6/ETL traceability and stay empty in Slice A;
- * {@code externalRef}/{@code provider} are filled by the billing provider in Slice C.
+ * <p>{@code externalRef}/{@code provider} are filled in by the billing provider once one is wired
+ * up; they stay null under the manual provider.
  */
 @Entity
 @Table(name = "subscriptions")
@@ -66,10 +66,4 @@ public class Subscription extends AbstractAuditedEntity {
 
     @Column(name = "provider", length = 32)
     private String provider;
-
-    @Column(name = "legacy_edition_id")
-    private Integer legacyEditionId;
-
-    @Column(name = "legacy_tenant_payment_ref", length = 128)
-    private String legacyTenantPaymentRef;
 }

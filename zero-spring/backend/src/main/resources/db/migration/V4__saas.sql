@@ -55,9 +55,7 @@ create table subscriptions (
   grace_end_at timestamptz,
   cancelled_at timestamptz,
   external_ref varchar(128),                   -- billing provider aboneliği (Slice C)
-  provider varchar(32),                        -- "manual" | "stripe" | ... (Slice C)
-  legacy_edition_id int,                       -- F6/ETL izlenebilirliği; Slice A'da boş
-  legacy_tenant_payment_ref varchar(128),      -- F6/ETL izlenebilirliği; Slice A'da boş
+  provider varchar(32),                        -- "manual" | "stripe" | ... (billing sağlayıcı)
   created_at timestamptz not null default now(),
   created_by varchar(64),
   updated_at timestamptz,
