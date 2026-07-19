@@ -6,7 +6,7 @@ package com.mycompanyname.zero.saas.feature;
  * a public pricing table.
  *
  * <p>Deliberately separate from {@code SettingDefinition}: settings and features are different
- * concepts with different storage and resolution chains (F5-ARCHITECTURE §6).
+ * concepts with different storage and resolution chains.
  */
 public record FeatureDefinition(
         String name,

@@ -1,44 +1,42 @@
-# zero-platform — ASP.NET Zero → Java Spring modernizasyonu
+# Doküman haritası
 
-ASP.NET Zero (ABP Framework) tabanlı enterprise SaaS iskeletinin Java 21 / Spring Boot 3.5
-ekosisteminde fonksiyonel-parite + modernizasyon karşılığı.
+Çok kiracılı SaaS başlangıç şablonu — Java 21 / Spring Boot 3.5 / Spring Modulith backend +
+React 19 / Vite / TypeScript admin arayüzü.
 
-## Dokümanlar
+## Nereden başlamalı
 
-| Belge | İçerik |
+| Durumun | Oku |
 |---|---|
-| [ANALYSIS.md](ANALYSIS.md) | **A) Analiz Raporu** — modül envanteri, 74 satırlık parite matrisi (Mevcut→Spring), riskler, netleştirme soruları, migration stratejisi, frontend değerlendirmesi |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | **B) Hedef Mimari** — Modulith kararı, katmanlar, multi-tenancy, auth, veri modeli, event akışları, observability, ADR özeti |
-| [IMPLEMENTATION-PLAN.md](IMPLEMENTATION-PLAN.md) | **C) Uygulama Planı** — 4 faz, her faz için görev + kabul + test kriterleri |
-| [CONTRACT-phase1.md](CONTRACT-phase1.md) | **D) Kod Üretim Sözleşmesi** — Faz 1 kesin paket/sınıf/DDL/config sözleşmesi (kod üretim ajanları için bağlayıcı) |
-| [QUALITY-GATES.md](QUALITY-GATES.md) | **E) Kalite Kapıları** — DoD, coverage hedefleri, security/performance/production-readiness checklist'leri |
+| Şablonu yeni klonladım | Repo kökündeki `README.md`, sonra `RENAME.md` |
+| Yeni bir modül/özellik ekleyeceğim | **`ADDING-A-MODULE.md`** — atlanan her adım sessiz bir açık |
+| Sistemin nasıl kurulduğunu anlamak istiyorum | `ARCHITECTURE.md` |
+| Bir kuralın neden böyle olduğunu merak ediyorum | `ARCHITECTURE-RULES.md`, sonra `governance/ADR/` |
+| Üretime çıkacağım | `RELEASE-RUNBOOK.md` |
+| Neyin eksik/riskli olduğunu bilmek istiyorum | `governance/RISK-REGISTER.md` |
 
-## Kod
+## Dosyalar
 
-- `../backend/` — çalışan Faz 1 Spring Boot iskeleti (auth + tenant + RBAC + seed + Testcontainers IT'leri).
-  Lokal çalıştırma ve test için bkz. [../backend/README.md](../backend/README.md).
+| Dosya | Ne işe yarar |
+|---|---|
+| `ADDING-A-MODULE.md` | Yeni modül eklemenin tam yordamı: Modulith sınırı, migration, izin kaydı, kiracılık, i18n, test. Kontrol listesiyle. |
+| `ARCHITECTURE-RULES.md` | Kodda uyulması zorunlu kurallar, gerekçeleriyle. Çoğu burada bir kez ihlal edilip hataya yol açtığı için yazıldı. |
+| `ARCHITECTURE.md` | Backend mimarisi: modül sınırları, çok kiracılık, kimlik doğrulama, veri katmanı. |
+| `SAAS-ARCHITECTURE.md` | Editions / subscriptions / features katmanı: durum makinesi, fiyat snapshot'ı, `BillingProvider` SPI, webhook idempotency. |
+| `FRONTEND-ARCHITECTURE.md` | Frontend yığını, provider zinciri, klasör yapısı, feature şablonu. |
+| `QUALITY-GATES.md` | "Bitti"nin tanımı, coverage eşikleri, güvenlik ve performans kontrol listeleri. |
+| `RELEASE-RUNBOOK.md` | Yayına çıkarma: config kontrol listesi, deploy adımları, rollback, olay müdahalesi. |
+| `governance/ADR/` | Mimari kararlar ve gerekçeleri (MADR formatı). |
+| `governance/RISK-REGISTER.md` | Bilinen açıklar ve devralınan kısıtlar. **Klonlarken önce buraya bak.** |
+| `governance/AGENT-WORKING-AGREEMENT.md` | Çalışma disiplini: kanıtsız "tamamlandı" yok, checkpoint formatı, GO/NO-GO. |
+| `governance/CHANGELOG.md` | Sürüm günlüğü. |
+| `governance/QUALITY-GATES-RESULTS.md` | Kapı sonuçlarının kaydı. |
+| `history/` | **Şablonun türetildiği göçün arşivi. Senin projeni bağlamaz** — bkz. `history/README.md`. |
 
-## Faz 1 durum özeti
+## Ayrıca
 
-- Derleme: **BUILD SUCCESS**
-- Test: **15/15 yeşil** (ModularityTests + 14 entegrasyon testi, Testcontainers PostgreSQL 16, ~22s)
-- Faz-sonu adversaryal güvenlik incelemesinde 1 kritik + 1 yüksek + 2 orta bulgu tespit edilip
-  **düzeltildi ve testle kanıtlandı**; re-review'da açık kritik/yüksek kalmadı. Özet:
-  - **[Kritik]** Tenant izolasyonu: yeni `AuthenticatedTenantFilter` ile JWT `tenant` claim otoriter
-    yapıldı; `X-Tenant` header ile uyuşmazlık / eksik header / yabancı tenant → 403
-    (`TenantEscalationIT` 3/3 kanıtlı). Böylece tenant token'ıyla host/başka-tenant erişimi ve
-    host-admin yaratma engellendi.
-  - **[Yüksek]** `HibernateTenantFilterAspect` sıralaması `@Order` + `TransactionOrderConfig` ile
-    transaction içinde garanti edildi (ikinci savunma hattı).
-  - **[Orta]** Refresh rotasyonu atomik (`revokeIfActive`) + reuse-detection kaskadı; prod'da seed
-    default kapalı + fail-fast.
-  - Ayrıntı: ANALYSIS §3.1 ve QUALITY-GATES §3.
-- Bilinçli F2'ye ertelenen artık riskler (residual): Hibernate `@Filter`'ın `findById`/lazy-collection'a
-  uygulanmaması (birincil savunma explicit tenant-scoped sorgular), host→tenant impersonation yokluğu,
-  tenant lookup cache'i, `jti` blacklist. Tümü belgeli.
-
-## Sonraki adım — açık kararlar
-
-Kapsamı daraltmak için ANALYSIS §3.3'teki 8 netleştirme sorusu yanıtlanmalı (chat, SaaS/ödeme,
-GraphQL, MAUI/Web.Mvc, LDAP/OIDC, veri migration, hedef bulut, tenant çözümleme modeli). Bunlar
-Opsiyonel bloktaki 30 parite kaleminin kaçının F2-F4'e alınacağını belirler.
+- Repo kökündeki **`CLAUDE.md`** — her oturumda yüklenir; bu depoda gerçekten hataya yol açmış
+  tuzakları ve konvansiyonları taşır.
+- **`.claude/`** — ajan takımı (`tech-lead`, `backend-engineer`, `frontend-engineer`,
+  `stack-reviewer`, `gate-auditor`), komutlar (`/new-module`, `/preflight`) ve skill'ler
+  (`migration-safety`, `tenant-isolation`, `permission-model`).
+- **`../scripts/ci-local.sh`** — CI kapılarını yerelde koşturur; push etmeden önce.

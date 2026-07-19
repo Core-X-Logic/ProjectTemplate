@@ -20,8 +20,9 @@ import java.util.Properties;
 import java.util.TreeMap;
 
 /**
- * Read-only localization service (Phase 2). Supported languages are fixed to English and Turkish;
- * DB-backed languages and tenant overrides arrive in Phase 3. Full dictionaries are read straight
+ * Read-only localization service. Supported languages are fixed to English and Turkish; there is
+ * no DB-backed language table and no per-tenant override — adding either is an extension point for
+ * the application built on this template. Full dictionaries are read straight
  * from the UTF-8 {@code i18n/messages_*.properties} bundles so the frontend can bootstrap its i18n.
  */
 @Service

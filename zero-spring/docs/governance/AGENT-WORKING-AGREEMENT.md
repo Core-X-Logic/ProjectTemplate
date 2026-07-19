@@ -5,13 +5,12 @@ Bu sözleşme, zero-platform üzerinde çalışan tüm AI ajanları ve orkestras
 
 ## 1. Scope lock (kapsam kilidi)
 
-- Aktif faz kapsamı `IMPLEMENTATION-PLAN.md` + o fazın `CONTRACT-phase{N}.md` dosyasıyla tanımlıdır.
-  **Ajan bu kapsamın dışına çıkamaz.** Kapsam dışı bir ihtiyaç görülürse: üretme, RISK-REGISTER'a
-  veya bir sonraki fazın notuna yaz, checkpoint'te "sonraki adım" olarak raporla.
-- **Teknoloji kilidi:** onaylanmış stack sabit — Java 21, Spring Boot 3.5, PostgreSQL, **frontend Angular
-  (devam)**. Yeni kütüphane/framework kararı ancak ADR ile ve kullanıcı onayıyla alınır. Sözleşmede
-  listelenmemiş bağımlılık eklenmez.
-- Faz karışımı yasak: "Faz 2 dışına çıkma" gibi açık direktifler her şeyin üstündedir.
+- Kapsam, o iş için verilen görevle tanımlıdır. **Ajan bu kapsamın dışına çıkamaz.** Yol boyunca
+  bulunan ama istenmeyen bir ihtiyaç varsa: düzeltme, `RISK-REGISTER.md`'ye yaz ve checkpoint'te
+  "sonraki adım" olarak raporla.
+- **Teknoloji kilidi:** onaylanmış stack sabit — Java 21, Spring Boot 3.5, Spring Modulith,
+  PostgreSQL + Flyway, Redis; frontend **React 19 + Vite + TypeScript** (`ADR-0008`).
+  Yeni kütüphane/framework kararı ancak ADR ile ve kullanıcı onayıyla alınır.
 
 ## 2. Kanıt zorunluluğu (Definition of "Done")
 

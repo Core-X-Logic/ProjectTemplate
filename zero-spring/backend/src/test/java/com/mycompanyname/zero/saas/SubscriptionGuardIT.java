@@ -15,8 +15,7 @@ import org.springframework.http.ResponseEntity;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * F5 Slice B proof for the subscription validity gate (CONTRACT-phase5 Slice B;
- * F5-ARCHITECTURE §7.1).
+ * Covers the subscription validity gate.
  *
  * <p>The gate lives in {@code TenantResolverFilter}, which runs <em>before</em> authentication. Two
  * consequences are exercised here: an expired tenant is refused on business endpoints no matter who

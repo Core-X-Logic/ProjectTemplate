@@ -1,13 +1,13 @@
 # ADR-0015: SaaS tablolarında Hibernate `@Filter` kullanılmaz; izolasyon host-only izin + explicit sorgu
 
-- **Durum:** Accepted · **Tarih:** 2026-07-18 · **Faz:** F5-A
+- **Durum:** Accepted · **Tarih:** 2026-07-18
 
 ## Bağlam
-Platform tarafında tenant izolasyonu iki katmanlı (ADR-0003): explicit tenant-scoped sorgular (birincil) +
-Hibernate `@Filter` (`tenantFilter`/`hostFilter`, ikincil güvenlik ağı). SaaS tabloları (`editions`,
-`subscriptions`, `tenant_features`) bu desene birebir uymuyor: **edition'lar host varlığıdır** (tenant_id yok) ve
-**host admin tüm tenant'ların aboneliklerini görebilmelidir**. `hostFilter` (`tenant_id is null`) uygulanırsa
-host, hiçbir aboneliği göremez — filtre işlevi tersine çalışır.
+Platform tarafında tenant izolasyonu iki katmanlıdır (ADR-0003): explicit tenant-scoped sorgular
+(birincil) + Hibernate `@Filter` (ikincil güvenlik ağı). SaaS tabloları (`editions`, `subscriptions`,
+`tenant_features`) bu desene uymaz: **edition'lar host varlığıdır** (tenant_id yok) ve **host admin
+tüm tenant'ların aboneliklerini görebilmelidir**. `hostFilter` (`tenant_id is null`) uygulanırsa host
+hiçbir aboneliği göremez — filtre burada işlevi tersine çevirir.
 
 ## Karar
 SaaS entity'lerinde `@Filter` **kullanılmaz**. İzolasyon şu üç katmanla sağlanır:
@@ -22,8 +22,9 @@ Host'un çapraz-tenant görünürlüğü SaaS yönetiminin **işlevsel gereği**
 (host-only izinler) burada birincil savunmadır ve testle kanıtlanmıştır.
 
 ## Sonuçlar
-- (+) Canlı smoke kanıtı: tenant kullanıcısı `POST /api/editions` → 403, `PUT /api/tenant-features/{id}` → 403,
-  `/me` yalnız kendi aboneliğini döndürür. `SaasAuthorizationIT` (8 test) aynı yüzeyi kapsar.
+- (+) Testle kanıtlı: tenant kullanıcısı `POST /api/editions` → 403, `PUT /api/tenant-features/{id}` → 403,
+  `/me` yalnız kendi aboneliğini döndürür (`SaasAuthorizationIT`).
 - (−) **Tasarım borcu:** platform genelindeki "ikincil güvenlik ağı" SaaS'ta yok. Yeni bir SaaS ucu yanlışlıkla
   izinsiz açılırsa filtre yakalamaz. Azaltım: her yeni SaaS ucu için `SaasAuthorizationIT`'ye negatif test
-  eklemek **zorunlu**; ArchUnit kuralı (saas controller'larında `@PreAuthorize` zorunluluğu) F5-B adayı.
+  eklemek **zorunludur**. (Daha güçlü bir azaltım: SaaS controller'larında `@PreAuthorize` zorunluluğunu
+  bir ArchUnit kuralıyla bağlamak — henüz kurulu değil.)

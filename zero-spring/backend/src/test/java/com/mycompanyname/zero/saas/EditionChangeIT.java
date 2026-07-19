@@ -14,11 +14,10 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * F5 Slice B proof for the edition change endpoint (state-table row S13).
+ * Covers the edition change endpoint (state-table row S13).
  *
  * <p>The arithmetic itself is pinned down by {@code ProrationCalculatorTest}; what is asserted here
- * is the domain behaviour around it — the two rules carried over from the source system that are
- * easy to get wrong:
+ * is the domain behaviour around it — two rules that are easy to get wrong:
  *
  * <ul>
  *   <li>the billing period end is <b>not</b> shifted, because the pro-rated amount already prices
@@ -27,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *       existing subscriber (ADR-0012).</li>
  * </ul>
  *
- * <p>Slice B collects nothing: the amount is reported and {@code paymentRequired} tells Slice C
+ * <p>Nothing is collected: the amount is reported and {@code paymentRequired} tells the caller
  * whether a checkout is needed at all.
  */
 class EditionChangeIT extends AbstractSaasIT {
@@ -154,7 +153,7 @@ class EditionChangeIT extends AbstractSaasIT {
                 new HttpEntity<>(body, tenantAdmin()), JsonNode.class);
 
         assertThat(response.getStatusCode())
-                .as("every SaaS write stays Side.HOST (F5-R3)")
+                .as("every SaaS write stays Side.HOST")
                 .isEqualTo(HttpStatus.FORBIDDEN);
     }
 

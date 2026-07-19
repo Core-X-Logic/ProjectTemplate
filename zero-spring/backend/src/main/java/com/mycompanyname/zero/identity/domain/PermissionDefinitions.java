@@ -6,8 +6,8 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Static registry of the permission tree (ABP {@code PermissionDefinitionProvider} parity).
- * Group nodes organize the tree; leaf nodes correspond to grantable {@link AppPermissions} values.
+ * Static registry of the permission tree. Group nodes organize the tree; leaf nodes correspond to
+ * grantable {@link AppPermissions} values.
  */
 public final class PermissionDefinitions {
 
@@ -57,8 +57,9 @@ public final class PermissionDefinitions {
             group(GROUP_LANGUAGES, GROUP_ADMINISTRATION, Side.BOTH),
             leaf(AppPermissions.LANGUAGES_MANAGE, GROUP_LANGUAGES, Side.HOST),
 
-            // Phase 5 (SaaS): every leaf is HOST-only, so the seeder automatically withholds them
-            // from the tenant Admin role and a tenant can never resell or re-scope itself (F5-R3).
+            // SaaS: every leaf is HOST-only, so the seeder automatically withholds them from the
+            // tenant Admin role and a tenant can never resell or re-scope itself
+            // (see ARCHITECTURE-RULES.md — "Tenant kendi limitini yükseltemez").
             group(GROUP_SAAS, GROUP_ADMINISTRATION, Side.BOTH),
             leaf(AppPermissions.EDITIONS_READ, GROUP_SAAS, Side.HOST),
             leaf(AppPermissions.EDITIONS_MANAGE, GROUP_SAAS, Side.HOST),

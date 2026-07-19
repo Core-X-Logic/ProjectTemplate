@@ -39,12 +39,13 @@ import java.util.Optional;
  *   <li><b>Transitions</b> ({@link #transition}, {@link #activate}, {@link #cancel},
  *       {@link #downgradeToExpiringEdition}) — rows S4-S12, guarded by
  *       {@link SubscriptionStatus#canTransitionTo}. An illegal transition raises
- *       {@code DomainException(VALIDATION)} instead of being silently ignored (K11).</li>
+ *       {@code DomainException(VALIDATION)} instead of being silently ignored.</li>
  * </ul>
  *
  * <p>Every successful status change appends a {@link SubscriptionEvent}. Every mutating method
  * evicts the SaaS caches: a package change alters resolved feature values, and a status change
- * alters the answer {@code SubscriptionGuard} gives the tenant filter (F5-R2).
+ * alters the answer {@code SubscriptionGuard} gives the tenant filter. See ARCHITECTURE-RULES.md —
+ * "Feature ve abonelik cache'i yazmadan sonra bayat kalmamalı".
  *
  * <p>Time is read from the injected {@link Clock}, never from {@code Instant.now()}, so the
  * lifecycle can be exercised deterministically.
@@ -248,8 +249,8 @@ public class SubscriptionService {
      * {@code zero.saas.proration.minimum-amount}, no payment is requested at all and the edition
      * changes immediately.
      *
-     * <p>Slice B has no billing provider: the amount is computed, logged and returned, and Slice C
-     * turns it into a checkout.
+     * <p>No billing provider is integrated: the amount is computed, logged and returned. Turning it
+     * into a checkout is left to the application built on this template.
      */
     @EvictsSaasCaches
     public EditionChangeDto changeEdition(Long tenantId, ChangeEditionRequest request, String actor) {

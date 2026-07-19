@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * in a test without fighting the distributed lock, and the lock can be exercised without depending
  * on which subscriptions happen to be due.
  *
- * <p><b>Single execution across instances (K10).</b> {@code @SchedulerLock} takes a row in the
+ * <p><b>Single execution across instances.</b> {@code @SchedulerLock} takes a row in the
  * {@code shedlock} table for the duration of the run. {@code lockAtLeastFor} keeps that row held for
  * a short while <em>after</em> the run finishes, which is what protects against two nodes whose
  * clocks are slightly apart firing back to back. ShedLock's default {@code PROXY_METHOD} mode means

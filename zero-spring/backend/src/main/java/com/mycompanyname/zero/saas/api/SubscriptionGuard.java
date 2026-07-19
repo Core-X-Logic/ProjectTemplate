@@ -3,9 +3,9 @@ package com.mycompanyname.zero.saas.api;
 /**
  * Tells whether a tenant's subscription currently permits access to business endpoints.
  *
- * <p>Slice A only defines and implements the check; wiring it into {@code TenantResolverFilter}
- * (403 {@code SUBSCRIPTION_INVALID}) together with the exempt-path list is Slice B scope
- * (F5-ARCHITECTURE §7.1).
+ * <p>This interface only defines the check. It is applied in {@code TenantResolverFilter}
+ * (403 {@code SUBSCRIPTION_INVALID}) via the {@code TenantAccessCheck} SPI, together with the
+ * exempt-path list — see ARCHITECTURE-RULES.md — "Abonelik geçerlilik kapısı filtrede ve cache'li".
  */
 public interface SubscriptionGuard {
 

@@ -19,9 +19,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Phase 2 parity proof for organization units (CONTRACT-phase2 §4.5).
+ * End-to-end coverage of organization units.
  *
- * <p>ABP materialized-path parity: 5-digit zero-padded, dot-separated {@code code}. Codes are
+ * <p>Materialized-path encoding: 5-digit zero-padded, dot-separated {@code code}. Codes are
  * asserted relatively (child = parentCode + ".00001") so the test is robust to sibling ITs that
  * also create units in the shared {@code default} tenant. Verifies move (whole subtree recoded),
  * delete cascade, and tenant isolation (a tenant's units are invisible to the host scope).
@@ -73,7 +73,7 @@ class OrganizationUnitIT extends AbstractIntegrationIT {
         JsonNode root = createOu(headers, unique("root"), null);
         String rootCode = root.path("code").asText();
         assertThat(rootCode)
-                .as("root code must be a 5-digit zero-padded segment (ABP parity, e.g. 00001)")
+                .as("root code must be a 5-digit zero-padded segment, e.g. 00001")
                 .matches("\\d{5}");
         long rootId = root.path("id").asLong();
 

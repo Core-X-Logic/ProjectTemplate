@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Central registry of every setting the platform understands (Phase 2). New settings MUST be added
+ * Central registry of every setting the platform understands. New settings MUST be added
  * here to be readable/writable through {@code SettingManager}. Values are stored as strings and
  * interpreted by their consumers.
  */

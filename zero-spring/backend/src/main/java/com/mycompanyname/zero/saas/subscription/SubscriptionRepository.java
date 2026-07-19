@@ -17,7 +17,7 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
     /** Guards edition deletion: an edition still sold to a tenant may not be removed. */
     long countByEditionId(Long editionId);
 
-    // --- lifecycle job queries (F5-ARCHITECTURE §3, states S6-S10) ---
+    // --- lifecycle job queries (states S6-S10 of the SubscriptionStatus transition table) ---
 
     /** S6: trials whose {@code trial_end_at} has passed. */
     List<Subscription> findByStatusAndTrialEndAtLessThanEqualOrderByIdAsc(SubscriptionStatus status, Instant at);

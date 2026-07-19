@@ -17,7 +17,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Phase 2 parity proof for HTTP audit logging (CONTRACT-phase2 §5.1).
+ * End-to-end coverage of HTTP audit logging.
  *
  * <p>Tenant-scoped ({@code default}). A {@code /api/users} call must be recorded with its method,
  * status, non-negative duration and with sensitive request parameters masked. The interceptor

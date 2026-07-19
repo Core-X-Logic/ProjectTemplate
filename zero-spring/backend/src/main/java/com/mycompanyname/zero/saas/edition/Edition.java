@@ -58,7 +58,7 @@ public class Edition extends AbstractAuditedEntity {
 
     /**
      * An edition is free when it carries no price at all. Computed rather than stored so it can never
-     * drift from the price columns (F5-ARCHITECTURE §2).
+     * drift from the price columns.
      */
     public boolean isFree() {
         return monthlyPrice == null && annualPrice == null;

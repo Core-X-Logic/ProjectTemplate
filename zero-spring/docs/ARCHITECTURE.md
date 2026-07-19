@@ -92,11 +92,16 @@ Tüm evrim **Flyway versioned migration** ile; `ddl-auto=validate` (şemanın te
 - Security header'ları (F4): HSTS, X-Content-Type-Options, CSP (Swagger hariç).
 - OWASP bağımlılık taraması CI'da (`dependency-check` veya GitHub Dependabot + `mvn versions`).
 
-## 9. Frontend stratejisi (özet — karşılaştırma ANALYSIS.md'de)
+## 9. Frontend
 
-- **A) Angular devamı:** mevcut ekip bilgisi + Metronic teması + nswag proxy'leri yeniden üretilebilir → en hızlı parite. Backend API'si AspNetZero DTO şemasına birebir değil; proxy'ler OpenAPI'den (`openapi-generator` typescript-angular) türetilir.
-- **B) React + Next.js:** daha geniş işe alım havuzu, SSR/edge, shadcn/ui gibi modern bileşen ekosistemi; ama TÜM admin ekranlarının yeniden yazımı = büyük efor.
-- **Öneri:** F4'te **B (React/Next.js)** ile minimum admin panel (login, tenant switch, user/role/permission CRUD, audit görüntüleme) — çünkü bu yeniden yazım her durumda proxy üretimi hariç sıfırdan; madem yazılacak, modern stack'e yazılır. Angular'a yatırım sadece mevcut ekip %100 Angular ise mantıklı (o durumda A'ya dön).
+**Karar verildi ve uygulandı: React 19 + Vite + TypeScript** (`governance/ADR/ADR-0008`).
+Ayrıntı: `FRONTEND-ARCHITECTURE.md`.
+
+Backend ile sözleşme **üretilir, elle yazılmaz**: `npm run gen:api` `/v3/api-docs`'tan
+`src/api/schema.d.ts` üretir ve CI'daki `typed-client-drift` kapısı bunu commit'lenmiş
+sürümle byte-byte karşılaştırır. Elle tip yazmak ya da `any` ile geçmek, backend sözleşmesi
+değiştiğinde derlemenin sessizce geçmesine yol açar; hata yalnızca üretimde, o uç
+çağrıldığında çıkar.
 
 ## 10. "Neden bu seçimler" — özet karar kaydı (ADR özeti)
 

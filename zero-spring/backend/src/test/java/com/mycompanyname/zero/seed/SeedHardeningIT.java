@@ -25,7 +25,8 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Evidence for the F5-R9 production fix and for PROD-R2.
+ * Evidence for the permission-reconciliation flag fix (see ARCHITECTURE-RULES.md — "İzin
+ * uzlaştırması seed bayrağından bağımsızdır") and for PROD-R2.
  *
  * <p>Both findings are about a flag doing something other than what its name says, and neither is
  * visible to a test that only exercises the wired-up bean: the shared context runs with seeding on
@@ -73,7 +74,7 @@ class SeedHardeningIT extends AbstractIntegrationIT {
 
     @Test
     void reconciliationRunsWhenSeedingIsDisabled() {
-        // The F5-R9 production fix in one assertion. Reconciliation used to be gated on
+        // The production fix in one assertion. Reconciliation used to be gated on
         // zero.seed.enabled, and prod ships with SEED_ENABLED=false — so the repair for permission
         // drift never ran in the only environment whose database is old enough to have drifted.
         long roleId = hostAdminRoleId();

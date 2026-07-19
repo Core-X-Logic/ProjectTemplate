@@ -9,14 +9,15 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Provisions the default subscription for every newly created tenant (F5-ARCHITECTURE §7).
+ * Provisions the default subscription for every newly created tenant.
  *
  * <p>Deliberately a plain synchronous {@code @EventListener} rather than
- * {@code @ApplicationModuleListener}: the contract requires tenant and subscription to be created in
- * a <em>single</em> transaction, so the source system's split two-unit-of-work provisioning (and its
- * "tenant exists but has no subscription" failure mode) cannot reappear.
+ * {@code @ApplicationModuleListener}: tenant and subscription must be created in a <em>single</em>
+ * transaction. Splitting them into two units of work admits a "tenant exists but has no
+ * subscription" state that nothing later repairs.
  *
- * <p>The event flows {@code tenancy -> saas} only, so {@code tenancy} stays a leaf module (F5-R1).
+ * <p>The event flows {@code tenancy -> saas} only, so {@code tenancy} stays a leaf module — see
+ * ARCHITECTURE-RULES.md — "Modül bağımlılıkları döngü kurmaz".
  */
 @Component
 @RequiredArgsConstructor

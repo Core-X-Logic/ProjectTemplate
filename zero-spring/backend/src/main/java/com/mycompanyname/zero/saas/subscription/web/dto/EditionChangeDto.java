@@ -5,10 +5,10 @@ import java.math.BigDecimal;
 /**
  * Result of an edition change (S13).
  *
- * <p>Slice B computes and reports the pro-rated amount but collects nothing: there is no billing
- * provider yet. {@code paymentRequired} tells Slice C whether a checkout has to be opened for this
- * change or whether it was below the configured minimum and therefore applied for free — the same
- * decision the source system made with {@code MinimumUpgradePaymentAmount}.
+ * <p>The pro-rated amount is computed and reported but nothing is collected: no billing provider is
+ * integrated. {@code paymentRequired} tells the caller whether a checkout has to be opened for this
+ * change, or whether the amount fell below the configured minimum
+ * ({@code zero.saas.proration.minimum-amount}) and the change was therefore applied for free.
  *
  * @param subscription      the subscription after the change
  * @param prorationAmount   amount attributable to the unused remainder; negative on a downgrade

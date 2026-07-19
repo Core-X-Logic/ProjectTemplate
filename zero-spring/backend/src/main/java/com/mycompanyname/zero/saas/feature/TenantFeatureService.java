@@ -14,9 +14,10 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Host-side administration of per-tenant feature overrides. Writing is deliberately host-only
- * (F5-R3): a tenant must never be able to raise its own limits, so this service is only reachable
- * through {@code tenantfeatures.manage}, a {@code Side.HOST} permission.
+ * Host-side administration of per-tenant feature overrides. Writing is deliberately host-only: a
+ * tenant must never be able to raise its own limits, so this service is only reachable through
+ * {@code tenantfeatures.manage}, a {@code Side.HOST} permission. See ARCHITECTURE-RULES.md —
+ * "Tenant kendi limitini yükseltemez".
  */
 @Service
 @RequiredArgsConstructor
@@ -37,7 +38,7 @@ public class TenantFeatureService {
      * Batch upsert of tenant overrides. A {@code null}/blank value deletes the override so the
      * tenant falls back to its edition; unknown names and type-incompatible values are rejected.
      *
-     * <p>Evicts the whole feature cache (F5-R2): a single override can be masked or unmasked at any
+     * <p>Evicts the whole feature cache: a single override can be masked or unmasked at any
      * level of the chain, so per-key invalidation would have to guess which entries went stale.
      */
     @CacheEvict(cacheNames = SaasCaches.FEATURES, allEntries = true)

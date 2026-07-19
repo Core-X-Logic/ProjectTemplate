@@ -17,7 +17,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Phase 2 parity proof for the permission tree (CONTRACT-phase2 §3).
+ * End-to-end coverage of the permission tree.
  *
  * <p>The tree is filtered by side: a host user sees HOST-ONLY permissions
  * ({@code settings.host.manage}, {@code languages.manage}, {@code tenants.manage}); a tenant user

@@ -10,9 +10,8 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * F5 Slice B proof that the lifecycle job runs once even when it is triggered twice
- * (CONTRACT-phase5 Slice B; K10 — the source system's workers had no distributed lock at all, so on
- * more than one node the same tenant was processed repeatedly).
+ * Covers that the lifecycle job runs once even when it is triggered twice. Without a distributed
+ * lock, more than one node would process the same tenant repeatedly.
  *
  * <p>Triggering the bean directly is a faithful stand-in for a second node: ShedLock's default
  * {@code PROXY_METHOD} interception guards every call that arrives through the bean proxy, which is

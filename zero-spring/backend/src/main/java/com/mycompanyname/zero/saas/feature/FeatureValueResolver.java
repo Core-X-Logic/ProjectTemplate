@@ -15,10 +15,11 @@ import org.springframework.transaction.annotation.Transactional;
  * read from {@link TenantContext} for the convenience overloads), so it never depends on the
  * identity module.
  *
- * <p>Resolution itself is delegated to {@link FeatureValueLoader}, which owns the cache
- * (F5-R2). Every write path that can change a resolved value evicts that cache in full:
+ * <p>Resolution itself is delegated to {@link FeatureValueLoader}, which owns the cache. Every
+ * write path that can change a resolved value evicts that cache in full:
  * {@code EditionService.setFeatures}, {@code TenantFeatureService.setValues} and every
- * subscription mutation (package assignment included).
+ * subscription mutation (package assignment included). See ARCHITECTURE-RULES.md — "Feature ve
+ * abonelik cache'i yazmadan sonra bayat kalmamalı".
  */
 @Service
 @RequiredArgsConstructor

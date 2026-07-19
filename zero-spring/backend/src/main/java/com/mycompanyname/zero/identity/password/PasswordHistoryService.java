@@ -12,7 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 /**
- * Enforces "no reuse of the last N passwords" and records password changes (CONTRACT-phase2 §4.4).
+ * Enforces "no reuse of the last N passwords" and records password changes.
  *
  * <p>{@code N} corresponds to the {@code App.Password.HistoryCount} setting (default
  * {@link PasswordPolicy#DEFAULT_HISTORY_COUNT}). Every path that sets a password

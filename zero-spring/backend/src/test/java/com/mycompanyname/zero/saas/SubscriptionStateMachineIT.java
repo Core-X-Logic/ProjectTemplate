@@ -17,13 +17,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * F5 Slice A proof for the subscription state machine (CONTRACT-phase5 A.4, F5-ARCHITECTURE §3).
+ * Covers the subscription state machine.
  *
  * <p>The decisive behaviour is that an illegal transition <em>throws</em> rather than silently doing
- * nothing (K11), and that every legal transition leaves a {@code subscription_events} row. Lifecycle
- * transitions driven by elapsed time (GRACE/EXPIRED) have no HTTP route in this slice — the
- * scheduled jobs arrive in Slice B — so they are exercised through the service, which is the same
- * API those jobs will call.
+ * nothing, and that every legal transition leaves a {@code subscription_events} row. Lifecycle
+ * transitions driven by elapsed time (GRACE/EXPIRED) have no HTTP route, so they are exercised
+ * through the service — the same API the scheduled job calls.
  */
 class SubscriptionStateMachineIT extends AbstractSaasIT {
 

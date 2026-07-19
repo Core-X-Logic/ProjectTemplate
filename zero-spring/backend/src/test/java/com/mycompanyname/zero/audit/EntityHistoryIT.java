@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Phase 2 parity proof for entity change history (CONTRACT-phase2 §5.2).
+ * End-to-end coverage of entity change history.
  *
  * <p>{@code Role} is a tracked entity. Creating then renaming a role must produce a CREATED and an
  * UPDATED entity_change, and the UPDATED change must record the {@code displayName} property with

@@ -16,7 +16,8 @@ import java.lang.annotation.Target;
  *
  * <p>A composed annotation rather than two literal {@code @CacheEvict}s at each call site: both
  * caches must always be dropped together, and forgetting one of them is precisely the stale-cache
- * failure F5-R2 warns about.
+ * failure this design guards against (see ARCHITECTURE-RULES.md — "Feature ve abonelik cache'i
+ * yazmadan sonra bayat kalmamalı").
  *
  * <p>Eviction is coarse ({@code allEntries}) on purpose. A finer key-level invalidation would have
  * to enumerate every tenant subscribed to an edition and every feature name involved; getting that

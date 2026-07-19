@@ -49,7 +49,7 @@ public class User extends AbstractAuditedEntity {
     @Column(name = "lockout_end_at")
     private Instant lockoutEndAt;
 
-    // --- Phase 2: profile / account fields ---
+    // --- profile / account fields ---
 
     @Column(name = "name", length = 64)
     private String name;

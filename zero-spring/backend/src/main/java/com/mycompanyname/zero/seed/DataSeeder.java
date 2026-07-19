@@ -99,7 +99,7 @@ public class DataSeeder implements ApplicationRunner {
             } else {
                 log.info("Data seeding skipped (zero.seed.enabled=false)");
             }
-            // Independent of seeding on purpose (F5-R9): keyed on the static Admin roles' *contents*,
+            // Independent of seeding on purpose: keyed on the static Admin roles' *contents*,
             // not on the host admin, so an already-provisioned database picks up permissions added by
             // a later release. Prod runs with seeding off, which is exactly where that drift appears.
             reconcileStaticRolePermissions();
@@ -169,13 +169,13 @@ public class DataSeeder implements ApplicationRunner {
      *       UPDATE and produces no audit noise.</li>
      * </ul>
      *
-     * <p><b>Why its own flag (F5-R9, prod fix).</b> This used to be gated on
+     * <p><b>Why its own flag.</b> This used to be gated on
      * {@code zero.seed.enabled}. Prod ships with seeding off — that is the whole point of
      * {@code SEED_ENABLED=false} — so reconciliation never ran in the one environment whose database
      * is old enough to have drifted, while every clean-database test suite passed. It is now gated on
      * {@code zero.seed.reconcile-permissions} (default true, prod included), because reconciling an
      * existing role's permissions is not seeding: it creates nothing and touches only roles marked
-     * static.
+     * static. See ARCHITECTURE-RULES.md — "İzin uzlaştırması seed bayrağından bağımsızdır".
      *
      * <p>Public so the reconciliation can be exercised on its own (see
      * {@code RolePermissionReconciliationIT}) without re-running the whole {@link ApplicationRunner}.

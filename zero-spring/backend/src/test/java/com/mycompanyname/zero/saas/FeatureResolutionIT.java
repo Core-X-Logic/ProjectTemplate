@@ -14,7 +14,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * F5 Slice A proof for feature resolution (CONTRACT-phase5 A.4).
+ * Covers feature resolution.
  *
  * <p>Walks the whole chain in one test — definition default, then the edition value, then the tenant
  * override, then back down as each level is cleared — because the ordering between the levels is the

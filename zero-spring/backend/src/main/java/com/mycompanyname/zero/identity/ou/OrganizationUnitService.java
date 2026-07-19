@@ -19,7 +19,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Materialized-path organization-unit tree service (ABP parity).
+ * Materialized-path organization-unit tree service.
  *
  * <p>{@code code} is a dot-separated chain of 5-digit zero-padded units: a root is {@code 00001},
  * its first child {@code 00001.00001}, and so on. All reads/writes run inside {@code @Transactional}

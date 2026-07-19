@@ -14,8 +14,8 @@ import java.time.Clock;
 /**
  * Scheduling infrastructure for the SaaS lifecycle job.
  *
- * <p><b>ShedLock (K10).</b> The source system ran its subscription workers with no distributed lock,
- * so on more than one node the same tenant could be processed several times. Every scheduled method
+ * <p><b>ShedLock.</b> Scheduled subscription work without a distributed lock would process the same
+ * tenant several times once more than one node runs. Every scheduled method
  * here is wrapped by {@code @SchedulerLock}, whose lock rows live in the {@code shedlock} table
  * created by {@code V5__shedlock.sql}. The default {@code interceptMode} is {@code PROXY_METHOD},
  * which means the lock is honoured for <em>any</em> call arriving through the bean proxy, not only

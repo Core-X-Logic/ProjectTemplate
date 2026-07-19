@@ -17,8 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
  * {@code default} tenant.
  *
  * <p>Deliberately keyed on the <em>edition's</em> existence rather than on the host-admin check that
- * gates identity seeding (F5-R6). Tying it to the identity check would silently skip SaaS seeding on
- * every already-provisioned database, leaving the platform with no sellable package.
+ * gates identity seeding. Tying it to the identity check would silently skip SaaS seeding on
+ * every already-provisioned database, leaving the platform with no sellable package. See
+ * ARCHITECTURE-RULES.md — "Seeder kendi ürettiği şeyin varlığına bakar".
  *
  * <p>Lives in the module root package so {@code seed} can call it without reaching into
  * {@code saas.edition} / {@code saas.subscription} internals and breaking the module boundary.

@@ -26,7 +26,7 @@ import java.util.regex.Pattern;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Phase 2 parity proof for the password policy and account recovery (CONTRACT-phase2 §4.4, §8).
+ * End-to-end coverage of the password policy and account recovery.
  *
  * <p>A real SMTP endpoint is provided by GreenMail (port 3025); the mail host is pointed at it via
  * {@link DynamicPropertySource} so the SMTP e-mail sender (active only when {@code spring.mail.host}

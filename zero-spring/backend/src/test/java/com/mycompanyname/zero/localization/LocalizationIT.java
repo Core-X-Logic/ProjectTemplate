@@ -15,7 +15,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Phase 2 parity proof for localization (CONTRACT-phase2 §7).
+ * End-to-end coverage of localization.
  *
  * <p>The two built-in cultures (en/tr) each return their key/value dictionary, and the languages
  * endpoint advertises exactly the two supported languages.

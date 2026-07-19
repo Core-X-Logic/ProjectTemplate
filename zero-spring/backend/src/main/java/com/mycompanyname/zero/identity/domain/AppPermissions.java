@@ -4,7 +4,7 @@ import java.util.Set;
 
 public final class AppPermissions {
 
-    // Phase 1 (kept, unchanged string values)
+    // Core user / role / tenant administration
     public static final String USERS_READ = "users.read";
     public static final String USERS_CREATE = "users.create";
     public static final String USERS_UPDATE = "users.update";
@@ -12,7 +12,7 @@ public final class AppPermissions {
     public static final String ROLES_MANAGE = "roles.manage";
     public static final String TENANTS_MANAGE = "tenants.manage";
 
-    // Phase 2 additions
+    // Extended identity, auditing, settings and localization
     public static final String USERS_IMPERSONATE = "users.impersonate";
     public static final String USERS_UNLOCK = "users.unlock";
     public static final String ROLES_READ = "roles.read";
@@ -25,10 +25,11 @@ public final class AppPermissions {
     public static final String SETTINGS_HOST = "settings.host.manage";   // HOST-ONLY
     public static final String LANGUAGES_MANAGE = "languages.manage";    // HOST-ONLY
 
-    // Phase 5 (SaaS) — all HOST-ONLY.
+    // SaaS (editions / subscriptions / tenant features) — all HOST-ONLY.
     // The values are intentionally repeated here as plain string literals instead of importing
     // com.mycompanyname.zero.saas.SaasPermissions: the saas module core must never depend on
-    // identity, and importing it the other way round would create the very cycle F5-R1 forbids.
+    // identity, and importing it the other way round would create a module cycle
+    // (see ARCHITECTURE-RULES.md — "Modül bağımlılıkları döngü kurmaz").
     // SaasPermissionsAlignmentTest fails the build if the two lists ever drift apart.
     public static final String EDITIONS_READ = "editions.read";
     public static final String EDITIONS_MANAGE = "editions.manage";

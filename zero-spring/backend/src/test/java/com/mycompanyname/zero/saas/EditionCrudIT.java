@@ -13,11 +13,11 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * F5 Slice A proof for the edition catalogue (CONTRACT-phase5 A.1 / A.4).
+ * Covers the edition catalogue.
  *
  * <p>Covers the full CRUD round-trip plus the three catalogue invariants: an edition that is still
- * sold cannot be deleted (409), an edition another edition downgrades into cannot be deleted (409,
- * the K14 resolution), and a downgrade target must be free (400).
+ * sold cannot be deleted (409), an edition another edition downgrades into cannot be deleted (409),
+ * and a downgrade target must be free (400).
  */
 class EditionCrudIT extends AbstractSaasIT {
 
@@ -105,7 +105,7 @@ class EditionCrudIT extends AbstractSaasIT {
                 HttpMethod.DELETE, new HttpEntity<>(host()), JsonNode.class);
 
         assertThat(response.getStatusCode())
-                .as("deleting the downgrade target would leave expiring subscriptions nowhere to land (K14)")
+                .as("deleting the downgrade target would leave expiring subscriptions nowhere to land")
                 .isEqualTo(HttpStatus.CONFLICT);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().path("code").asText()).isEqualTo("CONFLICT");

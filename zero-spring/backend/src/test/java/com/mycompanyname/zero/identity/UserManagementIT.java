@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Phase 2 parity proof for user management (CONTRACT-phase2 §4.2).
+ * End-to-end coverage of user management.
  *
  * <p>Tenant-scoped ({@code default}). Verifies: extended create fields, role assignment,
  * organization-unit assignment, unlock, activate/deactivate (deactivation revokes refresh

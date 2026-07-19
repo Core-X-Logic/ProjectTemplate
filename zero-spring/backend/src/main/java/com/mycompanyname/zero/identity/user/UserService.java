@@ -115,7 +115,7 @@ public class UserService {
 
     public void delete(Long id) {
         User user = getInCurrentTenantOrThrow(id);
-        // Phase 2: soft delete. The @SQLRestriction("deleted = false") on User hides the row from
+        // Soft delete. The @SQLRestriction("deleted = false") on User hides the row from
         // every subsequent query; tokens are revoked so the deleted account cannot refresh a session.
         user.setDeleted(true);
         user.setDeletedAt(Instant.now());
@@ -221,11 +221,10 @@ public class UserService {
     /**
      * Enforces the {@code app.maxUserCount} feature of the tenant's package.
      *
-     * <p>Two semantics are carried over from the source system deliberately: {@code 0} means
-     * <em>unlimited</em> (not "no users allowed"), and host-scope users are not governed by a tenant
-     * feature at all. The limit is a numeric one, so it cannot be expressed with
-     * {@code @RequiresFeature} — it needs the current usage, which is why the check is programmatic
-     * (F5-ARCHITECTURE §6).
+     * <p>Two semantics are deliberate: {@code 0} means <em>unlimited</em> (not "no users allowed"),
+     * and host-scope users are not governed by a tenant feature at all. The limit is a numeric one,
+     * so it cannot be expressed with {@code @RequiresFeature} — it needs the current usage, which is
+     * why the check is programmatic.
      */
     private void enforceMaxUserCount(Long tenantId) {
         if (tenantId == null) {

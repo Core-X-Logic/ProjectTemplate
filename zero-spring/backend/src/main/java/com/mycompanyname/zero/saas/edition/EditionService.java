@@ -27,9 +27,10 @@ import java.util.Optional;
 
 /**
  * Edition catalogue management. Every mutation here is host-only (see the controller's
- * {@code @PreAuthorize}); a tenant can never change what it is sold (F5-R3).
+ * {@code @PreAuthorize}); a tenant can never change what it is sold — see ARCHITECTURE-RULES.md —
+ * "Tenant kendi limitini yükseltemez".
  *
- * <p>Enforces the four catalogue invariants of CONTRACT-phase5 A.1:
+ * <p>Enforces the four catalogue invariants:
  * an edition that is still sold — or that another edition downgrades to — cannot be deleted (409);
  * a downgrade target must be free (400); and a free edition cannot offer a trial (400).
  */
@@ -86,7 +87,7 @@ public class EditionService {
             throw DomainException.conflict("Edition '" + edition.getName() + "' is assigned to "
                     + subscribers + " tenant(s) and cannot be deleted");
         }
-        // K14: a free edition used as another edition's downgrade target must survive, otherwise the
+        // A free edition used as another edition's downgrade target must survive, otherwise the
         // expiring subscription would have nowhere to land.
         long dependents = editionRepository.countByExpiringEditionId(id);
         if (dependents > 0) {
@@ -101,8 +102,8 @@ public class EditionService {
      * edition-level override so resolution falls through to the definition default; unknown feature
      * names and type-incompatible values are rejected with VALIDATION.
      *
-     * <p>Evicts the feature cache in full (F5-R2): the edition is inherited by every tenant
-     * subscribed to it, and the subscriber set is not part of this call.
+     * <p>Evicts the feature cache in full: the edition is inherited by every tenant subscribed to
+     * it, and the subscriber set is not part of this call.
      */
     @CacheEvict(cacheNames = SaasCaches.FEATURES, allEntries = true)
     public EditionDetailDto setFeatures(Long id, List<FeatureValueDto> values) {

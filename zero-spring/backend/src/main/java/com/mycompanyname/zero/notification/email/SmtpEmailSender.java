@@ -20,8 +20,8 @@ import java.nio.charset.StandardCharsets;
  * SMTP-backed {@link EmailSender}, active only when {@code spring.mail.host} is non-empty.
  *
  * <p>The envelope from-address and display name are resolved from the hierarchical settings module
- * ({@code App.Email.DefaultFromAddress} / {@code App.Email.DefaultFromDisplayName}, CONTRACT-phase2
- * §6) via {@link SettingManager}, honouring a tenant-level override for the current tenant. The
+ * ({@code App.Email.DefaultFromAddress} / {@code App.Email.DefaultFromDisplayName}) via
+ * {@link SettingManager}, honouring a tenant-level override for the current tenant. The
  * {@code @Value} bindings act only as a last-resort fallback if a setting cannot be resolved.
  */
 @Component

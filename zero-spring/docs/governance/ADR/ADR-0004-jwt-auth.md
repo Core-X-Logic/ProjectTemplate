@@ -2,13 +2,13 @@
 
 - **Durum:** Accepted
 - **Tarih:** 2026-07-17
-- **Faz:** F1
 
 ## Bağlam
 
-Kaynak sistem gömülü JWT auth kullanıyor ama zayıf varsayılanlarla: HS256, access **1 gün**, refresh
-**365 gün** (`AppConsts.cs`). Ayrıca her istekte `TokenValidityKey` (DB/cache) + SecurityStamp doğruluyor
-(stateless değil).
+Auth katmanı ya hazır bir kimlik sunucusundan (Keycloak/Auth0) devralınır ya da uygulama içinde
+kurulur. Uygulama içinde kurulacaksa asıl karar token ömürleridir: uzun ömürlü refresh token
+(yaygın varsayılan: aylar) ile devasa bir saldırı penceresi açılır, ve her istekte token geçerliliğini
+veritabanından doğrulamak stateless ölçeklemeyi bitirir. Bu iki tuzağın nerede durulacağı seçilmeli.
 
 ## Karar
 
@@ -17,16 +17,16 @@ Kaynak sistem gömülü JWT auth kullanıyor ama zayıf varsayılanlarla: HS256,
   kullanımda **rotate** (eskiyi revoke, yenisini yaz).
 - Refresh reuse-detection: revoked token tekrar sunulursa kullanıcının **tüm** refresh'leri iptal (kaskad).
 - Lockout: 5 hatalı deneme → 5 dk kilit; sayaç yalnız başarılı login/süre dolumunda sıfırlanır.
-- **F4:** RS256 + JWKS endpoint (asimetrik, key rotation).
+- **Sonraki adım (henüz kurulu değil):** RS256 + JWKS endpoint (asimetrik, key rotation).
 
 ## Gerekçe
 
-- Kısa access + rotate refresh, 365-günlük refresh gibi devasa saldırı penceresini kapatır.
+- Kısa access + rotate eden refresh, çalınmış bir token'ın kullanılabilir ömrünü dakikalara indirir.
 - Stateful doğrulamadan (her istek DB) vazgeçilerek ölçeklenebilirlik kazanılır; anlık iptal gerekirse
-  Redis denylist (F2+) eklenebilir — bilinçli tradeoff.
+  Redis denylist eklenebilir — bilinçli tradeoff.
 
 ## Sonuçlar
 
 - (+) Standart Bearer resource-server; harici IdP (Keycloak) eklemek maliyetsiz.
-- (−) Access token TTL'i (≤15 dk) boyunca iptal edilemez (jti blacklist F2+ — R-06).
-- (+) Refresh rotasyonu atomik (`revokeIfActive` koşullu update) — yarış kapatıldı (F1 güvenlik fix).
+- (−) Access token TTL'i (≤15 dk) boyunca iptal edilemez (jti denylist henüz yok).
+- (+) Refresh rotasyonu atomik (`revokeIfActive` koşullu update) — eşzamanlı iki refresh isteğindeki yarış kapalı.

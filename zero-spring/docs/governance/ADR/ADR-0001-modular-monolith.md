@@ -2,12 +2,11 @@
 
 - **Durum:** Accepted
 - **Tarih:** 2026-07-17
-- **Faz:** Genel
 
 ## Bağlam
 
-ASP.NET Zero kaynak sistemi tek deployable monolittir. Hedef Spring sisteminin dağıtım topolojisi
-seçilmelidir: modüler monolit mi, mikroservis mi?
+Çok kiracılı bir SaaS iskeleti için dağıtım topolojisi seçilmeli: modüler monolit mi, mikroservis mi?
+Karar erken alınmalı, çünkü modül sınırlarının nasıl zorlandığı sonradan ucuza değiştirilemez.
 
 ## Karar
 
@@ -17,7 +16,7 @@ Spring Modulith tabanlı **modüler monolit**. Modül sınırları derleme/test 
 
 ## Gerekçe
 
-- Parite hedefi monolit; dağıtık sistem karmaşıklığı (network partition, dağıtık tx, sürümleme) sıfır değer katar.
+- Tek ürün, tek ekip ölçeğinde dağıtık sistem karmaşıklığı (network partition, dağıtık tx, sürümleme) net değer katmaz.
 - Modül sınırlarının statik zorlanması "big ball of mud" riskini yapısal olarak engeller.
 - Ölçekleme önce yatay replikasyonla (stateless API + Redis + Postgres) karşılanır.
 - Mikroservise geçiş gerektiğinde modüller zaten event sözleşmesi üzerinden konuştuğu için düşük maliyetlidir.

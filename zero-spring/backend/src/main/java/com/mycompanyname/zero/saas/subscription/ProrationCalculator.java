@@ -11,24 +11,24 @@ import java.time.Instant;
 /**
  * Prices an edition change for the unused remainder of the current billing period.
  *
- * <h2>Relation to the source formula</h2>
- * The source system computed (F5-SAAS-INVENTORY §3):
+ * <h2>Why this is a single ratio</h2>
+ * Proration is often written as a whole-periods term plus a leftover-hours term:
  * <pre>
  * unusedPeriodCount = (remainingHours / 24) / (int) period
  * unusedHours       = remainingHours % ((int) period * 24)
  * priceForUnused(P) = P * unusedPeriodCount + (P / (int) period) / 24 * unusedHours
  * upgradePrice      = priceForUnused(target) - priceForUnused(current)
  * </pre>
- * Those two terms are a whole-periods part plus a leftover-hours part of one and the same quantity:
- * {@code P × remaining / periodLength}. Since a subscription always sits inside exactly one period,
- * the whole-periods term is zero and the formula collapses to
- * {@code remainingRatio × (targetPrice − currentPrice)} — which is what this class computes.
+ * Both terms are parts of one and the same quantity, {@code P × remaining / periodLength}. Since a
+ * subscription always sits inside exactly one period, the whole-periods term is always zero and the
+ * expression collapses to {@code remainingRatio × (targetPrice − currentPrice)} — which is what this
+ * class computes. Splitting it back into two terms adds rounding seams for no gain.
  *
- * <p>The one deliberate deviation is where {@code periodLength} comes from. The source hard-coded it
- * as the enum value in days (30 or 365), so "one month" was never February and never a 31-day month.
- * Here the period length is the real calendar distance between the period's start and end
- * ({@link BillingPeriod} uses {@link java.time.Period}, which applies the end-of-month clamp), per
- * ADR-0013.
+ * <p>{@code periodLength} is the real calendar distance between the period's start and end
+ * ({@link BillingPeriod} uses {@link java.time.Period}, which applies the end-of-month clamp), never
+ * a hard-coded 30 or 365 days — otherwise "one month" would never be February and never a 31-day
+ * month, and the ratio would silently misprice. See ADR-0013 and ARCHITECTURE-RULES.md —
+ * "Tarih aritmetiği java.time, ay sonu clamp'lenir".
  *
  * <p>The class is pure: no repositories, no clock, everything passed in — so the arithmetic is unit
  * testable on its own ({@code ProrationCalculatorTest}).

@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * F5 Slice B proof that {@code app.maxUserCount} is enforced (CONTRACT-phase5 Slice B).
+ * Covers enforcement of {@code app.maxUserCount}.
  *
  * <p>This is the numeric half of feature gating and the reason {@code identity} now depends on
  * {@code saas :: api}: a limit cannot be expressed declaratively with {@code @RequiresFeature}
@@ -108,7 +108,7 @@ class MaxUserCountIT extends AbstractIntegrationIT {
         setMaxUserCount(String.valueOf(currentUsers + 5));
 
         assertThat(createUser(uniqueUsername("unblocked")).getStatusCode())
-                .as("raising the limit must not be masked by a stale feature cache (F5-R2)")
+                .as("raising the limit must not be masked by a stale feature cache")
                 .isEqualTo(HttpStatus.CREATED);
     }
 

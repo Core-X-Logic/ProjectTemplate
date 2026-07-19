@@ -8,10 +8,9 @@ her adımın komutu ve beklenen çıktısı var.
 > Aşağıdaki "rolling deploy" bölümü iki-instance + reverse proxy varsayımıdır; tek-instance
 > kurulumda kısa kesinti (recreate) kabul edilir ve bu açıkça işaretlendi.
 
-> **Denetim notu:** Bu runbook yazılırken backend kaynağı başka bir ajan tarafından değiştiriliyordu
-> (F5 Slice B: lifecycle job, feature enforcement, proration, subscription guard). §1'deki
-> **BLOKER** işaretli maddeler o sırada koddaki gerçek durumdur (dosya:satır kanıtlı) ve Slice B
-> kapanışında yeniden doğrulanmalıdır.
+> **Bakım notu:** §1.3 bu şablonun **güvenlik varsayılanlarını** anlatır — hangi ayarın neden bu
+> değerde olduğunu ve nasıl doğrulanacağını. Kod bu varsayılanları taşıyor ve testlerle bağlı;
+> bir varsayılanı değiştirdiğinizde ilgili maddeyi ve testini birlikte güncelleyin.
 
 ---
 
@@ -21,19 +20,19 @@ her adımın komutu ve beklenen çıktısı var.
 
 | Değişken | Zorunlu | Varsayılan davranış | Nasıl doğrulanır |
 |---|---|---|---|
-| `SPRING_PROFILES_ACTIVE=prod` | **EVET — en kritik** | Yoksa base profil çalışır: dev JWT secret + `seed.enabled=true` | `curl -s -u … /actuator/info` yerine log ilk satırı: `The following 1 profile is active: "prod"`. Yoksa **deploy'u durdur.** |
-| `DB_URL` | EVET | `jdbc:postgresql://localhost:5432/zero` (`application.yml:4`) | Başlangıç logunda `HikariPool-1 - Start completed`; `/actuator/health` içinde `"db":{"status":"UP"}` |
-| `DB_USER` | EVET | `zero` (`application.yml:5`) | Aynı health çıktısı; yanlışsa startup'ta `FATAL: password authentication failed` |
-| `DB_PASSWORD` | EVET | `zero` (`application.yml:6`) | Aynı. **Prod'da `zero` görürsen deploy'u durdur.** |
-| `JWT_SECRET` | EVET | `application-prod.yml:5` default **yok** → prod'da eksikse startup patlar (istenen davranış) | Base64 çözümü ≥64 bayt olmalı; kod zorluyor (`JwtService.java:75-90`). Yerel doğrulama: `echo -n "$JWT_SECRET" \| base64 -d \| wc -c` → **≥64** |
-| `REDIS_HOST` | EVET | `localhost` (`application.yml:24`) | `/actuator/health` içinde `"redis":{"status":"UP"}` |
-| `REDIS_PORT` | EVET (6379 değilse) | `6379` — **PROD-R18'de düzeltildi**, artık `${REDIS_PORT:6379}` okunuyor | `/actuator/health` içinde `"redis":{"status":"UP"}` |
-| `MAIL_HOST` | EVET (e-posta gerekiyorsa) | **boş** → `LoggingEmailSender`, e-posta sessizce gönderilmez (`application.yml:15`) | Post-deploy forgot-password smoke (§3.6). Log'da `LoggingEmailSender` görürsen prod'da e-posta YOK |
+| `SPRING_PROFILES_ACTIVE=prod` | **EVET** (imaj varsayılanı zaten `prod`) | Profilsiz boot base config'i kullanır: JWT secret default'u **yok** → uygulama açılmaz (fail-closed), seeding kapalı, cache `simple`, CORS boş | Log ilk satırı: `The following 1 profile is active: "prod"`. Değilse **deploy'u durdur** — `simple` cache ve eksik prod ayarlarıyla koşuyorsun. |
+| `DB_URL` | EVET | `jdbc:postgresql://localhost:5432/zero` (`application.yml`) | Başlangıç logunda `HikariPool-1 - Start completed`; `/actuator/health` içinde `"db":{"status":"UP"}` |
+| `DB_USER` | EVET | `zero` (`application.yml`) | Aynı health çıktısı; yanlışsa startup'ta `FATAL: password authentication failed` |
+| `DB_PASSWORD` | EVET | `zero` (`application.yml`) | Aynı. **Prod'da `zero` görürsen deploy'u durdur.** |
+| `JWT_SECRET` | EVET | `application-prod.yml` default **yok** → prod'da eksikse startup patlar (istenen davranış) | Base64 çözümü ≥64 bayt olmalı; kod zorluyor (`JwtService`). Yerel doğrulama: `echo -n "$JWT_SECRET" \| base64 -d \| wc -c` → **≥64** |
+| `REDIS_HOST` | EVET | `localhost` (`application.yml`) | `/actuator/health` içinde `"redis":{"status":"UP"}` |
+| `REDIS_PORT` | EVET (6379 değilse) | `6379` (`${REDIS_PORT:6379}`) — yönetilen Redis çoğu zaman 6379'da değildir (Azure Cache TLS için 6380) | `/actuator/health` içinde `"redis":{"status":"UP"}` |
+| `MAIL_HOST` | EVET (e-posta gerekiyorsa) | **boş** → `LoggingEmailSender`, e-posta sessizce gönderilmez (`application.yml`) | Post-deploy forgot-password smoke (§3.6). Log'da `LoggingEmailSender` görürsen prod'da e-posta YOK |
 | `MAIL_PORT` | EVET | `1025` (mailpit) | Aynı smoke |
-| `MAIL_USERNAME`/`MAIL_PASSWORD` | EVET (auth isteyen relay ise) | boş — **PROD-R19'da düzeltildi**; ayrıca `MAIL_SMTP_AUTH=true` ve genelde `MAIL_SMTP_STARTTLS=true` gerekir | §3.6 forgot-password smoke; log'da `LoggingEmailSender` görünmemeli |
-| `SEED_ENABLED` | `false` (önerilen) | prod'da zaten `false` (`application-prod.yml:9`) | Deploy sonrası log'da seeding satırı olmamalı |
-| `SEED_ADMIN_PASSWORD` | `SEED_ENABLED=true` ise **zorunlu ve güçlü** | boş; `DataSeeder.java:71-79` prod profilinde boş/dev-default parolada fail-fast | İlk kurulumda bilinçli `true` yap, ilk login sonrası `SEED_ENABLED=false` ile yeniden deploy et |
-| `CORS_ALLOWED_ORIGINS` | **EVET — default YOK** | **PROD-R3'te kapatıldı.** `application-prod.yml` default vermiyor → boşsa startup patlar; boş liste fail-closed, `*` reddedilir | Preflight: listedeki origin `200` + `Access-Control-Allow-Origin`; liste dışı origin `403`. Kanıt: `CorsPolicyIT` (4) |
+| `MAIL_USERNAME`/`MAIL_PASSWORD` | EVET (auth isteyen relay ise) | boş; gerçek relay (SES/SendGrid/Postmark) için ayrıca `MAIL_SMTP_AUTH=true` ve genelde `MAIL_SMTP_STARTTLS=true` gerekir | §3.6 forgot-password smoke; log'da `LoggingEmailSender` görünmemeli |
+| `SEED_ENABLED` | `false` (önerilen) | prod'da zaten `false` (`application-prod.yml`) | Deploy sonrası log'da seeding satırı olmamalı |
+| `SEED_ADMIN_PASSWORD` | `SEED_ENABLED=true` ise **zorunlu ve güçlü** | boş; `DataSeeder` her profilde boş/dev-default parolada fail-fast | İlk kurulumda bilinçli `true` yap, ilk login sonrası `SEED_ENABLED=false` ile yeniden deploy et |
+| `CORS_ALLOWED_ORIGINS` | **EVET — default YOK** | `application-prod.yml` default vermiyor → boşsa startup patlar; boş liste fail-closed, `*` reddedilir | Preflight: listedeki origin `200` + `Access-Control-Allow-Origin`; liste dışı origin `403`. Kanıt: `CorsPolicyIT` (4 test) |
 | `VITE_API_BASE_URL` (frontend build-time) | EVET | `frontend/app/.env.example:1` → `http://localhost:8080` | `dist/assets/*.js` içinde prod API host'u geçmeli: `grep -o 'https://api[^"]*' dist/assets/*.js` |
 
 **Vite değişkenleri build-time'dır** — imaj/dist üretilirken enjekte edilmeli, çalışma anında değiştirilemez.
@@ -57,67 +56,46 @@ echo "$DB_PASSWORD" | grep -cx "zero"                 # beklenen: 0
 gh run list --branch main --limit 1
 ```
 
-### 1.3 Deploy öncesi kapatılması gereken config açıkları
+### 1.3 Güvenlik varsayılanları ve perimeter işleri
 
-> **Durum notu (2026-07-18, hardening kapanış turu).** Bu bölüm ilk denetimde açılan sekiz kalemle
-> yazılmıştı; A–H o günün fotoğrafıdır. Kapanan kalemler **silinmedi**, kapandı olarak işaretlendi:
-> operatörün bir maddeyi "hâlâ açık" sanıp gereksiz manuel önlem alması, kapanmış bir maddeyi
-> görmemesi kadar zararlı. Her satırın karşısında kanıt var; kanıtı olmayan kalem kapalı sayılmadı.
+Bu bölüm iki farklı şeyi ayırır ve karıştırılmamalıdır:
 
-**A — `REDIS_PORT` env'i okunmuyordu** — ✅ **KAPANDI (PROD-R18)**
-`application.yml` artık `port: ${REDIS_PORT:6379}`. Daha önce literal `6379` yazılıydı ve yalnızca
-dev profili override ediyordu; yani `REDIS_PORT` bu runbook'ta *zorunlu değişken* olarak listelenirken
-hiçbir yerde okunmuyordu. Prod cache'i Redis olduğu için (§D) bağlantıya en çok muhtaç olan ortam,
-portunu ayarlayamayan ortamdı.
+- **(a) Kodun zaten garanti ettiği varsayılanlar** — deploy'da *doğrulanır*, kurulmaz. Her birinin
+  arkasında bir test var. Bir tanesi kırmızıysa bu bir **regresyondur**, deploy'u durdurun.
+- **(b) Yalnızca perimeter'de yapılabilecek işler** — uygulama bunları kendi başına yapamaz;
+  her kurulumda **sizin** yapmanız gerekir (§1.3-I, §1.3-J).
 
-**B — SMTP auth desteklenmiyordu** — ✅ **KAPANDI (PROD-R19)**
-`spring.mail.username` / `password` artık env'den okunuyor, `auth` ve `starttls.enable`
-`${MAIL_SMTP_AUTH:false}` / `${MAIL_SMTP_STARTTLS:false}` ile ayarlanabiliyor. Varsayılanlar
-değişmedi, dolayısıyla dev/mailpit ve GreenMail testleri aynen çalışıyor.
-*Kalan risk (kapatılmadı, bilinçli):* `MAIL_HOST` boşsa uygulama **hata vermeden**
-`LoggingEmailSender`'a düşer — şifre sıfırlama sessizce ölür. Prod'da bunun fail-fast olması
-tercih edilirdi; feature freeze kapsamında değiştirilmedi. **Deploy kontrolü: §3.6 smoke zorunlu.**
+#### (a) Doğrulanacak varsayılanlar
 
-**C — CORS yapılandırması yoktu** — ✅ **KAPANDI (PROD-R3)**
-`CorsConfigurationSource` bean'i var, allowlist `zero.cors.allowed-origins` üzerinden geliyor,
-prod'da **default yok** (eksikse startup patlar), boş liste fail-closed, `*` `CorsProperties`
-tarafından reddediliyor, `allowCredentials=false`. Kanıt: `CorsPolicyIT` (4),
-`CorsPropertiesValidationTest`. Canlı: listedeki origin 200, `evil.example.com` 403.
-*Not:* tek origin (proxy arkasında aynı host) hâlâ en basit kurulum — o durumda liste yalnızca
-o host'u içermeli, boş bırakılmamalı.
+| Konu | Garanti | Nerede | Kanıt |
+|---|---|---|---|
+| **JWT secret** | Base config'te default **yok**; sızmış dev anahtarı her profilde reddedilir → profilsiz boot *sessizce güvensiz* değil, **hiç açılmaz** | `application.yml` `zero.jwt.secret: ${JWT_SECRET}` | `JwtService` doğrulaması (≥64 bayt, geçerli base64) |
+| **CORS** | Allowlist `zero.cors.allowed-origins`; prod'da default yok (eksikse startup patlar), boş liste fail-closed, `*` reddedilir, `allowCredentials=false` | `application-prod.yml` | `CorsPolicyIT` (4 test), `CorsPropertiesValidationTest` |
+| **Seeding** | Base config'te `zero.seed.enabled=false`; boş/dev-default parolada **her profilde** fail-fast | `application.yml`, `DataSeeder` | `SeedHardeningIT` |
+| **İzin uzlaştırması** | `reconcile-permissions` seeding kapalıyken de **açık** — yeni sürümde eklenen izinler statik Admin rollerine ulaşır | `application.yml` / `-prod.yml` | `RolePermissionReconciliationIT` |
+| **Prod cache** | `spring.cache.type: ${CACHE_TYPE:redis}` — çok-instance'ta stale feature değeri riskini kapatır | `application-prod.yml` | — (§2.4 rolling ön koşulu) |
+| **OpenAPI/Swagger** | Prod'da `api-docs.enabled=false`; `SecurityConfig` `permitAll`'ı **yalnız** `dev`/`test` profilinde verir → profilsiz boot'ta da kapalı | `application-prod.yml`, `SecurityConfig` | `ApiDocsExposureIT` (2), `ProdApiDocsExposureIT` (5), `DefaultProfileApiDocsExposureIT` (4) |
+| **Actuator yetkisi** | `/actuator/health/**` anonim (probe'lar); **geri kalan her şey** `settings.host.manage` ister — kimlik değil **yetki** kapısı | `SecurityConfig` | `ActuatorExposureIT` (5) |
+| **Gövde sınırı (uygulama)** | `zero.request.max-body-bytes` = 1 MB, `/api/**`; aşan istek gövde okunmadan `413` | `application.yml` | `RequestBodyLimitIT`, `RequestBodyLimitLayeringIT` |
+| **Anonim uç sınırı** | `zero.ratelimit.max-body-bytes` = 16 KB, beş anonim uçta; global sınırdan bağımsız ve daha sıkı | `application.yml` | `RateLimitMediaTypeFailClosedIT` |
+| **İmaj varsayılanı** | `SPRING_PROFILES_ACTIVE=prod`, heap tavanı, readiness `HEALTHCHECK`, `exec` ile PID 1 (SIGTERM alır) | `backend/Dockerfile` | — (§3.2 ile doğrula) |
+| **Readiness kapsamı** | `readinessState` + **`db`**; redis/mail bilerek dışarıda | `application.yml` | `HealthProbeContractIT` |
 
-**D — `spring.cache.type` prod'da `redis` değildi** — ✅ **KAPANDI (PROD-R7)**
-`application-prod.yml` → `spring.cache.type: ${CACHE_TYPE:redis}`. Çok-instance'ta stale feature
-değeri riski (**F5-R2**) kapandı.
+**Neden actuator'da yetki kapısı var:** anonim `401` herkesin kontrol ettiği durumdur, ama sıfır
+izinli bir **tenant kullanıcısı** `/actuator/prometheus`'tan heap/JVM durumunu, tüm route isimlerini,
+istek sayaçlarını ve *hangi korumaların devrede olduğunu* sayan metrikleri okuyabilirdi. Kapı bu
+yüzden `settings.host.manage`'e bağlı. Üç durumu birden doğrulayın: §3.3.
 
-**E — Swagger/OpenAPI prod'da public'ti** — ✅ **KAPANDI (B6 + C5)**
-İki kilit: prod'da `springdoc.api-docs.enabled=false`, ve `SecurityConfig` `permitAll`'ı yalnızca
-`dev`/`test` profillerinde veriyor. Kapı "prod değilse aç" idi ve **profilsiz boot'ta açık**
-kalıyordu; yön tersine çevrildi. Kanıt: `ApiDocsExposureIT`, `ProdApiDocsExposureIT`,
-`DefaultProfileApiDocsExposureIT`. Canlı: profilsiz boot'ta `/v3/api-docs` → 401.
+**Bilinçli olarak kapatılmamış tek kalem — sessiz e-posta:** `MAIL_HOST` boşsa uygulama **hata
+vermeden** `LoggingEmailSender`'a düşer; şifre sıfırlama sessizce ölür. Prod'da fail-fast tercih
+edilirdi. Telafisi operasyoneldir: **§3.6 forgot-password smoke'u her deploy'da zorunludur.**
 
-**F — `/actuator/prometheus` kimlik doğrulama istiyor** — ⚙️ **DAVRANIŞ DEĞİŞTİ (PROD-R17)**
-Artık yalnız kimlik doğrulama değil, **yetki** de istiyor: `settings.host.manage` (host-only).
-Bunun sebebi kapanış smoke'unda ölçülen şuydu — anonim 401 alıyordu (herkesin kontrol ettiği
-durum), ama **sıfır izinli bir tenant kullanıcısı 200 alıyordu**: heap/JVM durumu, tüm route
-isimleri, istek sayaçları ve `spring.security.filterchains.RateLimitFilter.*` gibi *hangi
-korumaların devrede olduğunu* sayan metrikler. `/actuator/health/**` bilerek anonim kaldı (probe'lar).
-Scrape kurulumu için §1.3-J ve §3.3.
+**`docker-compose.yml` uygulamayı ayağa kaldırmaz:** yalnız `postgres` / `redis` / `mailpit`
+(dev bağımlılıkları) içerir. Prod compose'unu ayrı bir dosya olarak tutun.
 
-**G — Dockerfile'da profil, healthcheck ve heap sınırı yoktu** — ✅ **KAPANDI (PROD-R20)**
-`ENV SPRING_PROFILES_ACTIVE=prod`, `ENV JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"`,
-readiness üzerinden `HEALTHCHECK`, ve `exec` ile shell-form entrypoint (JAVA_OPTS genişlesin, JVM
-PID 1 kalıp SIGTERM'i alsın diye).
-*Düzeltme notu:* bu madde eskiden "profil verilmezse dev JWT secret ile prod'a çıkılır" diyordu.
-**Bu artık doğru değil** — PROD-R1'den beri base config'te JWT secret'ın default'u yok ve sızmış dev
-anahtarı her profilde reddediliyor, yani profilsiz boot *sessizce güvensiz* değil, **hiç açılmıyor**.
-Yine de imajın kendi varsayılanının doğru olması gerekiyordu.
+#### (b) Perimeter işleri
 
-**H — `docker-compose.yml` uygulama servisi içermiyor**
-Sadece `postgres` / `redis` / `mailpit` var (dev bağımlılıkları). `docker compose up` **uygulamayı
-ayağa kaldırmaz**. Prod compose'u ayrı bir dosya olarak tutun (§2.3).
-
-**I — Reverse proxy'de gövde (body) sınırı ayarlanmamış (F1 — asıl kontrol burada)**
+**I — Reverse proxy'de gövde (body) sınırı — asıl kontrol burada**
 
 Uygulama tarafında **savunma derinliği** olarak global bir sınır var:
 `zero.request.max-body-bytes` (varsayılan **1 MB**, `RequestSizeLimitFilter`, `/api/**`).
@@ -145,7 +123,8 @@ server {
 
     location /api/ {
         proxy_pass http://backend;
-        # PROD-R4 / B3 ile ayni guven siniri: istemcinin yolladigi X-Forwarded-* EZILMELI.
+        # Guven siniri: istemcinin yolladigi X-Forwarded-* EZILMELI (uygulama
+        # forward-headers-strategy=framework ile bu basliklara guveniyor).
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header Host              $host;
@@ -161,7 +140,7 @@ placeholder'dan sürer:
 | Uygulama (global) | `zero.request.max-body-bytes` ← `REQUEST_MAX_BODY_BYTES` | 1048576 |
 | Uygulama (multipart) | `spring.servlet.multipart.max-request-size` ← `REQUEST_MAX_BODY_BYTES` | 1048576 |
 
-Anonim uçlardaki **16 KB**'lık sınır (`zero.ratelimit.max-body-bytes`, B2) bundan bağımsızdır ve
+Anonim uçlardaki **16 KB**'lık sınır (`zero.ratelimit.max-body-bytes`) bundan bağımsızdır ve
 daha sıkı olduğu için o beş yolda kazanan odur — global sınırı yükseltmek onu gevşetmez.
 
 *Doğrulama (deploy sonrası, §3'e ek):*
@@ -174,7 +153,7 @@ curl -s -o /dev/stderr -w '%{http_code}\n' -X POST "$BASE/api/users" \
 # beklenen: 413 ; uygulama katmani cevap verdiyse govdede "PAYLOAD_TOO_LARGE" gecer
 ```
 
-**J — `/actuator/**` perimeter'de kapatılmalı; scrape iki yoldan biriyle kurulur (PROD-R17)**
+**J — `/actuator/**` perimeter'de kapatılmalı; scrape iki yoldan biriyle kurulur**
 
 Uygulama katmanı artık `/actuator/health/**` dışındaki her şey için `settings.host.manage`
 istiyor. Bu **yetkilendirme** boşluğunu kapatır ama **erişilebilirliği** kapatmaz: endpoint hâlâ
@@ -196,8 +175,8 @@ location ^~ /actuator/               { return 404; }
 | **1. Özel ağ** (önerilen) | Prometheus'u backend'e **proxy'yi atlayarak** ulaştır (aynı VPC/namespace, `backend:8080/actuator/prometheus`) ve host rolüne sahip bir servis hesabının token'ıyla scrape et | Kubernetes / özel ağ varsa |
 | **2. Host servis hesabı** | `settings.host.manage` içeren bir host kullanıcısı aç, sadece scrape için kullan; Prometheus `authorization: {type: Bearer, credentials: <token>}` | Tek makine / proxy dışında yol yoksa |
 
-*Bilinen kısıt (kabul edilmiş):* access token 15 dakikada bir yenilenmeli (PROD-R16: rotasyon/
-revocation yok), yani 2. yol scrape tarafında bir token tazeleyici gerektirir. Uzun vadeli
+*Bilinen kısıt (kabul edilmiş):* access token TTL'i 15 dakikadır ve iptal/rotasyon mekanizması yok,
+yani 2. yol scrape tarafında bir token tazeleyici gerektirir. Uzun vadeli
 doğru çözüm `management.server.port`'u ayrı bir porta almak ve o portu **hiç yayınlamamaktır**;
 o durumda ana security chain o porta uygulanmaz, koruma tamamen ağ katmanına geçer — bu yüzden
 port yayınlanırsa açık bir regresyondur.
@@ -224,7 +203,7 @@ docker tag zero-platform:$REL zero-platform:latest
 ```
 Beklenen: `BUILD SUCCESS` + son satır `naming to docker.io/library/zero-platform:<REL>`.
 
-> Not: `Dockerfile:9` `package -DskipTests` ile build ediyor — **imaj testleri koşmaz.**
+> Not: `Dockerfile` build asamasinda `package -DskipTests` kosuyor — **imaj testleri koşmaz.**
 > Kalite kapısı CI'dır (`.github/workflows/ci.yml`); imaj build'i yalnız CI yeşilken yapın.
 
 ### 2.2 Frontend build
@@ -242,8 +221,10 @@ grep -o 'https://api[^"]*' dist/assets/*.js | head -1   # prod host gectigini do
 
 ### 2.3 DB migration stratejisi
 
-**Mevcut durum:** `application.yml:10` `spring.flyway.enabled: true` → migration **uygulama
-başlangıcında** çalışıyor. Migration'lar: `V1__baseline` … `V5__shedlock` (`backend/src/main/resources/db/migration/`).
+**Mevcut durum:** `spring.flyway.enabled: true` → migration **uygulama başlangıcında** çalışıyor.
+Migration'lar `backend/src/main/resources/db/migration/` altındadır; deploy edilecek sürümdeki
+listeyi doğrudan oradan okuyun (`ls backend/src/main/resources/db/migration/`) — sürüm notunda
+(§7) hangi `V<n>` dosyalarının **yeni** olduğu yazılmalıdır.
 
 **Öneri — tek-instance (bugünkü kurulum): uygulama başında Flyway'de kalın.**
 Basit, ek işletme yükü yok. Flyway PostgreSQL advisory lock kullandığı için eşzamanlı iki instance'ta
@@ -285,7 +266,7 @@ Beklenen kesinti: ~20-40 sn (Flyway + Spring başlangıcı).
 2. Readiness bekle (§2.5), smoke koş (§3).
 3. LB'de `app-b`'yi ekle, `app-a`'yı drain et (mevcut istekleri bitir).
 4. `app-a`'yı yeni imajla değiştir, aynı döngü.
-Ön koşul: §1.3-D (Redis cache) kapalı olmalı, yoksa iki instance farklı feature değeri görür.
+Ön koşul: prod cache'i Redis olmalı (§1.3-a), yoksa iki instance farklı feature değeri görür.
 
 ### 2.5 Readiness bekleme
 
@@ -306,7 +287,7 @@ Her adım **beklenen sonucu** ile birlikte; biri kırmızıysa §4 rollback kara
 
 ### 3.1 Liveness / readiness
 
-**Üç ucun rolü ayrıdır — LB/probe'u yanlış olana bağlamak kesinti üretir (PROD-R29).**
+**Üç ucun rolü ayrıdır — LB/probe'u yanlış olana bağlamak kesinti üretir.**
 
 | Uç | Ne sorar | İçerik | Nereye bağlanır |
 |---|---|---|---|
@@ -321,7 +302,7 @@ curl -s -o /dev/null -w 'readiness=%{http_code}\n' localhost:8080/actuator/healt
 curl -s -H "Authorization: Bearer $HOST_TOKEN" localhost:8080/actuator/health | jq .
 ```
 Beklenen: `readiness=200`; tam tabloda `{"status":"UP","components":{"db":{"status":"UP"},"redis":{"status":"UP"},…}}`.
-`redis` DOWN ise → §5.2 (uygulama servis etmeye **devam eder**, cache bypass + WARN — PROD-R13).
+`redis` DOWN ise → §5.2 (uygulama servis etmeye **devam eder**: `CacheErrorHandler` cache'i bypass edip WARN yazar).
 `db` DOWN ise → §5.1 (readiness de DOWN olur, pod rotasyondan çıkar — istenen davranış).
 
 **`mail` bu listede yok, kasıtlı:** health indicator'ı kapalı (`management.health.mail.enabled: false`).
@@ -334,7 +315,12 @@ smoke'u** ile doğrulanır.
 docker logs zero-app 2>&1 | grep -m1 "profile is active"
 ```
 Beklenen: `The following 1 profile is active: "prod"`.
-**`prod` değilse: derhal durdur** — dev JWT secret ve `seed.enabled=true` ile çalışıyorsun.
+
+**`prod` değilse: derhal durdur.** Gerekçe *dev secret sızıntısı değildir* — base config'te JWT
+secret'ın default'u yok, o yüzden yanlış profille açılan bir uygulama zaten *sessizce güvensiz*
+olamaz. Asıl risk sessiz **yapılandırma** kaymasıdır: `dev`/`test` profili Swagger'ı public açar
+ve seeding'i geri açar; profilsiz boot ise cache'i `simple`'a düşürür (çok-instance'ta stale
+feature değeri) ve prod'a özgü havuz boyutlarını uygulamaz.
 
 ### 3.3 Prometheus erişimi
 ```bash
@@ -342,7 +328,7 @@ curl -s -o /dev/null -w '%{http_code}\n' localhost:8080/actuator/prometheus
 ```
 Beklenen: **`401`** (kimliksiz). Kurulum §1.3-J'de.
 
-**Üç durumu birden doğrula — ikisi geçip biri kalırsa açık kapanmamıştır (PROD-R17):**
+**Üç durumu birden doğrula — ikisi geçip biri kalırsa açık kapanmamıştır:**
 ```bash
 # 1) Kimliksiz -> 401
 curl -s -o /dev/null -w 'anon=%{http_code}\n' "$BASE/actuator/prometheus"
@@ -358,7 +344,7 @@ curl -s -H "Authorization: Bearer $HOST_TOKEN" "$BASE/actuator/prometheus" | hea
 # 4) Probe'lar kimliksiz calismaya devam etmeli (yoksa pod hic ready olmaz)
 curl -s -o /dev/null -w 'readiness=%{http_code}\n' "$BASE/actuator/health/readiness"
 ```
-Beklenen: `anon=401`, `tenant=403`, host `200`, `readiness=200`. Kanıt: `ActuatorExposureIT` (5).
+Beklenen: `anon=401`, `tenant=403`, host `200`, `readiness=200`. Kanıt: `ActuatorExposureIT` (5 test).
 
 ### 3.4 Login smoke (host admin)
 ```bash
@@ -369,8 +355,29 @@ TOKEN=$(curl -s -X POST localhost:8080/api/auth/login \
 
 curl -s localhost:8080/api/users/me -H "Authorization: Bearer $TOKEN" | jq '.permissions | length'
 ```
-Beklenen: `LOGIN OK`; host admin izin sayısı **22** (F5-A canlı kanıtı, QUALITY-GATES-RESULTS.md).
-Sayı düşükse (ör. 17) → **F5-R9 nüksü**: izin uzlaştırması çalışmamış. Bloker; §4'e git.
+Beklenen: `LOGIN OK`.
+
+**İzin sayısı kontrolü — sabit bir sayı beklemeyin, kodla karşılaştırın.** Host admin, tanımlı
+**tüm** izinleri (host-only olanlar dahil) taşımalıdır; doğru sayı sürümden sürüme değişir, o yüzden
+beklenen değeri kaynaktan üretin:
+
+Otorite `AppPermissions.all()`'dur — seeder host admin rolünü **tam olarak** o kümeye eşitler:
+
+```bash
+# Beklenen = AppPermissions.all() icindeki sabit sayisi
+EXPECTED=$(sed -n '/Set<String> all()/,/);/p' \
+  backend/src/main/java/com/mycompanyname/zero/identity/domain/AppPermissions.java \
+  | grep -oE '\b[A-Z][A-Z0-9_]+\b' | sort -u | wc -l)
+ACTUAL=$(curl -s localhost:8080/api/users/me -H "Authorization: Bearer $TOKEN" | jq '.permissions | length')
+echo "expected=$EXPECTED actual=$ACTUAL"
+```
+
+Eşit değilse — özellikle `actual < expected` ise — **izin uzlaştırması çalışmamıştır**: yeni sürümde
+eklenen izinler mevcut statik `Admin` rollerine ulaşmamış demektir (`zero.seed.reconcile-permissions`
+prod'da açık olmalı; seeding kapalıyken de çalışır). Bloker; §4'e git.
+
+Ayrıca **tenant** admin'in host-only izinleri (`settings.host.manage`, `tenants.manage`,
+`languages.manage`, SaaS grubunun tamamı) **görmemesi** gerekir — tersi bir yetki sızıntısıdır.
 
 ### 3.5 Tenant izolasyon negatifi (GÜVENLİK — atlanamaz)
 ```bash
@@ -397,17 +404,25 @@ curl -s -H "Authorization: Bearer $TOKEN" localhost:8080/api/editions | jq 'leng
 curl -s -H "Authorization: Bearer $T_TOKEN" localhost:8080/api/users/me | jq '.subscription'
 ```
 Beklenen: edition listesi dolu; tenant `/me` **yalnızca kendi aboneliğini** döner
-(status + currentPeriodEndAt). Feature limiti doğrulaması (Slice B'den sonra):
-plan limitini aşan bir kullanıcı oluşturma denemesi **403/400** dönmeli.
+(status + currentPeriodEndAt). Feature limiti doğrulaması: plan limitini aşan bir kullanıcı
+oluşturma denemesi **403/400** dönmeli (kanıt: `FeatureEnforcementIT`, `MaxUserCountIT`,
+`SubscriptionGuardIT`).
 
-> **Varsayım:** feature enforcement / subscription guard uçları Slice B ile geliyor; kesin
-> endpoint ve hata kodu Slice B kapanışında bu bölüme yazılmalı.
+**E-posta gönderimi (atlanmayın — sessiz arıza sınıfı):** bir forgot-password isteği tetikleyin ve
+log'da `LoggingEmailSender` **görünmediğini** doğrulayın. Görünüyorsa `MAIL_HOST` boştur ve prod'da
+şifre sıfırlama/e-posta onayı **hiç çalışmıyordur** (uygulama hata vermez).
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -X POST localhost:8080/api/account/forgot-password \
+  -H 'Content-Type: application/json' -d '{"email":"<gercek_kullanici_epostasi>"}'
+docker logs --since 2m zero-app 2>&1 | grep -c "LoggingEmailSender"   # beklenen: 0
+```
 
 ### 3.7 Frontend smoke
 Tarayıcıda prod URL → login → kullanıcı listesi. DevTools Network'te **CORS hatası olmamalı**
-(§1.3-C). Console'da 401 döngüsü olmamalı (refresh singleflight çalışıyor olmalı).
+(allowlist §1.1 `CORS_ALLOWED_ORIGINS`). Console'da 401 döngüsü olmamalı (refresh singleflight
+çalışıyor olmalı).
 
-### 3.8 Lifecycle job (Slice B)
+### 3.8 Lifecycle job
 ```bash
 docker exec -it zero-postgres psql -U zero -d zero -c "select * from shedlock;"
 ```
@@ -444,7 +459,7 @@ Bu surumde YENI migration var mi?
     │   ├── EVET (yeni kolonlar nullable / default'lu, eski kod onlari bilmiyor ama sema onu kirmiyor)
     │   │   └── Guvenli. Imaji geri al, SEMAYI GERI ALMA. Yeni kolonlar
     │   │       kullanilmadan durur; sonraki ileri deploy'da devreye girer.
-    │   │       (ornek: V5__shedlock — saf ekleme, eski surum tabloyu hic gormez)
+    │   │       (tipik ornek: yeni bir tablo ekleyen migration — eski surum tabloyu hic gormez)
     │   └── HAYIR (yeni kolon NOT NULL default'suz → eski kodun INSERT'leri patlar)
     │       └── RISKLI. Once kolonu nullable yap (yeni migration), sonra imaji geri al.
     │
@@ -493,14 +508,15 @@ Bu surumde YENI migration var mi?
 *Belirti:* health `redis: DOWN`. **Etki:** impersonation token store (`ImpersonationTokenStore`) ve
 SaaS feature cache Redis'e dayanıyor → impersonation kırılır; feature çözümü cache'siz kalır.
 1. `docker exec zero-redis redis-cli ping` → `PONG` bekleniyor.
-2. `PONG` geliyor ama app DOWN diyorsa → **§1.3-A**: `REDIS_PORT` env okunmuyor, app 6379'a gidiyor.
-   İlk müdahale: Redis'i 6379'da yayınla ya da `spring.data.redis.port` prod yml'de düzelt.
+2. `PONG` geliyor ama app DOWN diyorsa → adres/port uyuşmazlığı: `REDIS_HOST`/`REDIS_PORT` set
+   edilmemişse uygulama `localhost:6379`'a gider. Yönetilen Redis çoğu zaman 6379'da değildir.
+   İlk müdahale: doğru `REDIS_HOST`/`REDIS_PORT` ile yeniden başlat.
 3. Redis gerçekten çökmüşse: yeniden başlat. Cache kaybı zararsız (yeniden ısınır);
    **impersonation oturumları düşer** — beklenen davranış, kullanıcıya bildir.
 
 ### 5.4 Senaryo 3 — JWT secret yanlış
 *Belirti A:* startup patlıyor → `zero.jwt.secret must decode to at least 64 bytes` /
-`must be valid base64` (`JwtService.java:83-89`). → Secret'ı düzelt, yeniden başlat.
+`must be valid base64` (`JwtService`). → Secret'ı düzelt, yeniden başlat.
 *Belirti B:* uygulama ayakta ama **tüm authenticated istekler 401**, login token üretiyor.
 Sebep: secret deploy'lar arası değişti → eski token'lar doğrulanamıyor.
 1. Bilinçli rotasyon mu? Evet ise: bu **beklenen** — tüm kullanıcılar yeniden login olmalı, duyur.
@@ -529,8 +545,8 @@ Sebep: secret deploy'lar arası değişti → eski token'lar doğrulanamıyor.
    docker exec -it zero-postgres psql -U zero -d zero -c "select * from shedlock;"
    ```
 2. `lock_until` **gelecekte** ve `locked_by` artık yaşamayan bir instance ise → kilit takılmış
-   (job crash etti, lock süresi dolmadı). `lock_at_most_for` varsayılanı **PT10M**
-   (`SchedulingConfig.java:30`) → normalde 10 dk içinde kendiliğinden serbest kalır.
+   (job crash etti, lock süresi dolmadı). `zero.saas.lifecycle.lock-at-most-for` varsayılanı
+   **PT10M** → normalde 10 dk içinde kendiliğinden serbest kalır.
 3. **Önce 10 dk bekle.** Kalıcı takılıysa ve iş kritikse, DB/Infra onayıyla:
    ```sql
    -- SADECE ilgili instance'in olu oldugu dogrulandiktan sonra:
@@ -603,15 +619,24 @@ Sebep: secret deploy'lar arası değişti → eski token'lar doğrulanamıyor.
 
 ---
 
-## Ek — açık bloker özeti (deploy öncesi kapatılmalı)
+## Ek — her deploy'da doğrulanacak kısa liste
 
-| # | Konu | Kanıt | Şiddet |
-|---|---|---|---|
-| G | `SPRING_PROFILES_ACTIVE` imajda set değil → dev JWT secret + seed açık | `Dockerfile:22`, `application.yml:34,39` | **Kritik** |
-| C | CORS yapılandırması hiç yok | `SecurityConfig.java:42-59` | **Kritik** (ayrı origin ise) |
-| A | `REDIS_PORT` env okunmuyor | `application.yml:25` | **Yüksek** (6379 dışında ise) |
-| B | SMTP auth desteklenmiyor; `MAIL_HOST` boşsa sessiz no-op | `application.yml:15-17` | **Yüksek** |
-| E | Swagger/OpenAPI prod'da public | `SecurityConfig.java:50` | **Orta** |
-| D | `spring.cache.type` prod'da `redis` değil (F5-R2) | `application.yml:12`, `application-prod.yml` | **Orta** (rolling'de Yüksek) |
-| F | `/actuator/prometheus` 401 → scrape çalışmaz | `application.yml:42` + `SecurityConfig.java:50` | **Orta** |
-| H | `docker-compose.yml` app servisi içermiyor | `docker-compose.yml:1-40` | **Düşük** (işletme netliği) |
+Bu tablo §1.3'ün özetidir; ikisi çeliştiğinde **kod otoritedir** — doğrulama komutunu koşun.
+
+| Konu | Beklenen | Nerede |
+|---|---|---|
+| Aktif profil | log'da `profile is active: "prod"` | §3.2 |
+| CORS allowlist | listedeki origin 200, liste dışı 403 | §1.1, §3.7 |
+| Actuator yüzeyi | anon 401 · tenant 403 · host 200 · readiness 200 | §3.3 |
+| OpenAPI | prod'da `/v3/api-docs` erişilemez | §1.3-a |
+| Tenant izolasyonu | host-only uçta tenant token'ı → 403, çapraz-tenant veri yok | §3.5 |
+| İzin uzlaştırması | host admin izin sayısı = kaynaktaki tanım sayısı | §3.4 |
+| E-posta | `LoggingEmailSender` log'da **yok** | §3.6 |
+| Gövde sınırı | 1 MB üstü gövde → 413 (ProblemDetail) | §1.3-I |
+| Perimeter | `/actuator/**` dışarıdan 404, `/actuator/health` açık | §1.3-J |
+
+**Kalıcı, kapatılmamış kalemler (bilinçli tasarım tercihi — her sürümde geçerli):**
+- `MAIL_HOST` boşsa e-posta **sessizce** gönderilmez (fail-fast değil) → telafisi §3.6 smoke'udur.
+- Access token TTL'i (≤15 dk) boyunca iptal edilemez (jti denylist yok) → §1.3-J scrape kısıtı,
+  ADR-0004 "Sonuçlar".
+- `docker-compose.yml` yalnız dev bağımlılıklarını ayağa kaldırır; prod compose'u ayrı tutulur.

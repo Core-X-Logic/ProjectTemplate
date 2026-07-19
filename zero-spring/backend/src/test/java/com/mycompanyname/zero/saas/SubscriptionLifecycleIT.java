@@ -14,7 +14,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * F5 Slice B proof for the scheduled lifecycle (CONTRACT-phase5 Slice B, F5-ARCHITECTURE §3 S6-S10).
+ * Covers the scheduled lifecycle (transition-table rows S6-S10).
  *
  * <p>Time is moved with the injected {@link MutableClock} rather than by back-dating rows: that way
  * the production selection queries, the guard and the event trail are all exercised exactly as they
@@ -86,9 +86,9 @@ class SubscriptionLifecycleIT extends AbstractSaasIT {
     }
 
     /**
-     * The asymmetry the source system had (F5-SAAS-INVENTORY §3, K9): its domain gave trials no
-     * grace, but its worker's pre-filter granted one anyway. Here the edition offers a generous
-     * grace window and the trial must still expire outright.
+     * A trial must never enter the grace window, even when its edition offers a generous one.
+     * Granting grace in the job's pre-filter while the domain denies it is a divergence that shows
+     * up as trials living longer than they should.
      */
     @Test
     void anElapsedTrialExpiresWithoutEverEnteringGrace() {

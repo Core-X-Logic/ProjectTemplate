@@ -67,7 +67,8 @@ public class SubscriptionController {
     /**
      * Upgrade/downgrade (S13). Host-only like every other write: a tenant requesting an upgrade goes
      * through this route on its behalf, and the tenant can never move itself onto a package it has
-     * not paid for (F5-R3). The pro-rated amount is returned; collecting it is Slice C.
+     * not paid for. The pro-rated amount is returned; collecting it is up to the application.
+     * See ARCHITECTURE-RULES.md — "Tenant kendi limitini yükseltemez".
      */
     @PostMapping("/{tenantId}/change-edition")
     @PreAuthorize("hasAuthority('" + SaasPermissions.SUBSCRIPTIONS_MANAGE + "')")

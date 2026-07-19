@@ -18,7 +18,7 @@ import java.time.Instant;
  * (including the initial provisioning, where {@code fromStatus} is {@code null}).
  *
  * <p>Kept as a domain record independent of the {@code audit} module so it stays queryable as
- * business data rather than as generic entity history (F5-ARCHITECTURE §9).
+ * business data rather than as generic entity history.
  */
 @Entity
 @Table(name = "subscription_events")

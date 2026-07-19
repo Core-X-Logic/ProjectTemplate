@@ -21,7 +21,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
  *
  * <p>Three gates run here, in order: the tenant must exist (400 {@code TENANT_UNKNOWN}), it must be
  * active (403 {@code FORBIDDEN}), and — when a {@link TenantAccessCheck} is wired — its subscription
- * must permit the requested path (403 {@code SUBSCRIPTION_INVALID}, F5-ARCHITECTURE §7.1). Host
+ * must permit the requested path (403 {@code SUBSCRIPTION_INVALID}). Host
  * requests carry no tenant header and are never subject to any of them.
  */
 public class TenantResolverFilter extends OncePerRequestFilter {

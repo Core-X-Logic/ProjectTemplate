@@ -7,7 +7,8 @@ package com.mycompanyname.zero.saas;
  *
  * <p>Both caches are invalidated eagerly rather than expired: every write that can change a resolved
  * feature value (edition feature, tenant override, package assignment) or a subscription status
- * evicts them in full (F5-R2). The TTL configured for Redis is only a safety net.
+ * evicts them in full. The TTL configured for Redis is only a safety net. See
+ * ARCHITECTURE-RULES.md — "Feature ve abonelik cache'i yazmadan sonra bayat kalmamalı".
  */
 public final class SaasCaches {
 
@@ -17,7 +18,7 @@ public final class SaasCaches {
      */
     public static final String FEATURES = "features";
 
-    /** Subscription validity per tenant, entry key {@code tenantId} (F5-ARCHITECTURE §7.1). */
+    /** Subscription validity per tenant, entry key {@code tenantId}. */
     public static final String SUBSCRIPTION_VALIDITY = "subscription-validity";
 
     private SaasCaches() {

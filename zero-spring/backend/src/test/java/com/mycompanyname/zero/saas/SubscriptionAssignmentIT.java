@@ -13,9 +13,9 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * F5 Slice A proof for package assignment (CONTRACT-phase5 A.4).
+ * Covers package assignment.
  *
- * <p>Three things are asserted that the source system got wrong: a tenant is never left without a
+ * <p>Three easily-broken guarantees are asserted: a tenant is never left without a
  * subscription (the {@code TenantCreated} listener provisions one in the same transaction), the
  * price is <em>snapshotted</em> so later catalogue edits cannot change what an existing subscriber
  * pays (ADR-0012), and a paid package waits in {@code PENDING_PAYMENT} until the server activates it

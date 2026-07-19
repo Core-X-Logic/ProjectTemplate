@@ -15,8 +15,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * F5 Slice B proof for {@code @RequiresFeature} and for the cache behind it
- * (CONTRACT-phase5 Slice B; F5-ARCHITECTURE §6, F5-R2).
+ * Covers {@code @RequiresFeature} and the feature cache behind it.
  *
  * <p>The gate is exercised against a <em>real</em> production route — the organization-unit
  * controller carries {@code @RequiresFeature(app.organizationUnits)} — rather than a fixture
@@ -26,7 +25,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * feature-listing API. That distinction is deliberate: the admin listing reads each level of the
  * chain directly (it has to, so the editor can show what masks what), so it would pass even with a
  * completely stale cache. Only the gated route exercises the cached resolution path, which is what
- * F5-R2 is about.
+ * the cache-invalidation rule is about (see ARCHITECTURE-RULES.md — "Feature ve abonelik cache'i
+ * yazmadan sonra bayat kalmamalı").
  *
  * <p>The {@code default} tenant is shared with the rest of the suite, so teardown always restores
  * both the tenant override and the seeded {@code Standard} package.
@@ -76,7 +76,7 @@ class FeatureEnforcementIT extends AbstractSaasIT {
 
         setTenantFeature(tenantId, ORGANIZATION_UNITS, "true");
         assertThat(callGatedRoute().getStatusCode())
-                .as("the override write must evict the feature cache (F5-R2), otherwise the tenant "
+                .as("the override write must evict the feature cache, otherwise the tenant "
                         + "stays locked out of what it was just granted")
                 .isEqualTo(HttpStatus.OK);
 
@@ -117,7 +117,7 @@ class FeatureEnforcementIT extends AbstractSaasIT {
 
         assignEditionOk(tenantId, fullEditionId, null, false);
         assertThat(callGatedRoute().getStatusCode())
-                .as("package assignment is the third eviction path F5-R2 requires")
+                .as("package assignment is the third path that must evict the feature cache")
                 .isEqualTo(HttpStatus.OK);
     }
 

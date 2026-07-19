@@ -2,12 +2,11 @@
 
 - **Durum:** Accepted
 - **Tarih:** 2026-07-17
-- **Faz:** F2
 
 ## Bağlam
 
-ABP EntityHistory (`AbpEntityChanges`/`AbpEntityPropertyChanges`) değişiklik geçmişi tutuyor (kaynakta
-`IsEnabled=false` ama şema var). Spring'de iki seçenek: Hibernate Envers (`@Audited`) veya custom listener.
+Yönetim panelinde "bu kaydı kim, ne zaman, neyi değiştirdi" sorusunun cevabı gerekiyor. İki seçenek
+var: Hibernate Envers (`@Audited`) veya kendi event listener'ımız.
 
 ## Karar
 
@@ -17,14 +16,14 @@ User, Tenant).
 
 ## Gerekçe
 
-- **Flyway + `ddl-auto=validate` uyumu:** Envers `_aud` + `revinfo` tablolarını da validate eder;
-  bunları elle Flyway'e yazmak külfetli ve kırılgan. Custom şema bizim kontrolümüzde, ABP paritesine yakın.
-- ABP'nin `AbpEntityChanges` şemasına birebir yakın veri modeli → migration ve raporlama kolay.
+- **Flyway + `ddl-auto=validate` uyumu (belirleyici gerekçe):** Envers kendi `_aud` + `revinfo`
+  tablolarını üretir ve `validate` bunları da denetler; şemanın tek kaynağı SQL olduğu için (ADR-0002)
+  bu tabloları elle Flyway'e yazmak gerekir — külfetli ve kırılgan. Custom şema bizim kontrolümüzde.
 - Tenant/user bağlamını (`CurrentUser`) doğrudan enjekte edebiliriz; Envers'te ek `RevisionListener` gerekir.
 
 ## Sonuçlar
 
-- (+) Flyway-dostu, validate ile çakışmaz.
-- (+) Parity: eski/yeni değer + kim + ne zaman, ABP alan yapısına yakın.
+- (+) Flyway-dostu, `validate` ile çakışmaz.
+- (+) Kayıt başına eski/yeni değer + kim + ne zaman.
 - (−) Envers'in hazır sorgulama API'si yok; raporlama endpoint'i elle yazılır (kabul).
-- (−) Listener'da sonsuz döngü (audit entity'lerini izleme) engeli gerekir — test kapsamında.
+- (−) Listener'da sonsuz döngü (audit entity'lerinin kendilerini izlemesi) engellenmeli — `EntityHistoryIT` kapsamında.

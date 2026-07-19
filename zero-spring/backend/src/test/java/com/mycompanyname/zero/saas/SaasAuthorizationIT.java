@@ -15,8 +15,10 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * F5 Slice A negative-authorization proof (CONTRACT-phase5 A.3/A.4), following the
- * {@code TenantEscalationIT} pattern.
+ * Negative-authorization coverage for every SaaS route, following the {@code TenantEscalationIT}
+ * pattern. SaaS entities carry no tenant {@code @Filter}, so the permission check is the only thing
+ * preventing cross-tenant access — every SaaS endpoint needs a negative test here (see
+ * ARCHITECTURE-RULES.md — "Tenant kendi limitini yükseltemez").
  *
  * <p>Every SaaS route is {@code Side.HOST}, so the seeder withholds those permissions from the
  * tenant Admin role and a tenant admin — the most privileged tenant-side principal there is — is

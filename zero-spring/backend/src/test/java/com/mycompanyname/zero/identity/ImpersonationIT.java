@@ -17,7 +17,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Phase 2 parity proof for impersonation (CONTRACT-phase2 §4.6).
+ * End-to-end coverage of impersonation.
  *
  * <p>A host user impersonates a tenant user: a one-time token is exchanged for a token pair whose
  * JWT carries the {@code act} (actor) claim. Verifies: the actor claim identifies the real user,

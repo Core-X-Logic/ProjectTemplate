@@ -2,11 +2,11 @@
 
 - **Durum:** Accepted
 - **Tarih:** 2026-07-17
-- **Faz:** Genel
 
 ## Bağlam
 
-Kaynak sistem SQL Server + EF Core migration kullanıyor. Hedef veritabanı ve migration aracı seçilmeli.
+Veritabanı ve şema versiyonlama aracı seçilmeli. Şemanın tek kaynağının ne olacağı (ORM mi, SQL mi)
+ve migration'ların geri alınabilir olup olmayacağı bu kararla birlikte sabitlenir.
 
 ## Karar
 
@@ -15,13 +15,13 @@ Kaynak sistem SQL Server + EF Core migration kullanıyor. Hedef veritabanı ve m
 ## Gerekçe
 
 - Lisans maliyeti sıfır; bulutta her yerde yönetilen sürüm.
-- `NULLS NOT DISTINCT` (tenant+username tekilliği), Row-Level Security (F4 tenant derin savunma) gibi
+- `NULLS NOT DISTINCT` (tenant+username tekilliği), Row-Level Security (tenant derin savunma) gibi
   doğrudan işe yarayan özellikler.
-- Flyway düz SQL: EF migration zihniyetine en yakın, ekip için okunabilir. Liquibase'e göre daha az soyutlama.
-- Tarihsel 51 EF migration taşınmaz; tek `V1__baseline.sql` ile temiz başlangıç, sonra forward-only versioned.
+- Flyway düz SQL: şema değişikliği okunabilir ve gözden geçirilebilir; Liquibase'e göre daha az soyutlama.
+- Tek `V1__baseline.sql` ile temiz başlangıç, sonrası forward-only versioned.
 
 ## Sonuçlar
 
 - (+) `validate` modu şema kaymasını erken yakalar.
-- (−) SQL Server→Postgres tip eşleme + Windows→IANA timezone dönüşümü ETL'de gerekli (RISK-REGISTER R-05).
-- (−) Flyway undo yok → forward-fix stratejisi (bilinçli).
+- (+) Şemanın tek kaynağı SQL — ORM anotasyonu ile veritabanı sessizce ayrışamaz.
+- (−) Flyway undo yok → forward-fix stratejisi (bilinçli; RELEASE-RUNBOOK §4).

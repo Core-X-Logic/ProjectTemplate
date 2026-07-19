@@ -21,8 +21,8 @@ import java.util.List;
  * Validates raw passwords against a {@link PasswordPolicy} using Passay. Throws
  * {@link DomainException} with {@link ErrorCode#VALIDATION} on the first non-compliant password.
  *
- * <p>The effective policy is resolved from the hierarchical settings module ({@code App.Password.*},
- * CONTRACT-phase2 §6) via {@link SettingManager}: USER &rarr; TENANT &rarr; APPLICATION &rarr; definition
+ * <p>The effective policy is resolved from the hierarchical settings module
+ * ({@code App.Password.*}) via {@link SettingManager}: USER &rarr; TENANT &rarr; APPLICATION &rarr; definition
  * default. Setting names are referenced as string literals so the identity module only touches the
  * {@code settings} module's public {@link SettingManager} API (never its internal registry types).
  */

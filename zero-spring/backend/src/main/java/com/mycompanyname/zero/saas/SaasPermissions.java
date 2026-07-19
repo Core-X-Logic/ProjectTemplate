@@ -4,11 +4,14 @@ import java.util.Set;
 
 /**
  * SaaS permission constants. They live in the {@code saas} module (never in {@code identity}) so the
- * module core stays free of an identity dependency — {@code saas} may not depend on {@code identity}
- * (F5-ARCHITECTURE §1.1). Registration into the permission tree happens on the identity side, which
+ * module core stays free of an identity dependency — {@code saas} may not depend on
+ * {@code identity}. Registration into the permission tree happens on the identity side, which
  * repeats the same string values; {@code SaasPermissionsAlignmentTest} keeps both lists in sync.
  *
- * <p>Every SaaS permission is {@code Side.HOST}: a tenant can never raise its own limits (F5-R3).
+ * <p>Every SaaS permission is {@code Side.HOST}: a tenant can never raise its own limits. SaaS
+ * entities carry no tenant {@code @Filter}, so a permission wrongly granted here leaks data
+ * instead of returning an empty result — see ARCHITECTURE-RULES.md — "Tenant kendi limitini
+ * yükseltemez".
  */
 public final class SaasPermissions {
 

@@ -66,14 +66,26 @@ yanlış kırmızı üretti.
 | Temiz veritabanıyla koşan testler, **mevcut kurulum** hatalarını göremez | Şema/izin/seed değişikliklerinde canlı smoke zorunlu — temiz-DB suite'i yeşilken çalışan kurulum bozuk olabilir (bu bir kez gerçekleşti). |
 | PowerShell 5.1: `git commit -m @'...'@` here-string'i çalışmaz; `ConvertTo-Json` tek elemanlı diziyi düzleştirir | Commit mesajını dosyaya yazıp `git commit -F <dosya>`. |
 
-## Bu depodaki yardımcılar
+## Takım
 
-| Ne | Ne zaman |
+| Ajan | Ne zaman |
 |---|---|
-| `/new-module <ad>` | Yeni modül eklerken. Unutulduğunda **sessiz kalan** 10 korumanın kontrol listesi. |
+| `tech-lead` | Tek katmanı aşan her iş. Dikey dilimlere böler, mühendislere dağıtır, birleştirir, kanıtla raporlar. |
+| `backend-engineer` | Java/Spring tarafı: uç, servis, entity, migration, izin, IT. |
+| `frontend-engineer` | React tarafı: ekran, feature modülü, typed API, i18n, davranış testi. |
+| `stack-reviewer` | Kod değişikliğinden **sonra**, commit'ten önce. Bu yığına özgü tuzaklar. |
+| `gate-auditor` | Yeni test/CI gate'inden sonra. **Gate'in gerçekten kırmızıya döndüğünü kanıtlar** — bu depoda beş kontrol yeşilken hiçbir şey doğrulamıyordu. |
+
+Küçük ve tek katmanlı işte `tech-lead`'i atla, doğrudan mühendisi çağır. Bağımsız işleri
+**paralel** çağır.
+
+| Komut | Ne zaman |
+|---|---|
+| `/new-module <ad>` | Yeni modül eklerken. Unutulduğunda **sessiz kalan** 10 korumanın listesi. |
 | `/preflight` | Push etmeden önce. CI dakikası harcamadan yerel kapılar. |
-| `stack-reviewer` ajanı | Backend/frontend değişikliğinden sonra. Bu yığına özgü tuzaklar. |
-| `gate-auditor` ajanı | Yeni bir test/CI gate'i ekledikten sonra. **Gate'in gerçekten kırmızıya döndüğünü kanıtlar** — bu depoda beş kontrol yeşilken hiçbir şey doğrulamıyordu. |
+
+**Dikey dilim = "bitti"** — beş sütun: backend · frontend · izin+i18n · test (mutlu yol +
+**negatif yetki**) · risk kaydı. Dördü tamamsa iş bitmemiştir.
 
 ## Konvansiyonlar
 

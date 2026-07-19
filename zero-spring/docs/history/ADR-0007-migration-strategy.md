@@ -1,8 +1,12 @@
 # ADR-0007: Greenfield parity build + tek seferlik ETL + big-bang cutover
 
-- **Durum:** Accepted
+> **TARİHSEL KAYIT — yürürlükte değildir.** Bu karar, bu şablonun türetildiği projeye özgüdür:
+> üretimde çalışan bir .NET sisteminden Spring'e geçiş stratejisini sabitler. Yeni bir projede
+> karşılığı yoktur ve uygulanmamalıdır. Yürürlükteki mimari kararlar için
+> `docs/governance/ADR/README.md`'ye bakın.
+
+- **Durum:** Tarihsel (bu depoda uygulanmaz)
 - **Tarih:** 2026-07-17
-- **Faz:** Genel
 
 ## Bağlam
 

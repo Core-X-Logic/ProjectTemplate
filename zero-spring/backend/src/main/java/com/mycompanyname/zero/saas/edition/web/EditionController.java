@@ -27,8 +27,10 @@ import java.util.List;
 
 /**
  * Edition catalogue API. Every route is guarded by a {@code Side.HOST} permission, so a tenant admin
- * can neither read nor reshape the catalogue (F5-R3); the negative case is proven by
- * {@code SaasAuthorizationIT}.
+ * can neither read nor reshape the catalogue. Editions carry no tenant {@code @Filter}, so the
+ * permission is the only thing standing between a tenant and the whole catalogue; the negative case
+ * is proven by {@code SaasAuthorizationIT}. See ARCHITECTURE-RULES.md — "Tenant kendi limitini
+ * yükseltemez".
  */
 @RestController
 @RequestMapping("/api/editions")

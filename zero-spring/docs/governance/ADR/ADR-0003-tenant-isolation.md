@@ -2,12 +2,12 @@
 
 - **Durum:** Accepted
 - **Tarih:** 2026-07-17
-- **Faz:** F1 (F4'te RLS ile derinleşir)
 
 ## Bağlam
 
-ABP `IMustHaveTenant`/`IMayHaveTenant` örtük filtreleriyle tenant izolasyonu sağlıyor. Bu görünmez
-davranış Spring'de açıkça kurulmazsa **tenant verisi sızıntısı** riski var (RISK-REGISTER R-01, en kritik).
+Çok kiracılı bir sistemde en pahalı hata sınıfı **tenant verisi sızıntısıdır**: sessizdir, geç fark
+edilir ve tek bir unutulmuş `where` yeterlidir. İzolasyonun nerede zorlandığı (framework'ün örtük
+davranışı mı, açık kod mu) ve **hangi girdinin otorite** olduğu açıkça seçilmelidir.
 
 ## Karar
 
@@ -18,7 +18,7 @@ davranış Spring'de açıkça kurulmazsa **tenant verisi sızıntısı** riski 
 4. **Otorite:** authenticated isteklerde tenant = **JWT `tenant` claim** (`AuthenticatedTenantFilter`).
    `X-Tenant` header ile claim uyuşmazlığı / eksik header / yabancı tenant → **403**. Header yalnız
    login/refresh (henüz token yok) için tenant belirler.
-5. **F4 derin savunma:** PostgreSQL Row-Level Security (`SET app.tenant_id` + policy).
+5. **Derin savunma (opsiyonel, henüz kurulu değil):** PostgreSQL Row-Level Security (`SET app.tenant_id` + policy).
 
 ## Gerekçe
 
@@ -29,6 +29,7 @@ davranış Spring'de açıkça kurulmazsa **tenant verisi sızıntısı** riski 
 
 ## Sonuçlar
 
-- (+) Çok katmanlı izolasyon; kanıtlanmış (F1 IT: TenantIsolationIT 4/4, TenantEscalationIT 3/3).
-- (−) `@Filter`'ın `findById`'ye uygulanmaması artık risk (R-08, F2'de `@FilterJoinTable`/ArchUnit ile azaltılır).
-- (−) Tenant-başına ayrı DB kullanan tenant varsa ayrı karar gerekir (şu an YAGNI; F4'te DATABASE moduna yol açık).
+- (+) Çok katmanlı izolasyon; testle kanıtlı (`TenantIsolationIT`, `TenantEscalationIT`).
+- (−) `@Filter` `findById`'ye uygulanmaz — bu yüzden birincil savunma explicit sorgulardır; yeni bir
+  repository metodu eklerken tenant scope'u elle vermek **zorunludur**.
+- (−) Tenant-başına ayrı veritabanı gerekirse ayrı bir karar gerekir (şu an YAGNI).

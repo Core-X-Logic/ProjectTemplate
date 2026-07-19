@@ -1,12 +1,12 @@
 # ADR-0011: Webhook idempotency — `webhook_events` UQ + duplicate/kalıcı hatada 200
 
-- **Durum:** Accepted · **Tarih:** 2026-07-18 · **Faz:** F5-C (tasarım F5-A'da sabitlendi)
+- **Durum:** Accepted · **Tarih:** 2026-07-18
 
 ## Bağlam
-ASP.NET Zero'da webhook idempotency **yok**: işlenmiş `event.Id` kaydı tutulmuyor. Tek savunma bir durum
-guard'ı; duplicate event geldiğinde `ApplicationException` → controller `catch` → **`BadRequest()` (400)**.
-Stripe 400'ü başarısızlık sayar ve **aynı event'i sonsuza dek yeniden gönderir**. Recurring yolunda
-(`invoice.paid`) hiç guard yok → aynı event iki kez gelirse **abonelik iki kez uzar**.
+Ödeme sağlayıcıları webhook'ları **en az bir kez** teslim eder: aynı event birden çok kez gelir ve bu
+bir arıza değil, sözleşmenin parçasıdır. İşlenmiş event id'si kaydedilmezse iki ayrı hata doğar:
+(1) duplicate bir yenileme event'i aboneliği **iki kez uzatır**; (2) duplicate'e hata (400) yanıtı
+vermek sağlayıcıya "başarısız" sinyali gönderir ve aynı event **sonsuza dek** yeniden denenir.
 
 ## Karar
 ```
@@ -22,7 +22,8 @@ Aynı idempotency recurring yenileme yoluna da uygulanır. `DEAD` kayıtlar admi
 
 ## Gerekçe
 Duplicate teslimat bir hata değil, sağlayıcının **normal** davranışıdır; doğru yanıt 200'dür.
-Kalıcı hatada retry istemek sonsuz döngü üretir (kaynak sistemin fiili durumu).
+HTTP durum kodu burada "iş başarılı mı" değil, "bu event'i bir daha gönder mi" anlamına gelir —
+kalıcı bir hatada retry istemek sonsuz döngü üretir.
 
 ## Sonuçlar
 - (+) Çift uzatma/çift tahsilat yapısal olarak engellenir.

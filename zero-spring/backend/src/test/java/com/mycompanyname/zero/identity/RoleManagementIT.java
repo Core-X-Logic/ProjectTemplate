@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Phase 2 parity proof for role management (CONTRACT-phase2 §4.1).
+ * End-to-end coverage of role management.
  *
  * <p>Runs entirely in the {@code default} tenant scope because roles are tenant-scoped
  * ({@code tenantId = CurrentUser.tenantId()}). Verifies: full CRUD, clone, static-role

@@ -15,7 +15,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Phase 2 parity proof for hierarchical settings (CONTRACT-phase2 §6).
+ * End-to-end coverage of hierarchical settings.
  *
  * <p>Verifies: a tenant-scoped override is persisted and read back (with cache eviction on write),
  * the client endpoint exposes only {@code visibleToClient} settings, and a tenant user cannot reach
@@ -88,7 +88,7 @@ class SettingsIT extends AbstractIntegrationIT {
     @Test
     void tenantSettingsCarryDefinitionDefaultAsHint() {
         HttpHeaders admin = tenantAdmin();
-        // Even with a tenant override in place, defaultValue must reflect the definition fallback (SETTINGS parity).
+        // Even with a tenant override in place, defaultValue must reflect the definition fallback.
         putTenantSetting(admin, REQUIRED_LENGTH, "12");
 
         JsonNode body = getTenantSettings(admin);

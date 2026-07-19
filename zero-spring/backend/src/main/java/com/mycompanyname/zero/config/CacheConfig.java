@@ -19,7 +19,8 @@ import java.time.Duration;
  * class adds the Redis-specific configuration used when {@code spring.cache.type=redis} (prod).
  *
  * <p>The SaaS caches carry a short TTL purely as a safety net — correctness comes from explicit
- * eviction on every write that can change a resolved value (F5-R2), not from expiry.
+ * eviction on every write that can change a resolved value, not from expiry. See
+ * ARCHITECTURE-RULES.md — "Feature ve abonelik cache'i yazmadan sonra bayat kalmamalı".
  *
  * <p>Cache names in {@code spring.cache.cache-names} must stay in sync with what the code actually
  * reads through: {@code settings} ({@code SettingManager}), {@link SaasCaches#FEATURES}

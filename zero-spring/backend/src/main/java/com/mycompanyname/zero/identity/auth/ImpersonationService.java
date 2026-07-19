@@ -32,7 +32,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * ABP-style impersonation (CONTRACT-phase2 §4.6).
+ * User impersonation: an operator acts as another user without knowing their credentials.
  *
  * <p>Flow: an authorized actor requests a single-use hand-off token
  * ({@link #start(ImpersonateRequest)}), then exchanges it for a target-user token pair

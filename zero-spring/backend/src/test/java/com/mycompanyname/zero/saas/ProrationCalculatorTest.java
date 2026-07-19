@@ -12,12 +12,12 @@ import java.time.Instant;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * F5 Slice B unit proof for proration (CONTRACT-phase5 Slice B test criteria).
+ * Unit coverage of proration.
  *
- * <p>Two things are being pinned down. First, that the adaptation reproduces the source formula's
- * <em>result</em>: {@code priceForUnused(target) - priceForUnused(current)} over the unused remainder
- * of the period. Second, that it no longer reproduces the source's 30/365-day constants (K7) —
- * a calendar month is whatever the calendar says, including the end-of-month clamp (F5-R5).
+ * <p>Two things are being pinned down. First, the result: {@code priceForUnused(target) -
+ * priceForUnused(current)} over the unused remainder of the period. Second, that no 30/365-day
+ * constant creeps back in — a calendar month is whatever the calendar says, including the
+ * end-of-month clamp (see ARCHITECTURE-RULES.md — "Tarih aritmetiği java.time, ay sonu clamp'lenir").
  */
 class ProrationCalculatorTest {
 
@@ -80,7 +80,7 @@ class ProrationCalculatorTest {
 
         assertThat(result.amount()).isEqualByComparingTo("-10.0000");
         assertThat(result.paymentRequired())
-                .as("a downgrade is never a charge; Slice C decides whether it becomes a credit")
+                .as("a downgrade is never a charge; whether it becomes a credit is up to the caller")
                 .isFalse();
     }
 
@@ -125,7 +125,7 @@ class ProrationCalculatorTest {
                 .isTrue();
     }
 
-    // --- end-of-month clamp (F5-R5 / ADR-0013): no 30- or 365-day constants ---
+    // --- end-of-month clamp (ADR-0013): no 30- or 365-day constants ---
 
     @Test
     void oneMonthFromTheEndOfJanuaryClampsToTheEndOfFebruary() {

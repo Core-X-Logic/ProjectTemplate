@@ -1,13 +1,12 @@
 # ADR-0012: Abonelikte fiyat snapshot; edition düzenlenebilir kalır
 
-- **Durum:** Accepted · **Tarih:** 2026-07-18 · **Faz:** F5-A
+- **Durum:** Accepted · **Tarih:** 2026-07-18
 
 ## Bağlam
-ASP.NET Zero'da `UpdateEdition` **yalnız `DisplayName` ve feature değerlerini** günceller; `MonthlyPrice`,
-`AnnualPrice`, `TrialDayCount`, `WaitingDayAfterExpire` DTO'da bile yok. Fiyat değiştirmek için **yeni edition
-oluşturup tenant'ları taşımak** gerekiyor (`MoveTenantsToAnotherEdition`). Amaç doğru (aktif abonelerin fiyatını
-geriye dönük bozmamak) ama maliyeti yüksek: edition katalogu çoğalıyor, plan kimliği (`Name_Period_Currency`)
-dondurulmuş oluyor.
+"Mevcut abonelerin fiyatı geriye dönük değişmemeli" kuralı iki şekilde sağlanabilir. Yaygın yol
+edition'ı **kısmen dondurmaktır**: fiyat alanları düzenlenemez yapılır, fiyat değiştirmek için yeni bir
+edition açılıp tenant'lar oraya taşınır. Amaç doğrudur ama maliyeti yüksektir — katalog her fiyat
+değişikliğinde çoğalır ve bir yazım hatasını düzeltmek bile yeni bir plan gerektirir.
 
 ## Karar
 Edition **tam düzenlenebilir** (fiyat, trial, grace, expiring dahil). Buna karşılık abonelik oluşturulurken
@@ -20,6 +19,6 @@ Mevcut aboneler edition fiyatı değişse de kendi snapshot'larından faturalan�
 - Fatura/proration hesabı aboneliğin kendi verisinden yapılır — edition'a bağımlı değil.
 
 ## Sonuçlar
-- (+) K13 çözüldü; katalog temiz kalır.
-- (+) Canlı smoke: paket atamada `price=49.9000 USD, period=MONTHLY` snapshot'landığı doğrulandı.
-- (−) "Tüm abonelere yeni fiyatı uygula" senaryosu artık **açık bir toplu işlem** gerektirir (F5-B/C adayı).
+- (+) Katalog temiz kalır; fiyat düzeltmesi yeni plan açmayı gerektirmez.
+- (+) Snapshot'lama abonelik atamasında testle doğrulanır (`SubscriptionAssignmentIT`).
+- (−) "Tüm abonelere yeni fiyatı uygula" senaryosu artık **açık bir toplu işlem** gerektirir (henüz yok).

@@ -5,8 +5,8 @@ package com.mycompanyname.zero.saas.api;
  * resolved through the chain {@code tenant_features} (host override) &rarr; {@code edition_features}
  * (the tenant's edition) &rarr; {@code FeatureDefinition.defaultValue}.
  *
- * <p>Slice A exposes reading only; declarative enforcement ({@code @RequiresFeature} AOP) and the
- * Redis-backed cache arrive in Slice B.
+ * <p>This interface reads only. Declarative enforcement lives in {@link RequiresFeature} (AOP), and
+ * resolved values are served through the Redis-backed feature cache.
  */
 public interface FeatureChecker {
 

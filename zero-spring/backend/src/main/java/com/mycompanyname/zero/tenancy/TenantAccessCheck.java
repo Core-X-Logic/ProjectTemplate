@@ -6,9 +6,9 @@ import java.util.Optional;
  * Extension point that lets another module veto a tenant-scoped request at the very edge of the
  * stack, inside {@link TenantResolverFilter}.
  *
- * <p><b>Why an SPI instead of a direct call.</b> F5-ARCHITECTURE §7.1 puts the subscription validity
- * gate into {@code TenantResolverFilter}, while the common rules of CONTRACT-phase5 forbid a
- * {@code tenancy -> saas} dependency ({@code tenancy} must stay a leaf module). Inverting the
+ * <p><b>Why an SPI instead of a direct call.</b> The subscription validity gate belongs in
+ * {@code TenantResolverFilter}, but a {@code tenancy -> saas} dependency is forbidden
+ * ({@code tenancy} must stay a leaf module). Inverting the
  * dependency solves both: {@code tenancy} owns this interface and {@code saas} implements it
  * ({@code SubscriptionAccessCheck}), so the arrow points {@code saas -> tenancy}, which is allowed.
  *

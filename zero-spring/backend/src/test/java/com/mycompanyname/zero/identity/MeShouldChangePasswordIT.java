@@ -19,8 +19,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Phase 2 parity proof for the {@code shouldChangePassword} flag surfaced on {@code /api/auth/me}
- * (CONTRACT-phase2 §4.4). A user flagged to change their password must see {@code shouldChangePassword=true}
+ * End-to-end coverage of the {@code shouldChangePassword} flag surfaced on {@code /api/auth/me}.
+ * A user flagged to change their password must see {@code shouldChangePassword=true}
  * in the {@code me} payload so the frontend can force a password change.
  */
 class MeShouldChangePasswordIT extends AbstractIntegrationIT {

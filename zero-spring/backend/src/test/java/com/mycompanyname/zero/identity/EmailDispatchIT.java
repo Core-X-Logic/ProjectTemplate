@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Phase 2 parity proof for transactional email dispatch (CONTRACT-phase2 §8).
+ * End-to-end coverage of transactional email dispatch.
  *
  * <p>A real SMTP endpoint is provided by GreenMail (port 3025) so the {@code SmtpEmailSender} (active
  * only when {@code spring.mail.host} is set) is exercised. Verifies that creating a user delivers a

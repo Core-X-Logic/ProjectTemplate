@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Impersonation endpoints, kept separate from {@code AuthController} per CONTRACT-phase2 §4.6.
+ * Impersonation endpoints, kept separate from {@code AuthController}.
  * All three require an authenticated caller (enforced by the security filter chain); {@code /impersonate}
  * additionally requires the {@code users.impersonate} permission.
  */

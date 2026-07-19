@@ -12,17 +12,18 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Advances subscriptions whose deadlines have passed (F5-ARCHITECTURE §3, rows S6-S10).
+ * Advances subscriptions whose deadlines have passed (rows S6-S10 of the transition table on
+ * {@link SubscriptionStatus}).
  *
  * <p><b>What this class does and does not decide.</b> It only selects the subscriptions that are
  * due and names the reason; the resulting status, the guard and the {@code subscription_events} row
  * all come from {@link SubscriptionService}. That is what keeps the job from being a second,
- * divergent implementation of the state machine — the source system's worker set the flags itself
- * and drifted from the domain rules (K9).
+ * divergent implementation of the state machine: a job that sets status flags itself will sooner or
+ * later disagree with the domain rules, and the disagreement surfaces as customers wrongly cut off.
  *
- * <p><b>Trial has no grace (S6).</b> The source system's domain said trials expire immediately while
- * its worker pre-filter granted them the grace window anyway; the two disagreed. Here a trial goes
- * straight to {@code EXPIRED} and the grace window applies to paid periods only.
+ * <p><b>Trial has no grace (S6).</b> A trial goes straight to {@code EXPIRED}; the grace window
+ * applies to paid periods only. Granting grace to trials in the job's pre-filter but not in the
+ * domain is exactly the kind of divergence described above.
  *
  * <p><b>Ordering matters.</b> The passes run period → grace → downgrade, so a subscription whose
  * edition grants no grace can expire and land on its free downgrade edition within a single run.

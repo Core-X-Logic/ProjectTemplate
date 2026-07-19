@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
  * the paid period, which is why cancellation preserves {@code currentPeriodEndAt}.
  *
  * <p>The answer is cached per tenant because {@code TenantResolverFilter} asks on every
- * tenant-scoped request (F5-ARCHITECTURE §7.1). Every subscription mutation in
+ * tenant-scoped request. Every subscription mutation in
  * {@code SubscriptionService} — including the ones the lifecycle job drives — evicts the cache, so a
  * status change takes effect on the very next request.
  *

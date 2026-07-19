@@ -35,7 +35,7 @@ public class FeatureValueLoader {
      * Effective value of {@code featureName} for {@code tenantId}, resolved through
      * tenant override &rarr; edition &rarr; definition default.
      *
-     * <p>Cached under {@code feature:{tenantId}:{name}} (F5-ARCHITECTURE §6). Unknown feature names
+     * <p>Cached under {@code feature:{tenantId}:{name}}. Unknown feature names
      * raise before anything is cached, so the registry stays authoritative.
      */
     @Cacheable(cacheNames = SaasCaches.FEATURES,

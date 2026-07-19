@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
  * Audit configuration. {@code trackedEntityTypes} is the authoritative list of fully-qualified
  * entity class names whose changes are recorded. Kept as a fixed list (rather than only relying on a
  * marker annotation on the entities) so tracking is deterministic and never collides with other
- * writers. Defaults cover the Phase 2 auditable entities; overridable via
+ * writers. Overridable via
  * {@code zero.audit.tracked-entity-types}.
  */
 @Component

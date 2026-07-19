@@ -11,15 +11,16 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Wires the subscription validity gate into {@code TenantResolverFilter} (F5-ARCHITECTURE §7.1).
+ * Wires the subscription validity gate into {@code TenantResolverFilter}.
  *
  * <p>The arrow points {@code saas -> tenancy}: {@code tenancy} owns {@link TenantAccessCheck} and
- * stays a leaf module, which is what keeps the "no {@code tenancy -> saas} dependency" rule of
- * CONTRACT-phase5 intact while still putting the check where the architecture asks for it.
+ * stays a leaf module, which is what keeps the "no {@code tenancy -> saas} dependency" rule intact
+ * while still putting the check where the architecture asks for it.
  *
  * <p>The exemption list is the reason an expired tenant is locked out but not locked <em>in</em>:
- * it can still authenticate, read its own subscription and reach the pages that let it recover
- * (F5-R7). Everything else answers 403 {@code SUBSCRIPTION_INVALID}.
+ * it can still authenticate, read its own subscription and reach the pages that let it recover.
+ * Everything else answers 403 {@code SUBSCRIPTION_INVALID}. See ARCHITECTURE-RULES.md —
+ * "Abonelik geçerlilik kapısı filtrede ve cache'li" and "Modül bağımlılıkları döngü kurmaz".
  */
 @Component
 public class SubscriptionAccessCheck implements TenantAccessCheck {

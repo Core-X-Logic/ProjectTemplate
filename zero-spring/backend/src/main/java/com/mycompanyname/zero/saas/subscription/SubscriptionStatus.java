@@ -6,14 +6,16 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Explicit subscription lifecycle state (ADR-0009 — replaces the ambiguous implicit three-field
- * combination of the source system).
+ * Explicit subscription lifecycle state, rather than an ambiguous combination of implicit
+ * date/flag fields (ADR-0009).
  *
- * <p>The transition table encodes F5-ARCHITECTURE §3. Rows S1-S3 of that table have no source state:
- * they describe <em>provisioning</em> (creating or re-assigning a package), which is handled by
+ * <p>{@link #ALLOWED} below is the authoritative transition table; its rows are referred to as
+ * S1-S13 elsewhere in this package. Rows S1-S3 have no source state: they describe
+ * <em>provisioning</em> (creating or re-assigning a package), which is handled by
  * {@code SubscriptionService.assignEdition} and therefore not part of this guard. Everything else is
  * a transition and an invalid one raises {@code DomainException(VALIDATION)} rather than silently
- * doing nothing (K11).
+ * doing nothing — a silent no-op leaves the caller believing the change took effect. See
+ * ARCHITECTURE-RULES.md — "Durum geçişleri açık tablo, sessiz no-op yok".
  */
 public enum SubscriptionStatus {
 
@@ -47,7 +49,7 @@ public enum SubscriptionStatus {
         return target != null && ALLOWED.getOrDefault(this, Set.of()).contains(target);
     }
 
-    /** {@code true} while the tenant may use business endpoints (F5-ARCHITECTURE §7.1). */
+    /** {@code true} while the tenant may use business endpoints. */
     public boolean grantsAccess() {
         return this != EXPIRED && this != PENDING_PAYMENT;
     }

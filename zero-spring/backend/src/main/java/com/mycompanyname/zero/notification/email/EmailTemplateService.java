@@ -10,7 +10,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Renders the HTML bodies of the Phase 2 transactional emails from Thymeleaf templates under
+ * Renders the HTML bodies of the transactional emails from Thymeleaf templates under
  * {@code templates/email/}. The rendered string is handed to an {@link EmailSender}.
  */
 @Service
