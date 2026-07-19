@@ -1,7 +1,30 @@
 # Risk Register + Mitigasyon Takvimi
 
 Skala: Olasılık (L/M/H) × Etki (L/M/H) → Seviye. Durum: `Open` · `Mitigating` · `Closed`.
-Kaynak analiz: ANALYSIS §3.1. `PHASE-2-REPORT.md` §F ile birebir hizalı (2026-07-18).
+
+---
+
+## ⚠️ Şablonu klonluyorsanız — devraldığınız açık kısıtlar
+
+Aşağıdaki kayıtların çoğu bu şablonun **kendi geçmişidir** ve sizi bağlamaz. Ama şunlar
+**hâlâ açıktır** ve klonunuza aynen geçer. Kabul edip etmediğinize karar verin:
+
+| ID | Ne | Neden önemli |
+|---|---|---|
+| **PROD-R21** | `/api/users` **bellekte sayfalıyor** (`@EntityGraph` + `Pageable`, `HHH90003004`) | 5 kullanıcıda görünmez; tek kiracıda 50k kullanıcıda her sayfa isteği tüm seti heap'e çeker. Aynı desen `RoleRepository`'ye **kopyalanmış** durumda — yeni entity'lere taşımayın |
+| **PROD-R23** | Branch protection **ücretsiz planda kurulamıyor** (403) | CI zinciri raporlar ama **kırmızı check push'u engellemez**. Blokaj insan disiplininde. `SETUP-NEW-PROJECT.md` §2 |
+| **PROD-R27** | Dockerfile'ı **hiçbir gate build etmiyor** | İmajdaki sertleştirmeler (prod profili, heap tavanı, healthcheck) hiçbir otomatik kontrolde doğrulanmıyor |
+| **PROD-R6** | Rate limit bucket'ları **JVM-local** | N replika = N × limit. Ayrıca istemci kimliği `X-Forwarded-For`'a dayanır: **proxy'nin bu başlığı ezmesi zorunludur**, kodla garanti edilemez |
+| **PROD-R16** | `kid` / anahtar rotasyonu / access-token iptali **yok** | Rotasyon tüm oturumları düşürür; access token 15 dk boyunca iptal edilemez |
+| **Issue #1** | `POST /api/tenants` **admin kullanıcı oluşturmuyor** | Açılan kiracıya giriş yapılamaz. Self-registration akışının ön koşulu |
+| **R-30** | 31 ham `hasAuthority('...')` literali (`identity`, `audit`, `settings`) | `'users.raed'` derlenir, test geçer, endpoint sonsuza dek 403 döner. Doğru örnek: `saas` modülü |
+| **R-31** | `ROLES_MANAGE` izin **ağacında yok** | `AppPermissions.all()` 22, `PermissionDefinitions` 21 döndürüyor. Admin'e veriliyor ama UI'da görünmüyor ve başka role atanamıyor. Hizalama testi yalnız `saas`'ı kapsıyor |
+| **R-32** | `Tenant` entity history'sinin **uçtan uca IT'si yok** | `EntityChangeTrackingTest` sınıf referansıyla bağlıyor, ama HTTP seviyesinde kanıt yok |
+
+Kapatılmış maddeler ve tarihsel kayıt aşağıda; `docs/history/` altındaki arşiv de bu
+kararların ham gözlem tabanıdır.
+
+---
 
 | ID | Risk | Olas. | Etki | Seviye | Durum | Mitigasyon | Ne zaman |
 |---|---|---|---|---|---|---|---|
