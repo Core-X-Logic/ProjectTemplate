@@ -11,6 +11,7 @@ React 19 / Vite / TypeScript admin arayüzü.
 | Yeni bir modül/özellik ekleyeceğim | **`ADDING-A-MODULE.md`** — atlanan her adım sessiz bir açık |
 | Sistemin nasıl kurulduğunu anlamak istiyorum | `ARCHITECTURE.md` |
 | Bir kuralın neden böyle olduğunu merak ediyorum | `ARCHITECTURE-RULES.md`, sonra `governance/ADR/` |
+| Güvenlik yüzeyini anlamak / yeni uç yazacağım | **`SECURITY.md`** |
 | Üretime çıkacağım | `RELEASE-RUNBOOK.md` |
 | Neyin eksik/riskli olduğunu bilmek istiyorum | `governance/RISK-REGISTER.md` |
 
@@ -21,6 +22,7 @@ React 19 / Vite / TypeScript admin arayüzü.
 | `ADDING-A-MODULE.md` | Yeni modül eklemenin tam yordamı: Modulith sınırı, migration, izin kaydı, kiracılık, i18n, test. Kontrol listesiyle. |
 | `ARCHITECTURE-RULES.md` | Kodda uyulması zorunlu kurallar, gerekçeleriyle. Çoğu burada bir kez ihlal edilip hataya yol açtığı için yazıldı. |
 | `ARCHITECTURE.md` | Backend mimarisi: modül sınırları, çok kiracılık, kimlik doğrulama, veri katmanı. |
+| `SECURITY.md` | Güvenlik modeli: kiracı izolasyonu, üçlü kilit, JWT, rate limit, secret yönetimi, log bütünlüğü. Her başlıkta neyin garanti **edilmediği** ve hangi testin tuttuğu yazılı. |
 | `SAAS-ARCHITECTURE.md` | Editions / subscriptions / features katmanı: durum makinesi, fiyat snapshot'ı, `BillingProvider` SPI, webhook idempotency. |
 | `FRONTEND-ARCHITECTURE.md` | Frontend yığını, provider zinciri, klasör yapısı, feature şablonu. |
 | `QUALITY-GATES.md` | "Bitti"nin tanımı, coverage eşikleri, güvenlik ve performans kontrol listeleri. |
