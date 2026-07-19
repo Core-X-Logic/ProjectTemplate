@@ -1,5 +1,8 @@
+import { accountMessages } from '@/features/account/messages';
 import { auditMessagesEn } from '@/features/audit/messages';
 import { editionsMessages } from '@/features/editions/messages';
+import { profileMessages } from '@/features/profile/messages';
+import { tenantsMessages } from '@/features/tenants/messages';
 import { impersonationEn } from '@/features/impersonation/messages';
 import { notificationsEn } from '@/features/notifications/messages';
 import { organizationUnitsMessages } from '@/features/organization-units/messages';
@@ -33,6 +36,7 @@ const en: Record<string, string> = {
   'auth.login.submit': 'Sign in',
   'auth.login.submitting': 'Signing in…',
   'auth.login.error': 'Sign in failed. Please check your credentials.',
+  'auth.login.forgotPassword': 'Forgot your password?',
   'auth.logout': 'Sign out',
 
   // Navigation
@@ -46,6 +50,8 @@ const en: Record<string, string> = {
   'nav.saas': 'Saas',
   'nav.editions': 'Editions',
   'nav.subscriptions': 'Subscriptions',
+  'nav.tenants': 'Tenants',
+  'nav.profile': 'My profile',
 
   // Common actions
   'common.save': 'Save',
@@ -92,6 +98,10 @@ const en: Record<string, string> = {
   ...settingsEn,
   ...editionsMessages.en,
   ...subscriptionsMessages.en,
+  // U-01: account self-service, own profile, tenant management
+  ...accountMessages.en,
+  ...profileMessages.en,
+  ...tenantsMessages.en,
 };
 
 export default en;

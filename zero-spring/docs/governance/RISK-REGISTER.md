@@ -20,6 +20,8 @@ Aşağıdaki kayıtların çoğu bu şablonun **kendi geçmişidir** ve sizi ba�
 | **R-30** | 31 ham `hasAuthority('...')` literali (`identity`, `audit`, `settings`) | `'users.raed'` derlenir, test geçer, endpoint sonsuza dek 403 döner. Doğru örnek: `saas` modülü |
 | **R-31** | `ROLES_MANAGE` izin **ağacında yok** | `AppPermissions.all()` 22, `PermissionDefinitions` 21 döndürüyor. Admin'e veriliyor ama UI'da görünmüyor ve başka role atanamıyor. Hizalama testi yalnız `saas`'ı kapsıyor |
 | **R-32** | `Tenant` entity history'sinin **uçtan uca IT'si yok** | `EntityChangeTrackingTest` sınıf referansıyla bağlıyor, ama HTTP seviyesinde kanıt yok |
+| **R-33** | Şifre alt sınırı **iki uçta farklı**: `ResetPasswordRequest` min **6**, `ChangePasswordRequest` min **8** | `PasswordPolicy.DEFAULT_REQUIRED_LENGTH = 6`. Yani sıfırlama politikayla uyumlu, **değiştirme onu eziyor**: kiracı politikayı 6'ya ayarlasa bile şifre değiştirme 8 dayatır — kimsenin bakmadığı bir DTO anotasyonundan, yapılandırmayı sessizce geçersiz kılarak. **Düzeltme yönü ürün kararı:** (a) ikisini de `PasswordPolicy`'ye devret, (b) ikisini 6'da hizala, (c) politika varsayılanını 8'e çıkar |
+| **R-34** | `GET /api/tenants` **sayfalanmıyor** (`List<TenantDto>`), `PUT /api/tenants/{id}` ve `DELETE` **yok** | Kiracı adı oluşturulduktan sonra değiştirilemiyor. UI bunu kullanıcıya söylüyor (çalışmayan düğme koymak yerine), ama uç eksikliği sürüyor |
 
 Kapatılmış maddeler ve tarihsel kayıt aşağıda; `docs/history/` altındaki arşiv de bu
 kararların ham gözlem tabanıdır.

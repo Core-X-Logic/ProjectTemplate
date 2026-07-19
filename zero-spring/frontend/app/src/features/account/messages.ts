@@ -1,0 +1,129 @@
+/**
+ * Account feature message catalogue (flat, dot-keyed; en + tr, keys 1:1).
+ *
+ * Parity is enforced at COMPILE TIME: `accountEn` is the key source of truth
+ * (`as const satisfies`), and `accountTr` is typed `Record<AccountMessageId,
+ * string>` — a missing or extra Turkish key fails `tsc -b`.
+ */
+
+export const accountEn = {
+  // Forgot password
+  'account.forgot.title': 'Reset your password',
+  'account.forgot.subtitle':
+    'Enter your username or email address and we will send you a reset code.',
+  'account.forgot.username': 'Username or email',
+  'account.forgot.usernamePlaceholder': 'you@example.com',
+  'account.forgot.tenant': 'Tenant',
+  'account.forgot.tenantPlaceholder': 'Leave empty for the default tenant',
+  'account.forgot.tenantHint':
+    'If you sign in under a specific tenant, enter its name here.',
+  'account.forgot.submit': 'Send reset code',
+  'account.forgot.submitting': 'Sending…',
+  'account.forgot.backToLogin': 'Back to sign in',
+  // Enumeration-safe wording: the backend answers 204 whether or not the
+  // account exists, so this text must not confirm that it does.
+  'account.forgot.sentTitle': 'Check your inbox',
+  'account.forgot.sentDescription':
+    'If an account matches what you entered, a reset code has been sent to its email address. The code is single-use.',
+  'account.forgot.sentHint': 'Already have the code?',
+  'account.forgot.sentAction': 'Enter it here',
+  'account.forgot.error': 'The request could not be sent. Please try again.',
+
+  // Reset password
+  'account.reset.title': 'Choose a new password',
+  'account.reset.subtitle':
+    'Paste the code from the email and pick a new password.',
+  'account.reset.code': 'Reset code',
+  'account.reset.codePlaceholder': 'The code from your email',
+  'account.reset.codeFromLink': 'The code was taken from your link.',
+  'account.reset.newPassword': 'New password',
+  'account.reset.confirmPassword': 'Confirm new password',
+  'account.reset.passwordHint':
+    'At least {min} characters. Your tenant may enforce a stricter policy.',
+  'account.reset.mismatch': 'The passwords do not match.',
+  'account.reset.tooShort': 'Use at least {min} characters.',
+  'account.reset.tooLong': 'Use at most {max} characters.',
+  'account.reset.submit': 'Set new password',
+  'account.reset.submitting': 'Saving…',
+  'account.reset.error':
+    'The password could not be reset. The code may be invalid or already used.',
+  'account.reset.doneTitle': 'Password updated',
+  'account.reset.doneDescription':
+    'You can now sign in with your new password.',
+  'account.reset.goToLogin': 'Go to sign in',
+
+  // Email confirmation (the emailed link points at this screen)
+  'account.confirm.title': 'Confirming your email',
+  'account.confirm.pending': 'Confirming…',
+  'account.confirm.missingCode':
+    'This link is missing its confirmation code. Please open the link from your email again.',
+  'account.confirm.doneTitle': 'Email confirmed',
+  'account.confirm.doneDescription': 'Your email address has been verified.',
+  'account.confirm.error':
+    'The email could not be confirmed. The code may be invalid or already used.',
+  'account.confirm.goToLogin': 'Go to sign in',
+} as const satisfies Record<string, string>;
+
+export type AccountMessageId = keyof typeof accountEn;
+
+// Typed against the English key set so the two catalogues cannot drift (1:1).
+export const accountTr: Record<AccountMessageId, string> = {
+  // Forgot password
+  'account.forgot.title': 'Parolanızı sıfırlayın',
+  'account.forgot.subtitle':
+    'Kullanıcı adınızı veya e-posta adresinizi girin, size bir sıfırlama kodu gönderelim.',
+  'account.forgot.username': 'Kullanıcı adı veya e-posta',
+  'account.forgot.usernamePlaceholder': 'siz@ornek.com',
+  'account.forgot.tenant': 'Kiracı',
+  'account.forgot.tenantPlaceholder': 'Varsayılan kiracı için boş bırakın',
+  'account.forgot.tenantHint':
+    'Belirli bir kiracı altında giriş yapıyorsanız kiracı adını buraya yazın.',
+  'account.forgot.submit': 'Sıfırlama kodu gönder',
+  'account.forgot.submitting': 'Gönderiliyor…',
+  'account.forgot.backToLogin': 'Girişe dön',
+  'account.forgot.sentTitle': 'Gelen kutunuzu kontrol edin',
+  'account.forgot.sentDescription':
+    'Girdiğiniz bilgiyle eşleşen bir hesap varsa, e-posta adresine bir sıfırlama kodu gönderildi. Kod tek kullanımlıktır.',
+  'account.forgot.sentHint': 'Kod elinizde mi?',
+  'account.forgot.sentAction': 'Buraya girin',
+  'account.forgot.error': 'İstek gönderilemedi. Lütfen tekrar deneyin.',
+
+  // Reset password
+  'account.reset.title': 'Yeni parola belirleyin',
+  'account.reset.subtitle':
+    'E-postadaki kodu yapıştırın ve yeni bir parola seçin.',
+  'account.reset.code': 'Sıfırlama kodu',
+  'account.reset.codePlaceholder': 'E-postanızdaki kod',
+  'account.reset.codeFromLink': 'Kod bağlantınızdan alındı.',
+  'account.reset.newPassword': 'Yeni parola',
+  'account.reset.confirmPassword': 'Yeni parola (tekrar)',
+  'account.reset.passwordHint':
+    'En az {min} karakter. Kiracınız daha katı bir politika uyguluyor olabilir.',
+  'account.reset.mismatch': 'Parolalar eşleşmiyor.',
+  'account.reset.tooShort': 'En az {min} karakter kullanın.',
+  'account.reset.tooLong': 'En fazla {max} karakter kullanın.',
+  'account.reset.submit': 'Yeni parolayı kaydet',
+  'account.reset.submitting': 'Kaydediliyor…',
+  'account.reset.error':
+    'Parola sıfırlanamadı. Kod geçersiz veya daha önce kullanılmış olabilir.',
+  'account.reset.doneTitle': 'Parola güncellendi',
+  'account.reset.doneDescription':
+    'Artık yeni parolanızla giriş yapabilirsiniz.',
+  'account.reset.goToLogin': 'Girişe git',
+
+  // Email confirmation
+  'account.confirm.title': 'E-postanız doğrulanıyor',
+  'account.confirm.pending': 'Doğrulanıyor…',
+  'account.confirm.missingCode':
+    'Bu bağlantıda doğrulama kodu yok. Lütfen e-postanızdaki bağlantıyı tekrar açın.',
+  'account.confirm.doneTitle': 'E-posta doğrulandı',
+  'account.confirm.doneDescription': 'E-posta adresiniz doğrulandı.',
+  'account.confirm.error':
+    'E-posta doğrulanamadı. Kod geçersiz veya daha önce kullanılmış olabilir.',
+  'account.confirm.goToLogin': 'Girişe git',
+};
+
+export const accountMessages: Record<'en' | 'tr', Record<string, string>> = {
+  en: accountEn,
+  tr: accountTr,
+};

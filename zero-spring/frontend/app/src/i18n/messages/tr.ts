@@ -1,5 +1,8 @@
+import { accountMessages } from '@/features/account/messages';
 import { auditMessagesTr } from '@/features/audit/messages';
 import { editionsMessages } from '@/features/editions/messages';
+import { profileMessages } from '@/features/profile/messages';
+import { tenantsMessages } from '@/features/tenants/messages';
 import { impersonationTr } from '@/features/impersonation/messages';
 import { notificationsTr } from '@/features/notifications/messages';
 import { organizationUnitsMessages } from '@/features/organization-units/messages';
@@ -31,6 +34,7 @@ const tr: Record<string, string> = {
   'auth.login.submit': 'Giriş yap',
   'auth.login.submitting': 'Giriş yapılıyor…',
   'auth.login.error': 'Giriş başarısız. Lütfen bilgilerinizi kontrol edin.',
+  'auth.login.forgotPassword': 'Parolanızı mı unuttunuz?',
   'auth.logout': 'Çıkış yap',
 
   // Navigation
@@ -44,6 +48,8 @@ const tr: Record<string, string> = {
   'nav.saas': 'Saas',
   'nav.editions': 'Paketler',
   'nav.subscriptions': 'Abonelikler',
+  'nav.tenants': 'Kiracılar',
+  'nav.profile': 'Profilim',
 
   // Common actions
   'common.save': 'Kaydet',
@@ -89,6 +95,10 @@ const tr: Record<string, string> = {
   ...settingsTr,
   ...editionsMessages.tr,
   ...subscriptionsMessages.tr,
+  // U-01: hesap self-servis, kendi profili, kiracı yönetimi
+  ...accountMessages.tr,
+  ...profileMessages.tr,
+  ...tenantsMessages.tr,
 };
 
 export default tr;

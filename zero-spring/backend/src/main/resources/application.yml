@@ -77,6 +77,22 @@ server:
   forward-headers-strategy: framework
 zero:
   multitenancy.header: X-Tenant
+  # Bu blok, degerleri yalnizca @Value varsayilanlarinda yasadigi icin eklendi: bir operator
+  # "urun adini nereden degistiririm" ya da "e-postadaki link neden yanlis porta gidiyor"
+  # sorusunun cevabini hicbir yml'de bulamiyordu. Varsayilanin yalnizca kod icinde yasamasi,
+  # onu KESFEDILEMEZ yapar — yanlis olmasindan bagimsiz bir sorun.
+  app:
+    # E-postalardaki baglantilarin tabani. Frontend Vite dev sunucusu 5173'te kosar.
+    # Varsayilan uzun sure `http://localhost:4200` idi — Angular'in portu. Frontend React'e
+    # gecirildikten sonra kimse bu satiri guncellemedi, yani dev'de gonderilen her sifre
+    # sifirlama / e-posta dogrulama baglantisi OLU bir porta gidiyordu. Hata vermeden.
+    base-url: ${APP_BASE_URL:http://localhost:5173}
+  email:
+    # NOT: bu ucu de ayarlar modulu (App.Email.*) EZER; buradakiler yalnizca ayar
+    # cozulemedigi durumda kullanilan son care varsayilanlaridir.
+    app-name: ${APP_DISPLAY_NAME:Zero Platform}
+    from-address: ${MAIL_FROM_ADDRESS:noreply@zero.local}
+    from-display-name: ${MAIL_FROM_NAME:Zero}
   jwt:
     # PROD-R1: no default on purpose. A committed dev secret means a profile mishap silently signs
     # tokens with a key that is public in the repository history. Dev/test values live in

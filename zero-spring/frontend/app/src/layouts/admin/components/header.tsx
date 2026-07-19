@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LogOut, Menu, Moon, Sun } from 'lucide-react';
+import { LogOut, Menu, Moon, Sun, UserCircle } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { FormattedMessage } from 'react-intl';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -123,6 +123,16 @@ function UserMenu() {
             </span>
           )}
         </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {/* Own profile + password change — available to every authenticated
+            user, so no permission guard (matches the route and the backend's
+            `@PreAuthorize("isAuthenticated()")` on ProfileController). */}
+        <DropdownMenuItem asChild className="cursor-pointer">
+          <Link to="/profile">
+            <UserCircle />
+            <FormattedMessage id="nav.profile" />
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
           <LogOut />

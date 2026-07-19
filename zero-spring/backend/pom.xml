@@ -24,6 +24,7 @@
         <logstash-logback-encoder.version>8.0</logstash-logback-encoder.version>
         <shedlock.version>5.16.0</shedlock.version>
         <bucket4j.version>8.10.1</bucket4j.version>
+        <archunit.version>1.4.1</archunit.version>
     </properties>
 
     <dependencyManagement>
@@ -201,6 +202,17 @@
             <groupId>com.icegreen</groupId>
             <artifactId>greenmail-junit5</artifactId>
             <version>2.1.0</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Q-01: ArchUnit. Bu depo bir ŞABLON; şablondaki en tehlikeli kusur KOPYALANAN
+             DESEN'dir. Tek tek düzeltmek yetmez, kural gerekir — bkz.
+             src/test/java/com/mycompanyname/zero/architecture/ArchitectureRules.java.
+             Sadece çekirdek (archunit-junit5 motoru DEĞİL): kurallar düz JUnit 5 @Test
+             içinden çağrılıyor, böylece surefire test sayımı olağan kalıyor. -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit</artifactId>
+            <version>${archunit.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

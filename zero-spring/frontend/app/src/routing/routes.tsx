@@ -3,6 +3,11 @@ import { LoginPage } from '@/auth/pages/login';
 import { ForbiddenPage } from '@/auth/pages/forbidden';
 import { RequireAuth } from '@/auth/require-auth';
 import { AdminLayout } from '@/layouts/admin';
+import { ConfirmEmailPage } from '@/features/account/pages/confirm-email';
+import { ForgotPasswordPage } from '@/features/account/pages/forgot-password';
+import { ResetPasswordPage } from '@/features/account/pages/reset-password';
+import { ProfilePage } from '@/features/profile/pages/profile';
+import { TenantsListPage } from '@/features/tenants/pages/tenants-list';
 import { DashboardPage } from '@/features/dashboard/pages/dashboard';
 import { UsersPage } from '@/features/users/pages/users';
 import { RolesPage } from '@/features/roles/pages/roles';
@@ -29,10 +34,40 @@ export function AppRoutes() {
       {/* Public */}
       <Route path="/login" element={<LoginPage />} />
 
+      {/* Public account self-service (U-01). These paths are NOT free choices:
+          `EmailTemplateService` mails links to `{baseUrl}/account/reset-password
+          ?code=…` and `{baseUrl}/account/confirm-email?code=…`, so the segments
+          and the `code` query parameter are a contract with the backend's mail
+          templates. Renaming either side alone breaks every link already sent. */}
+      <Route
+        path="/account/forgot-password"
+        element={<ForgotPasswordPage />}
+      />
+      <Route path="/account/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/account/confirm-email" element={<ConfirmEmailPage />} />
+
       {/* Protected shell */}
       <Route element={<RequireAuth />}>
         <Route element={<AdminLayout />}>
           <Route index element={<DashboardPage />} />
+
+          {/* Own profile + password. No permission guard on purpose:
+              `ProfileController` is `@PreAuthorize("isAuthenticated()")` on
+              every method, so requiring a named permission here would lock
+              users out of their own account details. */}
+          <Route path="profile" element={<ProfilePage />} />
+
+          {/* Tenant management — host only. `tenants.manage` is declared
+              `Side.HOST`, and `TenantController` carries a class-level
+              `@PreAuthorize` for the same key (triple lock with <Can>). */}
+          <Route
+            path="tenants"
+            element={
+              <RequireAuth permission="tenants.manage">
+                <TenantsListPage />
+              </RequireAuth>
+            }
+          />
 
           <Route
             path="users"

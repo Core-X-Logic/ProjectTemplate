@@ -4,7 +4,7 @@ import { LoaderCircle } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { Helmet } from 'react-helmet-async';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { ApiError } from '@/api/client';
@@ -141,9 +141,19 @@ export function LoginPage() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>
-                      <FormattedMessage id="auth.login.password" />
-                    </FormLabel>
+                    <div className="flex items-center justify-between gap-2">
+                      <FormLabel>
+                        <FormattedMessage id="auth.login.password" />
+                      </FormLabel>
+                      {/* Self-service recovery: without this link the only way
+                          out of a forgotten password is an administrator. */}
+                      <Link
+                        to="/account/forgot-password"
+                        className="text-sm text-muted-foreground hover:underline"
+                      >
+                        <FormattedMessage id="auth.login.forgotPassword" />
+                      </Link>
+                    </div>
                     <FormControl>
                       <Input
                         {...field}

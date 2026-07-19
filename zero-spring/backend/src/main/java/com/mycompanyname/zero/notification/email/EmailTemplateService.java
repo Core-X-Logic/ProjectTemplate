@@ -22,7 +22,9 @@ public class EmailTemplateService {
     @Value("${zero.email.app-name:Zero Platform}")
     private String appName;
 
-    @Value("${zero.app.base-url:http://localhost:4200}")
+    // Varsayilan artik application.yml'de ve 5173 (Vite). Buradaki fallback yalnizca
+    // property hic tanimlanmamissa devreye girer; 4200 (Angular) kalintisiydi.
+    @Value("${zero.app.base-url:http://localhost:5173}")
     private String baseUrl;
 
     /**

@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import {
   Bell,
+  Building,
   Building2,
   CreditCard,
   LayoutGrid,
@@ -44,6 +45,14 @@ export const MENU_SIDEBAR: MenuConfig = [
     icon: Building2,
     path: '/organization-units',
     permission: 'organizationunits.manage',
+  },
+  {
+    // Host-only: `tenants.manage` is declared `Side.HOST`, so a tenant-side
+    // role can never hold it and the entry never renders for tenant operators.
+    title: 'nav.tenants',
+    icon: Building,
+    path: '/tenants',
+    permission: 'tenants.manage',
   },
   {
     title: 'nav.notifications',
