@@ -153,6 +153,14 @@ satır aynalıyor; W5-4 o matcher'ları taşır.
 
 **Kesim sırası:** zaman biterse önce W5-6, sonra W5-5 düşer. **W5-1…W5-4 kesilemez çekirdektir.**
 
+> ⚠️ **2026-07-19 — kapsam sahibi tarafından değiştirildi.** Yürütme sırasında W5-4 yeniden
+> tanımlandı: **`ApiPaths` değil, yönetişim kapanışı**. Yani bu sözleşmenin "kesilemez çekirdek"
+> tanımı dalga ortasında daraldı ve **R-38 / alt-tür A açık kaldı** — sınıfın *en sert* üyesi,
+> tabloda **"en sert"** diye işaretli olan. Somut hâli: `SecurityConfig`, `identity`'nin
+> `allowedDependencies`'inde **olmayan** `localization` üzerinde `permitAll` kararı veriyor ve bunu
+> Modulith de ArchUnit de derleyici de görmüyor. Dalga 5 bunu **kapatmadı**; Dalga 6'nın ilk kalemi
+> olarak devrediyor. Bu satır, kapsamın sessizce daralmış görünmemesi için buradadır.
+
 Her iş için `stack-reviewer` commit'ten önce; §5 satırları için `gate-auditor` zorunlu.
 
 ---

@@ -24,6 +24,20 @@ kendi günlüğünüzü yukarıya yazın.
 
 ### Güvenlik
 
+- **Oturum iptali ve impersonation ticket'ı artık sahibine bağlı.** `logout`, sunulan refresh
+  token'ın çağıranın kendi token'ı olduğunu doğruluyor; **statü bilerek 204'te bırakıldı** —
+  403/404 dönmek ucu bir *varlık oracle*'ına çevirirdi (statü farkı "bu string canlı bir refresh
+  token'dır" bilgisini onaylar). Ayrım operatörün göreceği WARN satırına taşındı.
+  `ImpersonationTokenStore.consume(String, Long callerUserId)` — aktör bir **parametre**, ticket'tan
+  okunan alan değil, yani bağ çağrı yerinde **unutulamaz**. Yanlış aktör ticket'ı **yakmıyor**;
+  aksi hâlde sızan bir ticket meşru hand-off'a DoS'a dönerdi.
+- **Export'lar sınırlı.** `/api/users/export` ve `/api/audit-logs/export` tüm scope'unu tek listeye
+  çekiyordu; audit tablosu her servis edilen istekle büyüdüğü için ikincisi daha ağırdı. İkisi de
+  ortak `BoundedExport` üzerinden `maxRows+1` çekiyor ve sınır aşılırsa **reddediyor** (400
+  ProblemDetail), **kesmiyor** — sessizce kısaltılmış bir export, tam görünen ve olmayan bir
+  dosyadır. `zero.export.max-rows` (varsayılan 10 000) boot'ta doğrulanıyor: `0` ile kurulum
+  **açılmıyor**, her export'ta 500 üretmiyor.
+- **Korumasız 6 handler'a yetki beyanı eklendi.** ArchUnit Rule 5 donmuş 6 → 0.
 - **İzin dizgeleri artık sabitlerle yazılıyor.** 31 ham `hasAuthority('...')` literali
   `AppPermissions` (ve modül sahipli `AuditPermissions` / `SettingsPermissions` /
   `TenantPermissions` / `SaasPermissions`) sabitlerine taşındı. Yazım hatası içeren bir literal
@@ -49,10 +63,17 @@ kendi günlüğünüzü yukarıya yazın.
 
 ### Eklendi
 
-- **ArchUnit cırcırı (5 kural).** Mevcut ihlaller donduruldu, **yeni** ihlal build'i kırar; liste
-  düzeltildikçe küçülür ve geri büyüyemez. Kuralların ikisi bytecode'da ifade edilemediği için
-  (`javac` sabit katlaması, anotasyonsuz `package-info`'nun `.class` üretmemesi) `.java` kaynağını
-  okuyor — kaynak kökü bulunamazsa **fırlatıyor**, "ihlal yok" demiyor.
+- **ArchUnit cırcırı (5 kural), donmuş ihlal 58 → 0.** Mevcut ihlaller donduruldu, **yeni** ihlal
+  build'i kırar; liste düzeltildikçe küçülür ve geri büyüyemez. Kuralların ikisi bytecode'da ifade
+  edilemediği için (`javac` sabit katlaması, anotasyonsuz `package-info`'nun `.class` üretmemesi)
+  `.java` kaynağını okuyor — kaynak kökü bulunamazsa **fırlatıyor**, "ihlal yok" demiyor.
+  Rule 4 ayrıca yeniden formüle edildi (ADR-0016): entity'nin **kendi** paketinde dosya aramak
+  yerine modül köküne yukarı yürüyüp `@ApplicationModule` **beyanı** arıyor — eski hâli, koruduğunu
+  iddia ettiği beyan silindiğinde yeşil kalıyordu.
+- **Export'ların sınırının SQL'e indiğini tutan test.** Bir davranış testi bunu göremez: `Pageable`'ı
+  yok sayıp tüm satırları okuyan ve sınırı Java'da uygulayan bir fetcher dışarıdan **birebir aynı**
+  davranır. `ExportRowBoundIT`, `org.hibernate.SQL`'e `ListAppender` bağlayıp sorgunun satır limiti
+  taşıdığını doğruluyor — önünde bir vacuity guard var, sıfır statement yakalanırsa test kendini düşürüyor.
 - Test profilinde `hibernate.query.fail_on_pagination_over_collection_fetch` — ArchUnit'in
   göremediği `join fetch` + `Pageable` şeklini de kapatır.
 - Hesap ekranları: şifremi unuttum/sıfırla, profil + şifre değiştirme, e-posta doğrulama,

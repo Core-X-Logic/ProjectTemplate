@@ -72,6 +72,82 @@ de tutuyor — büyüyemezler.
 
 ---
 
+## Dalga 5 — 2026-07-19
+
+| Kapı | Sonuç |
+|---|---|
+| Backend `clean verify` | **389 test** (258 IT + 131 unit), 0 fail / 0 error / 0 skip |
+| JaCoCo coverage check | geçti |
+| ArchUnit cırcırı | 5 kural, donmuş ihlal **18 → 0** |
+| Frontend | değişmedi (kapsam dışı, 123 test sabit) |
+| Modül grafiği | **genişlemedi** — `ModularityTests` 1/1, `audit/package-info.java` diff'i boş |
+
+### CI — `2bedf66`, gerçek `push`, **8/8**
+
+| Gate | Vakum-yeşil riski | Bu koşudaki log kanıtı |
+|---|---|---|
+| `build` | — | jar üretildi, sonraki 4 gate onu **yeniden derlemeden** kullandı |
+| `backend` | bayat bytecode | `124` unit + `254` IT · `All coverage checks have been met` |
+| `frontend` | `test` typecheck yapmaz | `tsc -b && vite build` · 24 dosya / 123 test |
+| `typed-client-drift` | şema üretilmeden geçmek | `openapi-typescript` üretti, commit'liyle `diff -u` |
+| `migration-drift` | boş sette yeşil | oldset **V1..V7** · `applied 7 → v7` · `validated 7` (checksum drift yok) · ikinci migrate `No migration necessary` (idempotent) |
+| `live-smoke` | assertion koşmadan geçmek | **11 PASS**, içinde **5 negatif**: tenant mismatch 403 · tenant→subscriptions 403 · tenant→editions 403 · anonim `/me` 401 · bilinmeyen tenant 400 |
+| `security-checks` | gitleaks `.git` bulamayıp hatayı yutmak | **`49 commits scanned`** · **`no leaks found`** · 5 desen PASS · `npm audit: 0 vulnerabilities` |
+| `release` | `workflow_dispatch`'te **skipped** olur | gerçek `push`'ta **success**, `dist/app.jar` hazır. ⚠️ **"deploy edildi" DEMEK DEĞİL** — job'ın kendi satırı: *"Gerçek deploy adımı henüz bağlı değil (placeholder)."* |
+
+**Lokal ↔ CI:** `2bedf66` anında backend **378 = 378** (124 unit + 254 IT). **Sapma yok.**
+W5-3 sonrası lokal 389; bu commit henüz CI'a gitmedi, gate tablosu `2bedf66`'ya aittir.
+
+### W5-3 — bir davranış testinin göremediği şey
+
+W5-3'ün ilk turu yeşildi ve **yanlış sebeple** yeşildi. Gate auditor'ın mutasyonu:
+`Pageable`'ı yok sayan, tüm satırları okuyup sınırı **Java'da** uygulayan bir fetcher.
+Dışarıdan **birebir aynı**: limitte 200, bir üstünde 400.
+
+```
+ExportsAreBoundedTest  Tests run: 2, Failures: 0
+ExportRowBoundIT       Tests run: 2, Failures: 0
+BUILD SUCCESS
+```
+
+**Dört testin dördü de yeşil kaldı.** Ret davranışı kilitliydi; görevin var olma nedeni olan
+**tahsis** davranışı değil. `PagedListingIsNotSlicedInMemoryIT` de göremezdi — koleksiyon fetch
+olmadığı için `HHH90003004` hiç yayınlanmaz.
+
+Kapatan şey: `org.hibernate.SQL`'e `ListAppender` bağlayıp sorgunun satır limiti taşıdığını assert
+etmek. Eşleşen gerçek SQL:
+
+```
+select u1_0.id from users u1_0 where u1_0.tenant_id = ? and (u1_0.deleted = false)
+  and u1_0.tenant_id=? order by u1_0.id fetch first ? rows only
+```
+
+Mutation tekrar koşuldu: **her iki export'ta ayrı ayrı RED**, iki sınır testi **yeşil kaldı** —
+yani yeni testler tek yük taşıyıcı. Assertion'ın önünde vacuity guard var: sıfır statement
+yakalanırsa test *"aşağıdaki assertion hiçbir şeyi belgelemezdi"* diyerek kendini düşürür.
+
+**Kalan (papered over edilmedi):** assertion *"bir limit var"* der, *"limit tam olarak `maxRows+1`"*
+demez — `org.hibernate.SQL` bind parametrelerini basmaz. Farklı bir limit uygulayan fetcher geçer.
+R-41'e kaydedildi.
+
+### Reddedilen "düzeltme" — kısmi guard'ı fix diye raporlamak
+
+Stack reviewer `BoundedExport.fetch` içine `rows.size() > maxRows+1` guard'ı önerdi. **Eklendi ama
+fix sayılmadı:** yalnız veri kümesi `maxRows+1`'den büyükse ateşlenir. IT'de (limit 5, 6 satır)
+yok sayan fetcher tam 6 = `maxRows+1` döner ve guard **sessiz kalır** — mutation 6'yı yakalamazdı.
+Ölçüldü, öyle davrandı. Javadoc'u bunu söylüyor ve SQL testlerini işaret ediyor.
+
+### Kapsam ihlali — bulundu ve geri alındı
+
+İlk tur `BoundedExport`'u `config`'e koydu, bu da `audit`'i
+`allowedDependencies = {"shared"}` → `{"shared", "config"}` genişletmeye zorladı. Yasak listesinde
+*"mimari genişletme yok"* yazıyor. Gerekçe olarak yazılan *"`shared`'a konulamazdı, döngü olurdu"*
+iddiası da **yanlıştı**: döngü yalnızca sınıf `config`'te kalırsa var; her ikisi de `shared`'a
+taşınınca `DomainException`/`ErrorCode` zaten orada olduğu için döngü yok. Taşındı, `audit`
+geri alındı, `ModularityTests` yeşil.
+
+---
+
 ## Kayıt şablonu
 
 ```markdown
