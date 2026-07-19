@@ -82,7 +82,19 @@ de tutuyor — büyüyemezler.
 | Frontend | değişmedi (kapsam dışı, 123 test sabit) |
 | Modül grafiği | **genişlemedi** — `ModularityTests` 1/1, `audit/package-info.java` diff'i boş |
 
-### CI — `2bedf66`, gerçek `push`, **8/8**
+### CI — `c3b7673` (dalga kapanışı), gerçek `push`, **8/8**
+
+| Gate | Bu koşudaki kanıt |
+|---|---|
+| `backend` | **131 unit + 258 IT** · `All coverage checks have been met` |
+| `migration-drift` | `applied 7 migrations, now at v7` · ikinci migrate **`No migration necessary`** (idempotent) |
+| `live-smoke` | **11 PASS**, içinde **5 negatif** (tenant mismatch 403 · tenant→subscriptions 403 · tenant→editions 403 · anonim `/me` 401 · bilinmeyen tenant 400) |
+| `security-checks` | **`51 commits scanned`** · **`no leaks found`** · 5 desen PASS · `npm audit: 0 vulnerabilities` |
+| `release` | success (placeholder — deploy değil) |
+
+**Lokal ↔ CI:** **389 = 389** (131 unit + 258 IT). **Sapma yok.**
+
+### Önceki koşu — `2bedf66`, gerçek `push`, **8/8**
 
 | Gate | Vakum-yeşil riski | Bu koşudaki log kanıtı |
 |---|---|---|
@@ -96,7 +108,6 @@ de tutuyor — büyüyemezler.
 | `release` | `workflow_dispatch`'te **skipped** olur | gerçek `push`'ta **success**, `dist/app.jar` hazır. ⚠️ **"deploy edildi" DEMEK DEĞİL** — job'ın kendi satırı: *"Gerçek deploy adımı henüz bağlı değil (placeholder)."* |
 
 **Lokal ↔ CI:** `2bedf66` anında backend **378 = 378** (124 unit + 254 IT). **Sapma yok.**
-W5-3 sonrası lokal 389; bu commit henüz CI'a gitmedi, gate tablosu `2bedf66`'ya aittir.
 
 ### W5-3 — bir davranış testinin göremediği şey
 
