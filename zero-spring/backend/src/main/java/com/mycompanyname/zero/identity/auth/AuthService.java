@@ -15,6 +15,7 @@ import com.mycompanyname.zero.shared.domain.DomainException;
 import com.mycompanyname.zero.shared.domain.ErrorCode;
 import com.mycompanyname.zero.shared.tenant.TenantContext;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,12 +30,14 @@ import java.util.Base64;
 import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.LinkedHashSet;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 @Transactional
+@Slf4j
 public class AuthService {
 
     private static final int DEFAULT_MAX_FAILED_ATTEMPTS = 5;
@@ -111,9 +114,39 @@ public class AuthService {
         return issueTokenPair(user);
     }
 
+    /**
+     * Revokes a refresh token, but only the caller's own.
+     *
+     * <p>R-39. The endpoint is reachable by every authenticated principal (it is not in the
+     * {@code permitAll} set, and nothing narrower claims it), so authentication alone said nothing
+     * about <em>whose</em> token was being presented: holding the opaque string was the entire
+     * authorization. Anyone who obtained another user's refresh token — a proxy log, a shared
+     * device, a copied support ticket — could end that user's session. Not a leak, a cross-user
+     * availability attack. This is also the rigour {@link #refresh} already applies: there, a
+     * presented token that is not in a valid state for its own family gets the whole family
+     * revoked; logout did not share it.
+     *
+     * <p><b>Why a foreign token still answers 204.</b> An unknown token already returned 204, and
+     * the two answers are deliberately kept identical. Replying 403/404 for a token that exists but
+     * belongs to someone else would turn logout into an existence oracle: the difference in status
+     * confirms "this string IS a live refresh token", which is precisely what an attacker holding a
+     * candidate string wants to learn. The caller loses nothing by the ambiguity — logout is
+     * idempotent from its point of view and it has no legitimate need to distinguish a token it
+     * does not own from one that never existed. The mismatch is instead surfaced where an operator
+     * can act on it: one WARN line, carrying neither the token nor its hash.
+     */
     public void logout(String refreshToken) {
+        Long callerUserId = CurrentUser.userId();
+        if (callerUserId == null) {
+            throw new DomainException(ErrorCode.UNAUTHORIZED, "Authentication required");
+        }
         refreshTokenRepository.findByTokenHash(sha256Hex(refreshToken))
                 .ifPresent(token -> {
+                    if (!Objects.equals(token.getUserId(), callerUserId)) {
+                        log.warn("Rejected logout: the presented refresh token belongs to another user "
+                                + "(caller userId={})", callerUserId);
+                        return;
+                    }
                     token.setRevoked(true);
                     refreshTokenRepository.save(token);
                 });

@@ -91,10 +91,26 @@ public class ImpersonationService {
         return new ImpersonationTokenDto(token);
     }
 
-    /** Exchanges a single-use token for the target user's access/refresh pair with {@code act} claims. */
+    /**
+     * Exchanges a single-use token for the target user's access/refresh pair with {@code act} claims.
+     *
+     * <p>R-40. The redeeming caller must be the actor the ticket was minted for. The hand-off is
+     * performed while the actor is still logged in — that is what the flow already assumes — so
+     * binding the redemption to the caller's principal costs the legitimate path nothing and closes
+     * the window in which a leaked ticket string was, by itself, sufficient.
+     *
+     * <p>The rejection is deliberately the same {@code UNAUTHORIZED} / "Invalid or expired
+     * impersonation token" an unknown or stale ticket receives. Saying "that ticket is not yours"
+     * would confirm the string is a live ticket for another actor; the caller has no legitimate use
+     * for the distinction, and the submitted token is never echoed back.
+     */
     @Transactional
     public TokenPairDto authenticate(ImpersonateAuthRequest request) {
-        Ticket ticket = tokenStore.consume(request.impersonationToken())
+        Jwt caller = currentJwt();
+        if (caller == null || caller.getSubject() == null) {
+            throw new DomainException(ErrorCode.UNAUTHORIZED, "Authentication required");
+        }
+        Ticket ticket = tokenStore.consume(request.impersonationToken(), Long.valueOf(caller.getSubject()))
                 .orElseThrow(() -> new DomainException(
                         ErrorCode.UNAUTHORIZED, "Invalid or expired impersonation token"));
         User target = userRepository.findById(ticket.targetUserId())
