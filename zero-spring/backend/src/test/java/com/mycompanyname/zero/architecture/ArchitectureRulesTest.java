@@ -64,9 +64,9 @@ class ArchitectureRulesTest {
     }
 
     @Test
-    @DisplayName("Rule 4: every @Entity lives in a package with a package-info.java")
-    void entitiesLiveInDeclaredPackages() {
-        check(ArchitectureRules.entitiesLiveInDeclaredPackages());
+    @DisplayName("Rule 4: every @Entity lives under a package declaring @ApplicationModule")
+    void entitiesLiveUnderADeclaredModuleRoot() {
+        check(ArchitectureRules.entitiesLiveUnderADeclaredModuleRoot());
     }
 
     @Test

@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -24,9 +25,11 @@ import java.util.regex.Pattern;
  *       annotation value. {@code public static final String} is a compile-time constant, so javac
  *       folds the concatenation away before the class file is written. A bytecode rule therefore
  *       physically cannot tell the good form from the bad one — only the source can.
- *   <li>A {@code package-info.java} that carries no annotation produces <em>no</em>
- *       {@code package-info.class}. Asking the classpath whether a package is declared would answer
- *       "no" for perfectly well documented packages and silently pass for undeclared ones.
+ *   <li>Module declarations live on packages, and a {@code package-info.java} that carries no
+ *       annotation produces <em>no</em> {@code package-info.class} at all. Rule 4 has to walk from
+ *       an entity's package UP to its module root, inspecting ancestors that frequently contain no
+ *       class of their own; on the classpath those packages simply do not exist as artifacts, so a
+ *       bytecode walk would find nothing and report a clean run.
  * </ul>
  *
  * <p><b>Fails loud, never silent.</b> If the source root is missing, or a class under analysis has
@@ -80,13 +83,56 @@ final class JavaSources {
         }
     }
 
-    /** True when the package that {@code className} lives in ships a {@code package-info.java}. */
-    static boolean hasPackageInfo(String className) {
-        String packagePath = packageOf(className).replace('.', '/');
+    /**
+     * The nearest package at or above {@code className} whose {@code package-info.java} declares
+     * {@code @ApplicationModule} — that is, the Modulith module root governing the class. Empty
+     * when no ancestor up to and including {@code basePackage} declares one.
+     *
+     * <p>Walking UP is the whole point. Modulith module roots are the direct sub-packages of the
+     * application base package; everything below a root is internal to it and is governed by the
+     * root's declaration, not by a declaration of its own. A check that only looked at the class'
+     * OWN package would demand a declaration in exactly the places Modulith forbids one.
+     *
+     * <p>Both {@code allowedDependencies = {...}} and {@code type = Type.OPEN} count. They are
+     * opposite decisions — one narrows the module's imports, the other waives the boundary — but
+     * both are decisions a human wrote down. The absence of any declaration is the thing this
+     * looks for, because that is the state Modulith cannot distinguish from a clean one.
+     */
+    static Optional<String> declaringModuleRoot(String className, String basePackage) {
+        String candidate = packageOf(className);
+        while (candidate.startsWith(basePackage)) {
+            if (declaresApplicationModule(candidate)) {
+                return Optional.of(candidate);
+            }
+            int lastDot = candidate.lastIndexOf('.');
+            if (lastDot < 0) {
+                break;
+            }
+            candidate = candidate.substring(0, lastDot);
+        }
+        return Optional.empty();
+    }
+
+    /** True when {@code packageName}'s {@code package-info.java} carries {@code @ApplicationModule}. */
+    private static boolean declaresApplicationModule(String packageName) {
+        String packagePath = packageName.replace('.', '/');
         return SOURCE_ROOTS.stream()
                 .map(root -> root.resolve(packagePath).resolve("package-info.java"))
-                .anyMatch(Files::isRegularFile);
+                .filter(Files::isRegularFile)
+                .anyMatch(file -> APPLICATION_MODULE
+                        .matcher(withoutComments(readFile(file)))
+                        .find());
     }
+
+    /**
+     * {@code @ApplicationModule} as an actual annotation: at the start of a line, after comments
+     * have been stripped. Prose mentions of the annotation are common in these files — the
+     * {@code shared.domain} package-info discusses {@code ApplicationModule.Type.OPEN} at length —
+     * and counting one would be the dangerous direction of error: an entity would be certified as
+     * living under a declared root by a package that declares nothing.
+     */
+    private static final Pattern APPLICATION_MODULE =
+            Pattern.compile("(?m)^\\s*@ApplicationModule\\b");
 
     /** Every {@code @PreAuthorize} written in the source of {@code className}, in file order. */
     static List<PreAuthorizeUsage> preAuthorizeUsages(String className) {
@@ -171,6 +217,21 @@ final class JavaSources {
                 "No .java source for " + className + " under " + SOURCE_ROOTS + " (working dir: "
                         + Path.of("").toAbsolutePath() + "). The architecture rules read source on "
                         + "purpose; a missing source must fail the build, not pass it silently.");
+    }
+
+    private static String readFile(Path file) {
+        try {
+            return Files.readString(file, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Cannot read " + file, e);
+        }
+    }
+
+    /** Block and line comments blanked out, so prose about an annotation cannot pass for one. */
+    private static String withoutComments(String source) {
+        return source
+                .replaceAll("(?s)/\\*.*?\\*/", "")
+                .replaceAll("(?m)//.*$", "");
     }
 
     private static String packageOf(String className) {

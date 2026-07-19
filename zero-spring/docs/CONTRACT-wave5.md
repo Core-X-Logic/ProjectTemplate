@@ -112,7 +112,7 @@ izin gerekirdi.
 |---|---|---|---|
 | W5-1a | `saas/package-info.java`'yı sil | **Yeni** Rule 4 kırmızı | — |
 | **W5-1b** | Aynı silmeyi **eski** kuralla koştur | **Eski kural YEŞİL kalmalı** — `Subscription` zaten donmuş. W5-1'in tüm gerekçesi buna dayanır; yeşil kalmazsa gerekçe çürür | *Yeşil ≠ doğruladı* |
-| W5-1c | `shared`'dan `@ApplicationModule`'ü kaldır | Yeni Rule 4 kırmızı (`Type.OPEN` kabulünü de ölçer) | — |
+| ~~W5-1c~~ | ~~`shared`'dan `@ApplicationModule`'ü kaldır → yeni kural kırmızı (`AbstractAuditedEntity` üzerinden)~~ | ⚠️ **PREMİS YANLIŞTI — prob geçersiz.** Koşuldu: kural **YEŞİL** kaldı. Sebep kuralın körlüğü değil: `AbstractAuditedEntity` **`@MappedSuperclass`**, `@Entity` değil, ve `shared` altında **hiç `@Entity` yok**. Kural doğru davrandı. Aynı hata analizde "17 entity" rakamını da üretmişti (`^@Entity` deseni `@EntityListeners`'ı yakalıyor); **gerçek sayı 16** = 12 donmuş + 4 geçen (`User`, `Role`, `RefreshToken`, `Tenant`). `Type.OPEN` kabulünü ölçmek isteyen bir prob, `shared` altına gerçek bir `@Entity` koymayı gerektirir — kapsam dışı | *Yanlış sebeple yeşil'in tersi: **doğru sebeple yeşil**, ama probu geçersiz kılıyor* |
 | W5-2a | 6 handler'dan **birini** seç, `@PreAuthorize`'ı kaldır; en az 2 turda **farklı** handler | Rule 5 kırmızı | *Sınıfı kapat, yazımı değil* |
 | **W5-2b-1** | `logout` sahiplik kontrolünü kaldır | Test **iki gerçek kullanıcı ve iki gerçek token** ile yazılacak — tek kullanıcıyla yazılan test, kontrol olsun olmasın geçer | *Yanlış sebeple yeşil* |
 | **W5-2b-2** | Ticket `actorUserId` karşılaştırmasını kaldır | İkinci aktör **farklı tenant'tan** olacak; aynı tenant'tan ikisi, ileride eklenecek bir tenant kontrolüyle testi yanlış sebeple yeşil tutabilir | *Yanlış sebeple yeşil* |

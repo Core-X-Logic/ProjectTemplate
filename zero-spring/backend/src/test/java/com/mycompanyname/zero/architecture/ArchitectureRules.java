@@ -48,6 +48,14 @@ final class ArchitectureRules {
 
     static final String PRODUCTION_PACKAGE = "com.mycompanyname.zero..";
 
+    /**
+     * The application base package — Modulith module roots are its direct sub-packages, so rule 4's
+     * walk up the package tree stops here. Derived from {@link #PRODUCTION_PACKAGE} so that
+     * renaming the template (see {@code SETUP-NEW-PROJECT.md}) has one place to touch, not two.
+     */
+    static final String BASE_PACKAGE = PRODUCTION_PACKAGE.substring(
+            0, PRODUCTION_PACKAGE.length() - "..".length());
+
     private static final String PAGEABLE = "org.springframework.data.domain.Pageable";
 
     private static final List<Class<? extends Annotation>> REQUEST_MAPPINGS = List.of(
@@ -206,35 +214,102 @@ final class ArchitectureRules {
     }
 
     // ---------------------------------------------------------------------------------------
-    // Rule 4 — every @Entity lives in a package that declares itself
+    // Rule 4 — every @Entity lives under a declared module root
     // ---------------------------------------------------------------------------------------
 
     /**
      * Measured, not assumed: {@code ModularityTests.verify()} passes a module that writes NO
-     * {@code package-info.java}, because {@code allowedDependencies} defaults to empty and empty
+     * {@code @ApplicationModule}, because {@code allowedDependencies} defaults to empty and empty
      * means "unconstrained", not "nothing allowed". The Modulith boundary test therefore certifies
-     * precisely the modules that have no boundary. Requiring a {@code package-info.java} next to
-     * every entity forces each persistence package to state what it is before Modulith can vouch
-     * for it.
+     * most confidently precisely the packages that have declared no boundary. This rule requires
+     * every entity — the state a leak actually escapes through — to sit under a package that made
+     * the declaration, so that Modulith's verdict on it means something.
+     *
+     * <p><b>Why the previous formulation was wrong, and how that was found.</b> Until Wave 5 this
+     * rule read "every {@code @Entity} resides in a package that ships a {@code package-info.java}",
+     * checking the entity's OWN package for the mere EXISTENCE of the file. It froze 12 violations.
+     * Every one of them was measured to be a mistake:
+     *
+     * <ul>
+     *   <li><b>It never looked where its own justification applied.</b> All 12 frozen entities sat
+     *       in internal sub-packages of the five modules that DO declare {@code allowedDependencies}
+     *       ({@code audit}, {@code identity}, {@code notification}, {@code saas}, {@code settings}).
+     *       Not one was an undeclared module. The packages the justification actually described —
+     *       {@code config}, {@code seed}, {@code shared} — contain no entity, so the rule never
+     *       looked at them at all.
+     *   <li><b>Its sign was inverted.</b> Three of the five entities it PASSED live in
+     *       {@code identity.domain}, whose {@code package-info.java} carries {@code @NamedInterface}
+     *       — an annotation that OPENS the package to other modules. The rule scored a package for
+     *       loosening its boundary and penalised the properly encapsulated ones.
+     *   <li><b>Its only available fix was a no-op.</b> Because it tested file existence and not
+     *       content, twelve empty {@code package-info.java} files would have turned it green while
+     *       changing Modulith's semantics by exactly nothing. In a template that is worse than no
+     *       rule: the silencing pattern is inherited by every clone.
+     * </ul>
+     *
+     * <p>The invariant below is the one the justification always described. It walks UP from the
+     * entity to its module root and reads the declaration rather than counting the file. Both
+     * {@code allowedDependencies} and {@code Type.OPEN} are accepted: waiving a boundary on purpose
+     * is a decision, and this rule is about decisions being made, not about which one was made.
      */
-    static ArchRule entitiesLiveInDeclaredPackages() {
+    static ArchRule entitiesLiveUnderADeclaredModuleRoot() {
         return classes()
                 .that().areAnnotatedWith(Entity.class)
-                .should(new ArchCondition<JavaClass>("reside in a package with a package-info.java") {
+                .should(new ArchCondition<JavaClass>(
+                        "reside under a package declaring @ApplicationModule") {
+
+                    private int entitiesSeen;
+
                     @Override
                     public void check(JavaClass entity, ConditionEvents events) {
-                        if (!JavaSources.hasPackageInfo(entity.getName())) {
+                        entitiesSeen++;
+                        if (JavaSources.declaringModuleRoot(entity.getName(), BASE_PACKAGE)
+                                .isEmpty()) {
                             events.add(SimpleConditionEvent.violated(entity,
                                     "Entity " + entity.getName() + " lives in package "
-                                            + entity.getPackageName() + " which has no "
-                                            + "package-info.java — Modulith's verify() passes an "
-                                            + "undeclared package by default, so this boundary is "
-                                            + "currently unchecked rather than checked and clean."));
+                                            + entity.getPackageName() + ", and no package from "
+                                            + "there up to " + BASE_PACKAGE + " declares "
+                                            + "@ApplicationModule — Modulith constrains only what a "
+                                            + "module root claims, so this entity's boundary is "
+                                            + "unchecked rather than checked and clean. Declare the "
+                                            + "module root (allowedDependencies, or Type.OPEN if the "
+                                            + "waiver is deliberate); do NOT add an empty "
+                                            + "package-info.java, which silences this rule without "
+                                            + "changing anything Modulith enforces."));
+                        }
+                    }
+
+                    /**
+                     * Vacuity guard. A rule that matched no class would report "no violations" and
+                     * go green having certified nothing — the failure mode this whole test class
+                     * exists to prevent. If the entity scan ever comes back empty (renamed base
+                     * package, unbuilt classes, a changed import option), that is a broken guard,
+                     * not a clean codebase.
+                     *
+                     * <p><b>This is the second of two layers, and it was measured.</b> Forcing the
+                     * matched set empty fails the build on ArchUnit's own {@code failOnEmptyShould},
+                     * which pre-empts this method — it never runs. But that built-in is a GLOBAL
+                     * default that is not pinned in {@code archunit.properties}: setting
+                     * {@code archRule.failOnEmptyShould=false} to quieten some unrelated rule would
+                     * switch it off everywhere at once. Re-running the same empty-set probe with the
+                     * built-in disabled produces the message below instead, so this guard is the
+                     * layer that survives that change rather than dead code kept for appearances.
+                     */
+                    @Override
+                    public void finish(ConditionEvents events) {
+                        if (entitiesSeen == 0) {
+                            events.add(SimpleConditionEvent.violated(this,
+                                    "Rule 4 examined ZERO @Entity classes. It cannot have verified "
+                                            + "anything; a green result here would be vacuous. Check "
+                                            + "that target/classes is built and that "
+                                            + BASE_PACKAGE + " is still the base package."));
                         }
                     }
                 })
-                .as("Rule 4: every @Entity resides in a package that ships a package-info.java")
-                .because("Modulith's verify() green-lights a module that declares no boundary at all");
+                .as("Rule 4: every @Entity resides under a package that declares @ApplicationModule "
+                        + "(allowedDependencies or Type.OPEN — both are decisions; absence is not)")
+                .because("Modulith only constrains packages that a module root claims; an entity "
+                        + "under no declared root is unchecked rather than checked and clean");
     }
 
     // ---------------------------------------------------------------------------------------

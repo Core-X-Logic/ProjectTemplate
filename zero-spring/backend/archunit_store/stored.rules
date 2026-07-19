@@ -1,7 +1,7 @@
 #
-#Sun Jul 19 12:55:10 TRT 2026
+#Sun Jul 19 16:39:37 TRT 2026
 Rule\ 1\:\ @EntityGraph\ and\ Pageable\ are\ never\ used\ on\ the\ same\ repository\ method,\ because\ in-memory\ pagination\ is\ invisible\ at\ demo\ scale\ and\ fatal\ at\ production\ scale=00abf553-4f69-4178-8bc3-774d3ea80be6
 Rule\ 2\:\ entities\ with\ a\ tenant_id\ column\ declare\ a\ Hibernate\ tenant\ @Filter\ (saas\ excluded\ per\ ADR-0015\ \u2014\ host-scoped\ by\ design,\ paid\ for\ with\ a\ host\ permission\ plus\ a\ negative\ authorization\ test\ on\ every\ endpoint),\ because\ a\ missing\ tenant\ filter\ is\ a\ silent\ cross-tenant\ leak,\ not\ a\ visible\ failure=be784e9a-c0a0-4f4b-8fdf-cd40216db4bf
 Rule\ 3\:\ @PreAuthorize\ expressions\ reference\ permission\ constants,\ not\ raw\ strings,\ because\ a\ mistyped\ permission\ string\ compiles,\ passes\ tests,\ and\ 403s\ for\ ever=8011803f-3d4f-4673-afaa-b4e40efd56d8
-Rule\ 4\:\ every\ @Entity\ resides\ in\ a\ package\ that\ ships\ a\ package-info.java,\ because\ Modulith's\ verify()\ green-lights\ a\ module\ that\ declares\ no\ boundary\ at\ all=1e2f7884-aae9-4c6c-8765-15250b2c17af
+Rule\ 4\:\ every\ @Entity\ resides\ under\ a\ package\ that\ declares\ @ApplicationModule\ (allowedDependencies\ or\ Type.OPEN\ \u2014\ both\ are\ decisions;\ absence\ is\ not),\ because\ Modulith\ only\ constrains\ packages\ that\ a\ module\ root\ claims;\ an\ entity\ under\ no\ declared\ root\ is\ unchecked\ rather\ than\ checked\ and\ clean=e00370f0-7ae8-4af4-b795-d8c996aba23e
 Rule\ 5\:\ @RestController\ request\ handlers\ carry\ @PreAuthorize,\ except\ the\ endpoints\ named\ in\ INTENTIONALLY_ANONYMOUS,\ because\ an\ unguarded\ handler\ is\ reachable\ by\ every\ authenticated\ user\ of\ every\ tenant=d6c99ec0-8007-4982-b73c-b3cc04a1772d
