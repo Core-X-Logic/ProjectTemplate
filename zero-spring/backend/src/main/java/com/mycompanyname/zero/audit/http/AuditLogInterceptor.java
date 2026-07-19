@@ -5,6 +5,7 @@ import com.mycompanyname.zero.audit.AuditLogService;
 import com.mycompanyname.zero.audit.AuditPrincipal;
 import com.mycompanyname.zero.audit.AuditSupport;
 import com.mycompanyname.zero.audit.domain.AuditLog;
+import com.mycompanyname.zero.shared.web.EndpointPolicy;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.time.Instant;
@@ -17,9 +18,10 @@ import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.AsyncHandlerInterceptor;
 
 /**
- * Records one {@link AuditLog} per {@code /api/**} request (login/refresh excluded so their
- * credentials are never captured). Timing spans the whole request, surviving async re-dispatch.
- * Request parameters are serialised to JSON with sensitive keys masked.
+ * Records one {@link AuditLog} per {@code /api/**} request. Endpoints whose parameters are
+ * credentials opt out by claiming {@code EndpointPolicy.Exposure.AUDIT_EXEMPT} on the handler
+ * itself; this module names no other module's paths. Timing spans the whole request, surviving async
+ * re-dispatch. Request parameters are serialised to JSON with sensitive keys masked.
  */
 @Component
 @RequiredArgsConstructor
@@ -35,7 +37,7 @@ public class AuditLogInterceptor implements AsyncHandlerInterceptor {
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
-        if (shouldAudit(request) && request.getAttribute(START_NANOS_ATTR) == null) {
+        if (shouldAudit(request, handler) && request.getAttribute(START_NANOS_ATTR) == null) {
             request.setAttribute(START_INSTANT_ATTR, Instant.now());
             request.setAttribute(START_NANOS_ATTR, System.nanoTime());
         }
@@ -76,7 +78,21 @@ public class AuditLogInterceptor implements AsyncHandlerInterceptor {
         }
     }
 
-    private boolean shouldAudit(HttpServletRequest request) {
+    /**
+     * <p><b>R-38A.</b> The exemption used to read
+     * {@code uri.startsWith("/api/auth/login") || uri.startsWith("/api/auth/refresh")}. Those two
+     * strings are {@code identity}'s URL surface, hardcoded inside {@code audit}, whose
+     * {@code allowedDependencies = {"shared"}} says it depends on nothing else — an undeclared
+     * cross-module edge that neither Modulith nor ArchUnit nor the compiler could see, and that would
+     * have silently stopped matching the day {@code identity} renamed a path. The interceptor is
+     * already handed the resolved {@link HandlerMethod}, so the handler can state the exemption
+     * itself and the strings can be deleted rather than re-spelled. {@code audit}'s declared boundary
+     * is now TRUE, not merely unfalsified.
+     *
+     * <p>{@code /api/} stays literal: it is the API namespace this interceptor is registered on (see
+     * {@code AuditWebConfig}), owned by no module and claimed by no route.
+     */
+    private boolean shouldAudit(HttpServletRequest request, Object handler) {
         String uri = request.getRequestURI();
         if (uri == null || !uri.startsWith("/api/")) {
             return false;
@@ -84,7 +100,23 @@ public class AuditLogInterceptor implements AsyncHandlerInterceptor {
         if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
             return false;
         }
-        return !(uri.startsWith("/api/auth/login") || uri.startsWith("/api/auth/refresh"));
+        return !claimsAuditExemption(handler);
+    }
+
+    private static boolean claimsAuditExemption(Object handler) {
+        if (!(handler instanceof HandlerMethod handlerMethod)) {
+            return false;
+        }
+        EndpointPolicy policy = handlerMethod.getMethodAnnotation(EndpointPolicy.class);
+        if (policy == null) {
+            return false;
+        }
+        for (EndpointPolicy.Exposure exposure : policy.value()) {
+            if (exposure == EndpointPolicy.Exposure.AUDIT_EXEMPT) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String parameters(HttpServletRequest request) {

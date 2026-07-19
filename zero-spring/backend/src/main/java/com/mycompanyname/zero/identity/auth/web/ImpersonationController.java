@@ -6,6 +6,8 @@ import com.mycompanyname.zero.identity.auth.web.dto.ImpersonateRequest;
 import com.mycompanyname.zero.identity.auth.web.dto.ImpersonationTokenDto;
 import com.mycompanyname.zero.identity.domain.AppPermissions;
 import com.mycompanyname.zero.identity.web.dto.TokenPairDto;
+import com.mycompanyname.zero.shared.web.EndpointPolicy;
+import com.mycompanyname.zero.shared.web.EndpointPolicy.Exposure;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -28,6 +30,7 @@ public class ImpersonationController {
 
     @PostMapping("/impersonate")
     @PreAuthorize("hasAuthority('" + AppPermissions.USERS_IMPERSONATE + "')")
+    @EndpointPolicy(Exposure.SUBSCRIPTION_EXEMPT)
     public ImpersonationTokenDto impersonate(@Valid @RequestBody ImpersonateRequest request) {
         return impersonationService.start(request);
     }
@@ -41,6 +44,7 @@ public class ImpersonationController {
      */
     @PostMapping("/impersonate/authenticate")
     @PreAuthorize("isAuthenticated()")
+    @EndpointPolicy(Exposure.SUBSCRIPTION_EXEMPT)
     public TokenPairDto authenticate(@Valid @RequestBody ImpersonateAuthRequest request) {
         return impersonationService.authenticate(request);
     }
@@ -53,6 +57,7 @@ public class ImpersonationController {
      */
     @PostMapping("/back-to-impersonator")
     @PreAuthorize("isAuthenticated()")
+    @EndpointPolicy(Exposure.SUBSCRIPTION_EXEMPT)
     public TokenPairDto backToImpersonator() {
         return impersonationService.backToImpersonator();
     }

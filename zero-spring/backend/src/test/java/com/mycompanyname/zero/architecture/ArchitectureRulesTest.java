@@ -5,7 +5,9 @@ import com.tngtech.archunit.core.domain.JavaModifier;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.lang.ArchRule;
+import com.mycompanyname.zero.shared.web.EndpointPolicy;
 import com.tngtech.archunit.library.freeze.FreezingArchRule;
+import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
@@ -15,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.web.bind.annotation.RestController;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Checks the five architecture rules against production code.
@@ -96,6 +99,112 @@ class ArchitectureRulesTest {
                         + "longer name any @RestController method, so they exempt nothing and hide "
                         + "nothing — remove them, or fix the name they were meant to point at")
                 .containsAll(ArchitectureRules.INTENTIONALLY_ANONYMOUS);
+    }
+
+    /**
+     * Rule 6 is checked RAW, not frozen, and that is the point. It is at zero violations against
+     * production code today, so it enforces from zero; freezing it would create a sixth store file
+     * and bank whatever it happened to find on the first run, which is precisely the "green because
+     * the debt was recorded, not because the code is clean" move this project keeps having to undo.
+     * The frozen store stays at five files, all empty.
+     */
+    @Test
+    @DisplayName("Rule 6: /api path literals stay in the module that serves them")
+    void apiPathLiteralsStayInTheModuleThatServesThem() {
+        ArchitectureRules.apiPathLiteralsStayInTheModuleThatServesThem().check(productionClasses);
+    }
+
+    /**
+     * The first assertion of the claim {@code ArchitectureRules.INTENTIONALLY_ANONYMOUS} has always
+     * made about itself: "SecurityConfig, not this list, is the source of truth; this list only
+     * records the consequence." Until now nobody checked that. {@code anonymousExemptionsStillMatchRealHandlers}
+     * below verifies each entry names an existing {@code @RestController} method — it never looks at
+     * whether anything actually exposes it.
+     *
+     * <p>This binds the list to the handlers' own {@code @EndpointPolicy(ANONYMOUS)} claims, in both
+     * directions. {@code SecurityPathBindingIT} then binds those claims to the live {@code permitAll}
+     * grants, so the chain list -> claim -> grant -> live 401 is closed end to end. Kept in surefire
+     * because it needs no context and this is the half people run most often.
+     */
+    @Test
+    @DisplayName("Rule 5 guard: INTENTIONALLY_ANONYMOUS equals the set of @EndpointPolicy(ANONYMOUS) handlers")
+    void theIntentionallyAnonymousSetEqualsTheAnnotatedSet() {
+        Set<String> claimed = productionClasses.stream()
+                .filter(clazz -> clazz.isAnnotatedWith(RestController.class))
+                .flatMap(clazz -> clazz.getMethods().stream())
+                .filter(method -> method.isAnnotatedWith(EndpointPolicy.class))
+                .filter(method -> List.of(method.getAnnotationOfType(EndpointPolicy.class).value())
+                        .contains(EndpointPolicy.Exposure.ANONYMOUS))
+                .map(ArchitectureRules::key)
+                .collect(Collectors.toCollection(TreeSet::new));
+
+        assertThat(claimed)
+                .describedAs("no handler claims @EndpointPolicy(ANONYMOUS) at all — either the "
+                        + "annotation was removed from every anonymous endpoint, or this test is "
+                        + "reading the wrong classes. Both are red, never green")
+                .isNotEmpty();
+
+        assertThat(claimed)
+                .describedAs("ArchitectureRules.INTENTIONALLY_ANONYMOUS and the handlers claiming "
+                        + "@EndpointPolicy(ANONYMOUS) must be the SAME set. A handler in the list but "
+                        + "not annotated is exempted from Rule 5 while nothing records why; a handler "
+                        + "annotated but not in the list claims to be public while Rule 5 still "
+                        + "demands @PreAuthorize on it")
+                .containsExactlyInAnyOrderElementsOf(ArchitectureRules.INTENTIONALLY_ANONYMOUS);
+    }
+
+    /**
+     * Proves the readability guard that Rule 6 now applies to registered policy holders, in both
+     * directions: red on the form that was measured green, and clean on the real
+     * {@code SecurityConfig}.
+     *
+     * <p><b>Why this test exists at all.</b> Rule 6 passing tells you nothing about this guard —
+     * the guard's whole purpose is to fire on a form that does not exist in the codebase, so the
+     * production run can only ever exercise its negative branch. The fixture is the positive branch,
+     * and it is the auditor's finding verbatim: {@code .requestMatchers(PARTNER_PATHS).permitAll()}
+     * put the entire tenancy admin surface at permitAll with surefire 137, failsafe 271 and BUILD
+     * SUCCESS, because the group parsed and yielded zero literals.
+     *
+     * <p>The {@code hasAuthority} line in the fixture is deliberate. Keying on {@code permitAll}
+     * would have closed one spelling and left the next one open; the guard reads the ARGUMENT, so
+     * both are caught by the same assertion.
+     *
+     * <p><b>The fourth call is the second measured evasion and carries two guards at once.</b> It
+     * writes the dot and the method name on separate lines — legal Java that the first version of
+     * this scan, which asked for the contiguous token {@code ".requestMatchers"}, read as no call at
+     * all. Reproduced against the pre-fix scan with the same form in the real {@code SecurityConfig}:
+     * {@code /api/tenants/**} at {@code permitAll}, 9 tests, 0 failures, BUILD SUCCESS, UNREADABLE
+     * count 0. Because that call also has to be counted by BOTH detectors in {@code JavaSources},
+     * reverting either one alone makes them disagree and this test errors rather than passing.
+     */
+    @Test
+    @DisplayName("Rule 6 guard: a requestMatchers argument that is not an inline literal is rejected")
+    void unreadablePathDecisionsAreRejected() {
+        String fixture = UnreadablePathPolicyFixture.class.getName();
+
+        assertThat(JavaSources.requestMatcherArguments(fixture))
+                .describedAs("the fixture's four requestMatchers calls were not read at all — the "
+                        + "scan is broken, and a broken scan reports every file as clean. The fourth "
+                        + "call is written with a newline between the dot and the method name, which "
+                        + "is legal Java and was read as NO CALL by the contiguous-token scan this "
+                        + "replaced; if only three arguments come back, the pattern match regressed")
+                .hasSize(5)
+                .filteredOn(argument -> !argument.isReadable())
+                .describedAs("the three non-literal arguments in the fixture were classified as "
+                        + "readable, which is the exact silent-green state being closed")
+                .hasSize(3);
+
+        assertThatThrownBy(() -> JavaSources.verifyRequestMatchersAreReadable(fixture))
+                .describedAs("the guard accepted a String[] constant as a path decision")
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("PARTNER_PATHS");
+
+        assertThat(JavaSources.verifyRequestMatchersAreReadable(
+                "com.mycompanyname.zero.identity.auth.SecurityConfig"))
+                .describedAs("SecurityConfig either has no requestMatchers call the scan can find — "
+                        + "in which case the guard is vacuous — or writes one in a form it cannot "
+                        + "read")
+                .isGreaterThanOrEqualTo(3);
     }
 
     private static void check(ArchRule rule) {

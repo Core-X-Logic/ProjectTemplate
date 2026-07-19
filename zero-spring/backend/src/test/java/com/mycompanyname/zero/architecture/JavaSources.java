@@ -7,9 +7,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -66,7 +68,400 @@ final class JavaSources {
     private static final Pattern TYPE_DECLARATION =
             Pattern.compile("\\b(?:class|interface|record|enum)\\s+\\w+");
 
+    /**
+     * A WHOLE string literal that is an {@code /api} path and nothing else. Both ends are anchored
+     * inside the quotes on purpose, and the measurement that forced it is in this repository:
+     * {@code ExportLimitProperties:75} contains
+     * {@code "/api/users/export and /api/audit-logs/export answering every request "} — English prose
+     * that happens to begin with a path. A prefix-anchored scan reports it as a dead access decision
+     * and the rule goes red against correct code on day one. Excluding whitespace and quotes from the
+     * tail is what tells a route apart from a sentence.
+     */
+    private static final Pattern API_PATH_LITERAL = Pattern.compile("\"(/api(?:/[^\\s\"]*)?)\"");
+
+    /**
+     * {@code .requestMatchers("a", "b").permitAll()} in {@code SecurityConfig}'s fluent chain. The
+     * inner group excludes parentheses so the match cannot run past the call it belongs to, and the
+     * source is whitespace-normalised first because the chain wraps across lines.
+     */
+    private static final Pattern PERMIT_ALL_GROUP =
+            Pattern.compile("\\.\\s*requestMatchers\\s*\\(([^()]*)\\)\\s*\\.\\s*permitAll\\s*\\(\\s*\\)");
+
+    /**
+     * The SAME call site as {@link #openingParenOfRequestMatchers}, detected by a completely
+     * different mechanism: one regex over the whole file instead of a hand-rolled character walk.
+     *
+     * <p>This exists to be a second opinion, not a convenience. The hole this file has now been bitten
+     * by twice is ADDITIVE loss — one call site going quiet while the others keep the aggregate
+     * counter comfortably non-zero, so every "did we see anything at all" guard stays satisfied. No
+     * count of things-we-found can detect a thing-we-did-not-find. Two independent detectors of the
+     * same thing can, because the one that missed it DISAGREES with the one that did not. See
+     * {@link #requestMatcherArguments}, which refuses to return when they disagree.
+     */
+    private static final Pattern REQUEST_MATCHERS_CALL =
+            Pattern.compile("\\.\\s*requestMatchers\\s*\\(");
+
+    /** A string or char literal, blanked before the independent count so quoted prose is not one. */
+    private static final Pattern ANY_LITERAL =
+            Pattern.compile("\"(?:[^\"\\\\\\n]|\\\\.)*\"|'(?:[^'\\\\\\n]|\\\\.)*'");
+
+    private static final Pattern STRING_LITERAL = Pattern.compile("\"([^\"]*)\"");
+
+    /** A whole argument that is nothing but one string literal — the only form the parsers read. */
+    private static final Pattern WHOLE_STRING_LITERAL =
+            Pattern.compile("\"(?:[^\"\\\\]|\\\\.)*\"");
+
     private JavaSources() {
+    }
+
+    /** One {@code /api} path literal written in source, with the line it was written on. */
+    record ApiPathLiteral(int line, String value) {
+    }
+
+    /**
+     * Every whole {@code /api…} string literal in {@code className}'s source, comments removed.
+     *
+     * <p>Source and not bytecode, for the reason this whole class exists: a bytecode rule cannot tell
+     * a path constant apart from a raw literal, and cannot attribute a constant-pool string to the
+     * line that wrote it. Fails loudly through {@link #read} when the source file is missing.
+     */
+    static List<ApiPathLiteral> apiPathLiterals(String className) {
+        List<String> lines = withoutCommentsPreservingLines(read(className)).lines().toList();
+        List<ApiPathLiteral> found = new ArrayList<>();
+        for (int i = 0; i < lines.size(); i++) {
+            Matcher matcher = API_PATH_LITERAL.matcher(lines.get(i));
+            while (matcher.find()) {
+                found.add(new ApiPathLiteral(i + 1, matcher.group(1)));
+            }
+        }
+        return found;
+    }
+
+    /**
+     * Every path literal granted {@code permitAll()} in {@code className}'s security chain.
+     *
+     * <p><b>NOT the load-bearing check any more, and the caller must know it.</b> This parses one
+     * named file's fluent DSL. Four evasions were measured against it, all with a live grant on the
+     * chain and a green build: a backslash-u escaped dot, a readable literal in a helper class outside
+     * that file, a second {@code SecurityFilterChain} bean, and
+     * {@code WebSecurityCustomizer.ignoring()}. The last three contain nothing this parser is even
+     * looking at. {@code FilterChainReachabilityIT} probes the RUNNING CHAIN and caught all four; this
+     * stays because it names a file and a line, which the wire probe cannot.
+     *
+     * <p><b>This is the most brittle component of the design and it is deliberately fail-loud.</b> It
+     * parses one specific file's fluent DSL. Extract the matchers into a helper method, build one
+     * from a variable, or move the list to a {@code @Bean}, and this parser sees less than the truth
+     * — which is the dangerous direction for a rule that asserts "nothing outside this set is
+     * anonymous".
+     *
+     * <p><b>Two failure modes, and the second one was measured green.</b> A TOTAL parse loss is
+     * caught by the zero-group throw below plus the canaries the call sites assert. An ADDITIVE one
+     * is not, and that hole was real: writing
+     *
+     * <pre>{@code
+     * private static final String[] PARTNER_PATHS = {"/api/tenants/**"};
+     * ...
+     * .requestMatchers(PARTNER_PATHS).permitAll()
+     * }</pre>
+     *
+     * matches {@link #PERMIT_ALL_GROUP} (so the group count is non-zero), yields ZERO literals from
+     * inside it, leaves both canaries standing and both size floors satisfied. Measured result: the
+     * whole tenancy admin surface at {@code permitAll} with surefire 137, failsafe 271, BUILD SUCCESS.
+     * Counting literals per group cannot fix this — one legitimate group carries two or three of them
+     * — so the invariant enforced instead is that every {@code requestMatchers} ARGUMENT is a form
+     * this parser can read, checked by {@link #verifyRequestMatchersAreReadable} before any
+     * extraction happens. A form it cannot read fails; it is never skipped.
+     */
+    static Set<String> permitAllMatchers(String className) {
+        // Before extracting anything: prove the file contains nothing this parser cannot read.
+        // Without this, an ADDITIVE unreadable grant is silently dropped and every assertion
+        // derived from the returned set narrows without saying so. See the method's javadoc.
+        verifyRequestMatchersAreReadable(className);
+        String source = withoutCommentsPreservingLines(read(className)).replaceAll("\\s+", " ");
+        Set<String> matchers = new LinkedHashSet<>();
+        Matcher group = PERMIT_ALL_GROUP.matcher(source);
+        int groups = 0;
+        while (group.find()) {
+            groups++;
+            Matcher literal = STRING_LITERAL.matcher(group.group(1));
+            while (literal.find()) {
+                matchers.add(literal.group(1));
+            }
+        }
+        if (groups == 0 || matchers.isEmpty()) {
+            throw new IllegalStateException(
+                    "Parsed " + groups + " permitAll() matcher group(s) and " + matchers.size()
+                            + " literal(s) out of " + className + ". This parser reads the security "
+                            + "chain to prove that every anonymous endpoint has a grant and that no "
+                            + "other endpoint does; seeing nothing means it can prove neither. If the "
+                            + "chain was legitimately refactored, fix the parser deliberately — do "
+                            + "NOT relax this guard, which is the only thing standing between a "
+                            + "reformat and a security rule that passes vacuously.");
+        }
+        return matchers;
+    }
+
+    /**
+     * One argument of one {@code .requestMatchers(...)} call, with the line it was written on.
+     *
+     * @param line the source line the enclosing call starts on
+     * @param text the argument exactly as written, trimmed
+     */
+    record RequestMatcherArgument(int line, String text) {
+
+        /**
+         * Whether this argument is a bare string literal — the ONLY form
+         * {@link #permitAllMatchers} and {@code SecurityPathBindingIT} can actually resolve to a
+         * route. A constant, an array, a field, a method call or a {@code HttpMethod} overload all
+         * read as a route decision to a human and as nothing at all to the parser.
+         */
+        boolean isReadable() {
+            return WHOLE_STRING_LITERAL.matcher(text).matches();
+        }
+    }
+
+    /**
+     * Every argument of every {@code .requestMatchers(...)} call in {@code className}'s source.
+     *
+     * <p>Unlike {@link #PERMIT_ALL_GROUP} this balances parentheses instead of excluding them, so a
+     * call whose argument is itself a call ({@code .requestMatchers(antMatcher("/x"))}) is SEEN and
+     * reported rather than failing to match and disappearing. It is also indifferent to what the
+     * chain does next: {@code permitAll()}, {@code hasAuthority(...)} and anything added later are
+     * all read the same way, because the hole being closed is in the ARGUMENT, not in the verb.
+     */
+    static List<RequestMatcherArgument> requestMatcherArguments(String className) {
+        String source = withoutCommentsPreservingLines(read(className));
+        List<RequestMatcherArgument> arguments = new ArrayList<>();
+        int i = 0;
+        int line = 1;
+        int callSites = 0;
+        while (i < source.length()) {
+            char c = source.charAt(i);
+            // Literals are SKIPPED rather than searched, so that prose or a violation message
+            // quoting the call is never mistaken for one — Rule 6's own message contains the token.
+            if (c == '"' || c == '\'') {
+                int end = copyLiteral(source, i, c, new StringBuilder());
+                for (int j = i; j < end; j++) {
+                    if (source.charAt(j) == '\n') {
+                        line++;
+                    }
+                }
+                i = end;
+                continue;
+            }
+            if (c == '\n') {
+                line++;
+                i++;
+                continue;
+            }
+            int open = openingParenOfRequestMatchers(source, i);
+            if (open < 0) {
+                i++;
+                continue;
+            }
+            callSites++;
+            int close = closingParen(source, open);
+            for (String argument : splitTopLevelArguments(source.substring(open + 1, close))) {
+                arguments.add(new RequestMatcherArgument(line, argument));
+            }
+            // The dot, the name and the paren need not be adjacent, so the skipped gap can contain
+            // newlines. Counting them keeps every later line number honest; the arguments above are
+            // attributed to the line the CALL starts on, which is the dot.
+            for (int j = i; j < open; j++) {
+                if (source.charAt(j) == '\n') {
+                    line++;
+                }
+            }
+            i = open + 1;
+        }
+        verifyScanAgreesWithIndependentCount(className, source, callSites);
+        return arguments;
+    }
+
+    /**
+     * Throws when the character walk above and {@link #REQUEST_MATCHERS_CALL} disagree about how many
+     * {@code requestMatchers} calls a file contains.
+     *
+     * <p><b>Why a second detector and not a bigger number.</b> Every vacuity guard this file had
+     * before was an aggregate: "did the scan find ZERO?". That question cannot be answered wrong by a
+     * partial loss. Hiding one call among six leaves five, the counter stays non-zero, and the guard
+     * says nothing — which is exactly how {@code .\nrequestMatchers(EVASIVE_PATHS)} reached
+     * {@code permitAll} with a green build. The invariant that actually holds is a RELATIONSHIP, not a
+     * magnitude: two detectors reading the same file for the same construct must agree. A count-based
+     * assertion ("there are six calls") was deliberately rejected — this repository has been through
+     * that with {@code PermissionRegistryAlignmentTest}, which is relationship-based for the same
+     * reason: a hard number is a number someone updates to make the build green.
+     *
+     * <p><b>What this does NOT cover, stated so nobody assumes it does.</b> Both detectors run on the
+     * output of {@link #withoutCommentsPreservingLines}. A defect in the comment stripper itself moves
+     * both of them the same way and they would agree while both being wrong. The stripper is shared on
+     * purpose — it is load-bearing and separately measured (see its javadoc) — but it is a single point
+     * of agreement, and the independence claimed here is about call-site DETECTION only.
+     */
+    private static void verifyScanAgreesWithIndependentCount(
+            String className, String strippedSource, int callSites) {
+        Matcher matcher = REQUEST_MATCHERS_CALL.matcher(ANY_LITERAL.matcher(strippedSource)
+                .replaceAll(""));
+        int independent = 0;
+        while (matcher.find()) {
+            independent++;
+        }
+        if (independent != callSites) {
+            throw new IllegalStateException(
+                    "Two independent scans of " + className + " disagree about how many "
+                            + "requestMatchers calls it contains: the source walk read " + callSites
+                            + ", a plain regex over the same text found " + independent + ". One of "
+                            + "them is missing an access decision, and the dangerous direction is the "
+                            + "walk missing it: an argument the walk never sees is never checked for "
+                            + "readability, never extracted as a grant, and still grants at runtime. "
+                            + "This is the ADDITIVE loss that aggregate 'did we see anything' guards "
+                            + "cannot detect by construction. Do not silence this by relaxing either "
+                            + "scan — find the form that only one of them reads and teach the other, "
+                            + "in the same commit.");
+        }
+    }
+
+    /**
+     * Throws unless every {@code requestMatchers} argument in {@code className} is a bare string
+     * literal. Returns the number of arguments examined, so callers can guard their own vacuity.
+     *
+     * <p><b>Deliberately stricter than "the parser happens to cope".</b> Rejecting a
+     * {@code HttpMethod} overload or a well-named path constant will one day fail a change that is
+     * perfectly correct. That is the intended trade: the failure is a red build with instructions,
+     * whereas the alternative — accepting a form nobody taught the parser to read — is a green build
+     * over an access decision no gate can see. This project has already paid for the second kind
+     * five times. Widening the accepted forms must be a deliberate edit here, together with the
+     * extraction code that has to understand them.
+     */
+    static int verifyRequestMatchersAreReadable(String className) {
+        List<RequestMatcherArgument> arguments = requestMatcherArguments(className);
+        List<String> unreadable = new ArrayList<>();
+        for (RequestMatcherArgument argument : arguments) {
+            if (!argument.isReadable()) {
+                unreadable.add(argument.text() + " (line " + argument.line() + ")");
+            }
+        }
+        if (!unreadable.isEmpty()) {
+            throw new IllegalStateException(
+                    "Unreadable requestMatchers argument(s) in " + className + ": " + unreadable
+                            + ". Every path decision, in ANY class and not only a registered policy "
+                            + "holder, must be "
+                            + "written as an inline string literal, because that is the only form the "
+                            + "source parser behind SecurityPathBindingIT can resolve against the live "
+                            + "handler mapping. A constant, an array or a computed value still grants "
+                            + "access at runtime while contributing NOTHING to the parsed set — so the "
+                            + "grant-vs-claim assertions keep passing over a surface they can no "
+                            + "longer see, and the filter-chain lock drops silently to zero. Inline "
+                            + "the literals, or teach JavaSources to resolve the new form and widen "
+                            + "this check in the same commit. Do not relax it.");
+        }
+        return arguments.size();
+    }
+
+    /**
+     * Index of the {@code (} opening a {@code .requestMatchers} call that starts at {@code at}, or
+     * {@code -1} when no such call starts there.
+     *
+     * <p><b>The dot, the name and the paren are matched as a PATTERN, never as one contiguous
+     * token, and that distinction was measured.</b> The first version of this scan asked
+     * {@code source.startsWith(".requestMatchers", at)}. Java does not require those characters to
+     * be adjacent: whitespace, a newline or a comment may sit between the dot and the method name,
+     * and any of them breaks the token while leaving the call perfectly valid. The auditor's
+     * reproduction was
+     *
+     * <pre>{@code
+     * .requestMatchers("/api/localization/**").permitAll()
+     * .
+     * requestMatchers(EVASIVE_PATHS).permitAll()
+     * }</pre>
+     *
+     * which put {@code /api/tenants/**} at {@code permitAll} at runtime while the readability check
+     * counted ZERO unreadable arguments and the whole build stayed green. Comments reach the same
+     * state, because {@link #withoutCommentsPreservingLines} blanks them but KEEPS the newlines they
+     * spanned — so a newline between the dot and the name is the realistic case, not an exotic one,
+     * and the whitespace skip below must span it.
+     */
+    private static int openingParenOfRequestMatchers(String source, int at) {
+        if (source.charAt(at) != '.') {
+            return -1;
+        }
+        String name = "requestMatchers";
+        int i = skipWhitespace(source, at + 1);
+        if (!source.startsWith(name, i)) {
+            return -1;
+        }
+        i += name.length();
+        // requestMatchersOfMine(...) is a different method and must not be read as this one.
+        if (i < source.length() && Character.isJavaIdentifierPart(source.charAt(i))) {
+            return -1;
+        }
+        i = skipWhitespace(source, i);
+        return i < source.length() && source.charAt(i) == '(' ? i : -1;
+    }
+
+    private static int skipWhitespace(String source, int from) {
+        int i = from;
+        while (i < source.length() && Character.isWhitespace(source.charAt(i))) {
+            i++;
+        }
+        return i;
+    }
+
+    /** Index of the {@code )} closing the {@code (} at {@code open}, ignoring parens in literals. */
+    private static int closingParen(String source, int open) {
+        int depth = 0;
+        int i = open;
+        while (i < source.length()) {
+            char c = source.charAt(i);
+            if (c == '"' || c == '\'') {
+                i = copyLiteral(source, i, c, new StringBuilder());
+                continue;
+            }
+            if (c == '(') {
+                depth++;
+            } else if (c == ')') {
+                depth--;
+                if (depth == 0) {
+                    return i;
+                }
+            }
+            i++;
+        }
+        throw new IllegalStateException(
+                "Unbalanced requestMatchers( argument list at offset " + open + ". The source scan "
+                        + "cannot read this file, which must fail rather than certify nothing.");
+    }
+
+    /** Splits an argument list at top-level commas, respecting nesting and string literals. */
+    private static List<String> splitTopLevelArguments(String argumentList) {
+        List<String> arguments = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        int depth = 0;
+        int i = 0;
+        while (i < argumentList.length()) {
+            char c = argumentList.charAt(i);
+            if (c == '"' || c == '\'') {
+                i = copyLiteral(argumentList, i, c, current);
+                continue;
+            }
+            if (c == '(' || c == '[' || c == '{') {
+                depth++;
+            } else if (c == ')' || c == ']' || c == '}') {
+                depth--;
+            }
+            if (c == ',' && depth == 0) {
+                arguments.add(current.toString().trim());
+                current.setLength(0);
+            } else {
+                current.append(c);
+            }
+            i++;
+        }
+        String last = current.toString().trim();
+        if (!last.isEmpty()) {
+            arguments.add(last);
+        }
+        return arguments;
     }
 
     /** One {@code @PreAuthorize} occurrence: the element it guards and its verbatim source text. */
@@ -232,6 +627,72 @@ final class JavaSources {
         return source
                 .replaceAll("(?s)/\\*.*?\\*/", "")
                 .replaceAll("(?m)//.*$", "");
+    }
+
+    /**
+     * Comments blanked out, line numbers preserved, and — unlike {@link #withoutComments} — string
+     * literals respected.
+     *
+     * <p><b>Why a scanner and not two regexes.</b> This was measured, and it silenced a rule
+     * completely. An Ant path pattern contains the characters that open a block comment:
+     * {@code "/api/auth/**"} holds {@code /*}. Running {@code (?s)/\*.*?\*&#47;} over
+     * {@code SubscriptionAccessCheck} therefore started a "comment" inside the exemption list and
+     * ended it at the closing {@code *&#47;} of the next javadoc thirty lines below, deleting all
+     * four exemption literals. The rule then reported that the file contains no path decisions —
+     * green, and certifying nothing. Only the vacuity guard caught it.
+     *
+     * <p>So the state machine below is load-bearing, not tidiness: a comment stripper that cannot
+     * tell a comment from a wildcard is a stripper that hides exactly the strings these rules exist
+     * to find. Text blocks are not handled; no path in this codebase is written as one, and
+     * {@link #apiPathLiterals} would simply not see it (Rule 6's documented blind spot, shared with
+     * Rule 3).
+     */
+    private static String withoutCommentsPreservingLines(String source) {
+        StringBuilder out = new StringBuilder(source.length());
+        int i = 0;
+        while (i < source.length()) {
+            char c = source.charAt(i);
+            if (c == '"' || c == '\'') {
+                i = copyLiteral(source, i, c, out);
+            } else if (c == '/' && i + 1 < source.length() && source.charAt(i + 1) == '/') {
+                while (i < source.length() && source.charAt(i) != '\n') {
+                    i++;
+                }
+            } else if (c == '/' && i + 1 < source.length() && source.charAt(i + 1) == '*') {
+                i += 2;
+                while (i < source.length()
+                        && !(source.charAt(i) == '*' && i + 1 < source.length()
+                                && source.charAt(i + 1) == '/')) {
+                    if (source.charAt(i) == '\n') {
+                        out.append('\n');
+                    }
+                    i++;
+                }
+                i = Math.min(i + 2, source.length());
+            } else {
+                out.append(c);
+                i++;
+            }
+        }
+        return out.toString();
+    }
+
+    /** Copies a string or char literal verbatim, honouring backslash escapes. Returns the next index. */
+    private static int copyLiteral(String source, int start, char quote, StringBuilder out) {
+        out.append(quote);
+        int i = start + 1;
+        while (i < source.length()) {
+            char c = source.charAt(i);
+            out.append(c);
+            i++;
+            if (c == '\\' && i < source.length()) {
+                out.append(source.charAt(i));
+                i++;
+            } else if (c == quote || c == '\n') {
+                break;
+            }
+        }
+        return i;
     }
 
     private static String packageOf(String className) {

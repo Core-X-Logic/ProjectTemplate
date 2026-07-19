@@ -122,9 +122,16 @@ zero:
     # D3: every permitAll endpoint that takes a @RequestBody belongs here — those are the ones an
     # anonymous caller can drive into bcrypt, the database, or the mail sender. /api/account/confirm-email
     # was missing: live, eight of eight requests from one address were served, giving unmetered
-    # database load and a free channel for guessing confirmation codes. The list is checked against
-    # SecurityConfig's permitAll rules by RateLimitMediaTypeFailClosedIT.everyAnonymousBodyEndpointIsThrottled,
-    # so adding a permitAll POST without adding it here now fails the build.
+    # database load and a free channel for guessing confirmation codes.
+    #
+    # R-38A. This comment used to claim the list was checked against SecurityConfig's permitAll rules
+    # by RateLimitMediaTypeFailClosedIT.everyAnonymousBodyEndpointIsThrottled. That was FALSE: the
+    # test hardcodes the same five paths and never reads SecurityConfig, so the two lists agreed only
+    # because one was copied from the other — which is how confirm-email slipped through in the first
+    # place (that test's own javadoc admits it). The claim is now true and made by a different test:
+    # SecurityPathBindingIT.everyAnonymousBodyHandlerIsThrottled DERIVES the required set from the
+    # handlers claiming EndpointPolicy.Exposure.ANONYMOUS with a @RequestBody parameter, so adding a
+    # permitAll POST without adding it here fails the build.
     # /api/auth/logout is deliberately absent: it requires authentication, so it is already bounded
     # by holding a valid token, and throttling it per IP would penalise everyone behind one NAT.
     paths: /api/auth/login,/api/auth/refresh,/api/account/forgot-password,/api/account/reset-password,/api/account/confirm-email

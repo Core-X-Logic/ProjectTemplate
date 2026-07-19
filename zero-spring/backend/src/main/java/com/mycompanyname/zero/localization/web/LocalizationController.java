@@ -2,6 +2,8 @@ package com.mycompanyname.zero.localization.web;
 
 import com.mycompanyname.zero.localization.LocalizationService;
 import com.mycompanyname.zero.localization.web.dto.LanguageDto;
+import com.mycompanyname.zero.shared.web.EndpointPolicy;
+import com.mycompanyname.zero.shared.web.EndpointPolicy.Exposure;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -22,11 +24,13 @@ public class LocalizationController {
     private final LocalizationService localizationService;
 
     @GetMapping("/languages")
+    @EndpointPolicy({Exposure.ANONYMOUS, Exposure.SUBSCRIPTION_EXEMPT})
     public List<LanguageDto> languages() {
         return localizationService.getLanguages();
     }
 
     @GetMapping("/{culture}")
+    @EndpointPolicy({Exposure.ANONYMOUS, Exposure.SUBSCRIPTION_EXEMPT})
     public Map<String, String> dictionary(@PathVariable String culture) {
         return localizationService.getDictionary(culture);
     }

@@ -5,6 +5,8 @@ import com.mycompanyname.zero.identity.web.dto.LoginRequest;
 import com.mycompanyname.zero.identity.web.dto.MeDto;
 import com.mycompanyname.zero.identity.web.dto.RefreshRequest;
 import com.mycompanyname.zero.identity.web.dto.TokenPairDto;
+import com.mycompanyname.zero.shared.web.EndpointPolicy;
+import com.mycompanyname.zero.shared.web.EndpointPolicy.Exposure;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -23,12 +25,18 @@ public class AuthController {
 
     private final AuthService authService;
 
+    /**
+     * {@code AUDIT_EXEMPT} is what {@code AuditLogInterceptor} now reads instead of hardcoding this
+     * controller's URL: the request parameters are credentials and must never be persisted.
+     */
     @PostMapping("/login")
+    @EndpointPolicy({Exposure.ANONYMOUS, Exposure.AUDIT_EXEMPT, Exposure.SUBSCRIPTION_EXEMPT})
     public TokenPairDto login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
     }
 
     @PostMapping("/refresh")
+    @EndpointPolicy({Exposure.ANONYMOUS, Exposure.AUDIT_EXEMPT, Exposure.SUBSCRIPTION_EXEMPT})
     public TokenPairDto refresh(@Valid @RequestBody RefreshRequest request) {
         return authService.refresh(request);
     }
@@ -40,6 +48,7 @@ public class AuthController {
      */
     @PostMapping("/logout")
     @PreAuthorize("isAuthenticated()")
+    @EndpointPolicy(Exposure.SUBSCRIPTION_EXEMPT)
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void logout(@Valid @RequestBody RefreshRequest request) {
         authService.logout(request.refreshToken());
@@ -54,6 +63,7 @@ public class AuthController {
      */
     @GetMapping("/me")
     @PreAuthorize("isAuthenticated()")
+    @EndpointPolicy(Exposure.SUBSCRIPTION_EXEMPT)
     public MeDto me() {
         return authService.me();
     }

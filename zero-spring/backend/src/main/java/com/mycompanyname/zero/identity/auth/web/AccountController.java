@@ -4,6 +4,8 @@ import com.mycompanyname.zero.identity.auth.AccountService;
 import com.mycompanyname.zero.identity.auth.web.dto.ConfirmEmailRequest;
 import com.mycompanyname.zero.identity.auth.web.dto.ForgotPasswordRequest;
 import com.mycompanyname.zero.identity.auth.web.dto.ResetPasswordRequest;
+import com.mycompanyname.zero.shared.web.EndpointPolicy;
+import com.mycompanyname.zero.shared.web.EndpointPolicy.Exposure;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -25,18 +27,21 @@ public class AccountController {
     private final AccountService accountService;
 
     @PostMapping("/forgot-password")
+    @EndpointPolicy({Exposure.ANONYMOUS, Exposure.SUBSCRIPTION_EXEMPT})
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
         accountService.forgotPassword(request.usernameOrEmail(), request.tenant());
     }
 
     @PostMapping("/reset-password")
+    @EndpointPolicy({Exposure.ANONYMOUS, Exposure.SUBSCRIPTION_EXEMPT})
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         accountService.resetPassword(request.resetCode(), request.newPassword());
     }
 
     @PostMapping("/confirm-email")
+    @EndpointPolicy({Exposure.ANONYMOUS, Exposure.SUBSCRIPTION_EXEMPT})
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void confirmEmail(@Valid @RequestBody ConfirmEmailRequest request) {
         accountService.confirmEmail(request.code());

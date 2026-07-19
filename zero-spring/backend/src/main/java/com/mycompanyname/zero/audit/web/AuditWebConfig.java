@@ -7,8 +7,9 @@ import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
- * Registers the {@link AuditLogInterceptor} for all API routes. Path-level exclusions
- * (login/refresh) are handled inside the interceptor.
+ * Registers the {@link AuditLogInterceptor} for all API routes. Exclusions are claimed by the
+ * handlers themselves ({@code EndpointPolicy.Exposure.AUDIT_EXEMPT}) and read off the resolved
+ * {@code HandlerMethod} inside the interceptor — no path list lives here or there.
  */
 @Configuration
 @RequiredArgsConstructor

@@ -10,8 +10,12 @@ import com.tngtech.archunit.lang.SimpleConditionEvent;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import java.lang.annotation.Annotation;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import org.hibernate.annotations.Filter;
 import org.hibernate.annotations.Filters;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -28,9 +32,15 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.methods;
 
 /**
- * The five architecture rules of this template, defined once and checked twice: frozen against
- * production code by {@link ArchitectureRulesTest}, and raw against deliberately broken fixtures
- * whenever the guards themselves need re-proving.
+ * The architecture rules of this template, defined once and checked twice: against production code
+ * by {@link ArchitectureRulesTest}, and raw against deliberately broken fixtures whenever the guards
+ * themselves need re-proving.
+ *
+ * <p>Rules 1-5 are FROZEN at the call site (five store files, all at zero violations). Rule 6 is
+ * checked RAW: it is at zero today, and freezing a new rule would bank whatever it happened to find
+ * into a store this project requires to stay empty. Their {@code as}/{@code because} text is the
+ * frozen store's key, so rewording rules 1-5 orphans their violations and silently re-freezes from
+ * zero — do not touch it. Appending a rule is safe.
  *
  * <p><b>Why rules and not fixes.</b> A template's most dangerous defect is the COPIED PATTERN: the
  * next developer reads the existing code as the worked example and reproduces the mistake. This is
@@ -367,6 +377,360 @@ final class ArchitectureRules {
     /** {@code AuthController#login} — the key format used by {@link #INTENTIONALLY_ANONYMOUS}. */
     static String key(JavaMethod method) {
         return method.getOwner().getSimpleName() + "#" + method.getName();
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Rule 6 — an /api path literal stays in the module that serves it
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * The two classes allowed to name another module's URL surface, because naming it is their
+     * entire job: they are where an access decision is made, and keeping the decisions centralised
+     * is what lets one reviewer read the whole effective grant in two files.
+     *
+     * <p>They are not unchecked — they are checked by a different, stronger mechanism.
+     * {@code SecurityPathBindingIT} and {@code SubscriptionExemptPathBindingIT} assert their literals
+     * against the LIVE handler mapping in both directions. This list is the registration that makes
+     * a third policy holder a visible, required diff instead of something a reviewer has to notice.
+     *
+     * <p><b>The registration is conditional, and it was not always.</b> Being on this list buys
+     * exemption from the ownership check only; it obliges the holder to keep its path decisions in a
+     * form those cross-checks can actually READ — see
+     * {@link #apiPathLiteralsStayInTheModuleThatServesThem()}. Until that obligation existed the
+     * exemption was a blanket skip, and a grant spelled as a {@code String[]} constant was invisible
+     * to the ownership rule (skipped as a holder) AND to the source parser (no literal inside the
+     * matcher group) while every gate stayed green.
+     */
+    static final Set<String> PATH_POLICY_HOLDERS = Set.of(
+            "com.mycompanyname.zero.identity.auth.SecurityConfig",
+            "com.mycompanyname.zero.saas.subscription.SubscriptionAccessCheck");
+
+    /**
+     * Literals that name the API namespace itself rather than any route inside it: the interceptor
+     * registration ({@code AuditWebConfig}), the interceptor's own namespace guard
+     * ({@code AuditLogInterceptor}), the application-wide body bound ({@code RequestLimitProperties})
+     * and the startup validator's filter. No module owns {@code /api}, so no module can be told it is
+     * trespassing by writing it, and demanding an owner for these is how a rule goes red against
+     * correct code.
+     */
+    private static final Set<String> API_NAMESPACE_LITERALS = Set.of("/api", "/api/", "/api/**");
+
+    /**
+     * An access decision bound to a URL string is invisible to every tool this project owns. The
+     * compiler sees a {@code String}; Modulith compares package references and a URL is not one;
+     * bytecode ArchUnit cannot tell a path constant from a raw literal. Measured with {@code javap}:
+     * a {@code static final String} constant folds to a bare {@code ldc} with NO reference to the
+     * class that declared it, so hoisting these paths into a shared {@code ApiPaths} class would emit
+     * byte-identical output and make exactly nothing visible. Only the source can see it, which is
+     * why this rule reads source — the same reason Rule 3 does.
+     *
+     * <p>The invariant is ownership, not existence: {@code /api/localization/**} written inside
+     * {@code identity} is an undeclared dependency on {@code localization}'s published URL surface,
+     * and the day localization renames its prefix the matcher silently stops matching while every
+     * gate in the build stays green. This rule confines such literals to the module that serves them
+     * plus the two registered policy holders, so the SEVENTH place someone parks a path decision goes
+     * red rather than joining the pattern. It also fails a literal that no {@code @RestController}
+     * serves at all, which catches the rename statically.
+     *
+     * <p>The registered policy holders are exempt from the ownership half and are held to the second
+     * half instead: every {@code requestMatchers} argument they write must be a bare string literal.
+     * That is not a style preference. The ownership half SKIPS a holder, and the source parser behind
+     * {@code SecurityPathBindingIT} sees only literals — so a grant spelled any other way falls
+     * through both at once. Measured: {@code .requestMatchers(PARTNER_PATHS).permitAll()} put the
+     * whole tenancy admin surface at {@code permitAll} with surefire 137, failsafe 271, BUILD SUCCESS
+     * and both parser canaries intact. The invariant is therefore about the FORM of the decision, not
+     * about the verb after it — {@code hasAuthority} is read the same way, or the next spelling is
+     * simply the next hole.
+     *
+     * <p><b>Which layer is load-bearing.</b> Not this one. Everything above is a property of SOURCE
+     * TEXT, and source text of a fluent DSL cannot be made airtight — four evasions were measured
+     * against it, each with the grant live on the running chain and this rule green: a backslash-u
+     * escaped dot (javac decodes it before lexing, so the token this rule looks for is not in the
+     * file), a readable literal in a helper class called from the chain builder, a second
+     * {@code SecurityFilterChain} bean with {@code securityMatcher}, and
+     * {@code WebSecurityCustomizer.ignoring()}. The last three contain no {@code requestMatchers}
+     * token at all. {@code FilterChainReachabilityIT} asks the RUNNING FILTER CHAIN which routes it
+     * serves without a credential and caught all four; it is the guarantee. This rule is kept as
+     * defence in depth and as the fast half of the loop — it runs without a servlet container and
+     * names the file and line, which a wire probe cannot. A green result here means the text is
+     * clean, never that the chain is.
+     *
+     * <p><b>Not frozen, on purpose.</b> It is at zero today, so it is checked raw. Freezing a new
+     * rule banks whatever it happens to find into a store that this project requires to stay empty,
+     * and a ratchet that starts non-zero is a ratchet nobody trusts.
+     */
+    static ArchRule apiPathLiteralsStayInTheModuleThatServesThem() {
+        return classes()
+                .that().resideInAPackage(PRODUCTION_PACKAGE)
+                .and(ARE_TOP_LEVEL)
+                .should(new ApiPathOwnershipCondition())
+                .as("Rule 6: an /api path literal appears only in the module that serves that route, "
+                        + "or in a registered access-policy holder, and every requestMatchers "
+                        + "argument anywhere in production source is an inline string literal")
+                .because("a path string binds one module to another module's URL surface where no "
+                        + "compiler, no Modulith check and no bytecode rule can see the coupling — "
+                        + "and a path decision written in a form the cross-checks cannot read is "
+                        + "exempted by the first half and invisible to the second");
+    }
+
+    /**
+     * Derives which module serves which route prefix from the controllers themselves, then requires
+     * every {@code /api} literal in production source to belong to its own module.
+     */
+    private static final class ApiPathOwnershipCondition extends ArchCondition<JavaClass> {
+
+        /** {@code /api/audit-logs} -> {@code audit}. Two segments: the module's route prefix. */
+        private final Map<String, String> ownerByPrefix = new TreeMap<>();
+
+        private final Set<String> policyHoldersSeen = new TreeSet<>();
+        private int matcherArgumentsSeen;
+        private int classesSeen;
+        private int literalsSeen;
+        private int literalsAttributed;
+
+        ApiPathOwnershipCondition() {
+            super("keep /api path literals inside the module that serves them");
+        }
+
+        /**
+         * The ownership map is built from the mapping annotations of every imported controller, NOT
+         * from a hand-written registry. Class-level {@code @RequestMapping} is concatenated with the
+         * method-level value exactly as Spring does, and an ABSENT class-level mapping contributes
+         * the empty string rather than skipping the class — {@code AuditLogController} and
+         * {@code FeatureController} carry no class-level mapping at all, so a rule that read class
+         * annotations alone would silently skip the whole of {@code audit} and half of {@code saas}.
+         */
+        @Override
+        public void init(Collection<JavaClass> allClasses) {
+            for (JavaClass clazz : allClasses) {
+                if (!clazz.isAnnotatedWith(RestController.class)) {
+                    continue;
+                }
+                String module = JavaSources.declaringModuleRoot(clazz.getName(), BASE_PACKAGE)
+                        .map(root -> root.substring(root.lastIndexOf('.') + 1))
+                        .orElse(null);
+                if (module == null) {
+                    continue;
+                }
+                for (String classPrefix : mappedValues(clazz, RequestMapping.class)) {
+                    for (JavaMethod method : clazz.getMethods()) {
+                        for (Class<? extends Annotation> mapping : REQUEST_MAPPINGS) {
+                            for (String methodPath : mappedValues(method, mapping)) {
+                                registerRoute(classPrefix + methodPath, module);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        private void registerRoute(String path, String module) {
+            if (!path.startsWith("/api/")) {
+                return;
+            }
+            String[] segments = path.split("/");
+            if (segments.length < 3) {
+                return;
+            }
+            ownerByPrefix.putIfAbsent("/api/" + segments[2], module);
+        }
+
+        @Override
+        public void check(JavaClass clazz, ConditionEvents events) {
+            classesSeen++;
+            boolean policyHolder = PATH_POLICY_HOLDERS.contains(clazz.getName());
+            String ownModule = JavaSources.declaringModuleRoot(clazz.getName(), BASE_PACKAGE)
+                    .map(root -> root.substring(root.lastIndexOf('.') + 1))
+                    .orElse(null);
+
+            // UNCONDITIONAL, and it was not always. Running this only on PATH_POLICY_HOLDERS meant a
+            // grant written in a helper class — one nobody registered, because registering it is what
+            // a reviewer would have noticed — was seen by nothing at all: not by this check (not a
+            // holder) and not by the source parser (which only ever parses SecurityConfig). The
+            // holders list decides who may name ANOTHER module's routes; it must not also decide who
+            // gets their access decisions read. Every production class pays the check.
+            checkPathDecisionsAreMachineReadable(clazz, events);
+
+            for (JavaSources.ApiPathLiteral literal : JavaSources.apiPathLiterals(clazz.getName())) {
+                literalsSeen++;
+                if (policyHolder) {
+                    policyHoldersSeen.add(clazz.getName());
+                    continue;
+                }
+                if (API_NAMESPACE_LITERALS.contains(literal.value())) {
+                    continue;
+                }
+                literalsAttributed++;
+                String owner = ownerOf(literal.value());
+                if (owner == null) {
+                    events.add(SimpleConditionEvent.violated(clazz,
+                            "Dead path literal '" + literal.value() + "' in " + clazz.getName()
+                                    + ":" + literal.line() + " — no @RestController serves any route "
+                                    + "under it. Either the endpoint moved and this decision now "
+                                    + "matches nothing (a permitAll that silently stopped granting, "
+                                    + "an exemption that silently stopped exempting), or the string "
+                                    + "has never matched. Known prefixes: " + ownerByPrefix.keySet()));
+                } else if (!owner.equals(ownModule)) {
+                    events.add(SimpleConditionEvent.violated(clazz,
+                            "Cross-module path literal '" + literal.value() + "' in "
+                                    + clazz.getName() + ":" + literal.line() + " — that route is "
+                                    + "served by module '" + owner + "' but the literal is written in "
+                                    + "module '" + ownModule + "'. Nothing in the build can see this "
+                                    + "coupling: rename the route and this string silently stops "
+                                    + "matching. Either move the decision to the owning module, or "
+                                    + "make the handler state it with "
+                                    + "@EndpointPolicy and read that instead (see AuditLogInterceptor). "
+                                    + "If this really is a central access-policy site, register it in "
+                                    + "ArchitectureRules.PATH_POLICY_HOLDERS — which obliges it to be "
+                                    + "cross-checked against the live mappings by SecurityPathBindingIT."));
+                }
+            }
+        }
+
+        /**
+         * Wherever a class configures URL access it must do so in a form the cross-checks can read
+         * back. Classes that write no {@code requestMatchers} call contribute nothing and cost
+         * nothing, so this runs on ALL of them rather than on a registered list.
+         *
+         * <p><b>The list was the hole.</b> While this ran only on {@link #PATH_POLICY_HOLDERS}, a
+         * grant written in an unregistered helper class was checked by nothing: not here (not a
+         * holder) and not by the source parser, which only ever parses {@code SecurityConfig}.
+         * Registration decides who may name ANOTHER module's routes; it must not also decide whose
+         * access decisions get read.
+         *
+         * <p>Reported as a violation rather than thrown so that ALL offending arguments appear in one
+         * run — a file that has drifted usually has drifted more than once, and fixing them one
+         * build at a time is how a reviewer concludes the problem was a typo. The parallel guard in
+         * {@code JavaSources.permitAllMatchers} throws instead, because there the caller is about to
+         * derive assertions from a set it cannot trust and must not proceed at all.
+         */
+        private void checkPathDecisionsAreMachineReadable(JavaClass clazz, ConditionEvents events) {
+            for (JavaSources.RequestMatcherArgument argument
+                    : JavaSources.requestMatcherArguments(clazz.getName())) {
+                matcherArgumentsSeen++;
+                if (argument.isReadable()) {
+                    continue;
+                }
+                events.add(SimpleConditionEvent.violated(clazz,
+                        "Unreadable path decision " + argument.text() + " in " + clazz.getName()
+                                + ":" + argument.line() + " — a requestMatchers argument that is not "
+                                + "an inline string literal. It grants access at runtime and "
+                                + "contributes NOTHING to any check: the ownership half of this rule "
+                                + "skips registered policy holders, and the source parser behind "
+                                + "SecurityPathBindingIT extracts only literals, so the assertions keep "
+                                + "passing over a surface neither of them can see. That is the "
+                                + "filter-chain lock dropping to zero while the gate reports success. "
+                                + "Inline the literals so both checks can read them, or teach "
+                                + "JavaSources to resolve this form and widen the check in the same "
+                                + "commit."));
+            }
+        }
+
+        /** Longest registered prefix the literal sits under; null when nothing serves it. */
+        private String ownerOf(String literal) {
+            String best = null;
+            for (String prefix : ownerByPrefix.keySet()) {
+                boolean under = literal.equals(prefix) || literal.startsWith(prefix + "/");
+                if (under && (best == null || prefix.length() > best.length())) {
+                    best = prefix;
+                }
+            }
+            return best == null ? null : ownerByPrefix.get(best);
+        }
+
+        /**
+         * Vacuity guards, five of them, because this rule has five independent ways to certify
+         * nothing while reporting success — and "green means verified" is the assumption this
+         * repository has been wrong about five times.
+         */
+        @Override
+        public void finish(ConditionEvents events) {
+            if (classesSeen == 0) {
+                events.add(SimpleConditionEvent.violated(this,
+                        "Rule 6 examined ZERO classes. Check that target/classes is built and that "
+                                + BASE_PACKAGE + " is still the base package."));
+            }
+            if (ownerByPrefix.isEmpty()) {
+                events.add(SimpleConditionEvent.violated(this,
+                        "Rule 6 derived ZERO route prefixes from @RestController mapping annotations, "
+                                + "so every literal would be reported as dead or, worse, the rule "
+                                + "would be trivially satisfied. The mapping extractor is broken."));
+            }
+            if (literalsSeen == 0) {
+                events.add(SimpleConditionEvent.violated(this,
+                        "Rule 6 found ZERO /api path literals in production source. This codebase "
+                                + "declares its routes with them, so seeing none means the source "
+                                + "scan is not reading what it thinks it is reading."));
+            }
+            if (literalsAttributed == 0) {
+                events.add(SimpleConditionEvent.violated(this,
+                        "Rule 6 attributed ZERO literals to an owning module — every one was skipped "
+                                + "as a policy holder or as the /api namespace. The ownership check, "
+                                + "which is the entire rule, ran against nothing."));
+            }
+            // A FLOOR, and knowingly a weak one. It catches TOTAL loss only: the readability scan
+            // going quiet everywhere at once. It cannot catch ADDITIVE loss — one call site hidden
+            // among six leaves five and this stays silent, which is precisely how
+            // ".\nrequestMatchers(EVASIVE_PATHS).permitAll()" reached permitAll with a green build.
+            // The additive half is NOT defended here and must not be believed to be: it lives in
+            // JavaSources.verifyScanAgreesWithIndependentCount, which fails the single FILE whose two
+            // independent call-site detectors disagree, no matter how many other files are clean. An
+            // aggregate count of what was found can never notice what was not found.
+            if (matcherArgumentsSeen == 0) {
+                events.add(SimpleConditionEvent.violated(this,
+                        "Rule 6 examined ZERO requestMatchers arguments across all of "
+                                + BASE_PACKAGE + ". The security chain is written with those calls, "
+                                + "so seeing none means the readability check ran against nothing — "
+                                + "the state in which an unreadable grant is reported as clean."));
+            }
+            for (String holder : PATH_POLICY_HOLDERS) {
+                if (!policyHoldersSeen.contains(holder)) {
+                    events.add(SimpleConditionEvent.violated(this,
+                            "Registered path-policy holder " + holder + " was not examined, or holds "
+                                    + "no /api literal any more. Either it was renamed or deleted "
+                                    + "(remove it from PATH_POLICY_HOLDERS), or its access decisions "
+                                    + "moved somewhere this rule is not looking — which is exactly "
+                                    + "the state that must never be green."));
+                }
+            }
+        }
+
+        /** {@code value()} with {@code path()} as the fallback alias, for any mapping annotation. */
+        private static List<String> mappedValues(Object annotated, Class<? extends Annotation> type) {
+            Annotation annotation = annotationOn(annotated, type);
+            if (annotation == null) {
+                // An absent class-level mapping still contributes one empty prefix, so that method
+                // level absolute mappings are seen. Skipping would hide two whole controllers.
+                return type == RequestMapping.class && annotated instanceof JavaClass
+                        ? List.of("")
+                        : List.of();
+            }
+            String[] values = invoke(annotation, "value");
+            if (values.length == 0) {
+                values = invoke(annotation, "path");
+            }
+            return values.length == 0 ? List.of("") : List.of(values);
+        }
+
+        private static Annotation annotationOn(Object annotated, Class<? extends Annotation> type) {
+            if (annotated instanceof JavaClass clazz) {
+                return clazz.isAnnotatedWith(type) ? clazz.getAnnotationOfType(type) : null;
+            }
+            JavaMethod method = (JavaMethod) annotated;
+            return method.isAnnotatedWith(type) ? method.getAnnotationOfType(type) : null;
+        }
+
+        private static String[] invoke(Annotation annotation, String member) {
+            try {
+                return (String[]) annotation.annotationType()
+                        .getMethod(member).invoke(annotation);
+            } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException(
+                        "Cannot read " + member + "() from " + annotation.annotationType()
+                                + ". Rule 6 derives route ownership from these members; failing to "
+                                + "read one must break the build, not shrink the map silently.", e);
+            }
+        }
     }
 
     private static final DescribedPredicate<JavaClass> ARE_TOP_LEVEL =

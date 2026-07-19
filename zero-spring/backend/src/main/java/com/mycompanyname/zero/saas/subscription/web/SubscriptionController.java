@@ -7,6 +7,8 @@ import com.mycompanyname.zero.saas.subscription.web.dto.ChangeEditionRequest;
 import com.mycompanyname.zero.saas.subscription.web.dto.EditionChangeDto;
 import com.mycompanyname.zero.saas.subscription.web.dto.SubscriptionDetailDto;
 import com.mycompanyname.zero.saas.subscription.web.dto.SubscriptionDto;
+import com.mycompanyname.zero.shared.web.EndpointPolicy;
+import com.mycompanyname.zero.shared.web.EndpointPolicy.Exposure;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -52,6 +54,7 @@ public class SubscriptionController {
      */
     @GetMapping("/me")
     @PreAuthorize("isAuthenticated()")
+    @EndpointPolicy(Exposure.SUBSCRIPTION_EXEMPT)
     public SubscriptionDto me(@AuthenticationPrincipal Jwt jwt) {
         return subscriptionService.getOwnSubscription(tenantId(jwt));
     }
