@@ -66,6 +66,15 @@ yanlış kırmızı üretti.
 | Temiz veritabanıyla koşan testler, **mevcut kurulum** hatalarını göremez | Şema/izin/seed değişikliklerinde canlı smoke zorunlu — temiz-DB suite'i yeşilken çalışan kurulum bozuk olabilir (bu bir kez gerçekleşti). |
 | PowerShell 5.1: `git commit -m @'...'@` here-string'i çalışmaz; `ConvertTo-Json` tek elemanlı diziyi düzleştirir | Commit mesajını dosyaya yazıp `git commit -F <dosya>`. |
 
+## Bu depodaki yardımcılar
+
+| Ne | Ne zaman |
+|---|---|
+| `/new-module <ad>` | Yeni modül eklerken. Unutulduğunda **sessiz kalan** 10 korumanın kontrol listesi. |
+| `/preflight` | Push etmeden önce. CI dakikası harcamadan yerel kapılar. |
+| `stack-reviewer` ajanı | Backend/frontend değişikliğinden sonra. Bu yığına özgü tuzaklar. |
+| `gate-auditor` ajanı | Yeni bir test/CI gate'i ekledikten sonra. **Gate'in gerçekten kırmızıya döndüğünü kanıtlar** — bu depoda beş kontrol yeşilken hiçbir şey doğrulamıyordu. |
+
 ## Konvansiyonlar
 
 - **İzinler:** `AppPermissions` sabitleri + `PermissionDefinitions` ağacı. Yeni uç →
