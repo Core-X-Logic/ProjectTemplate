@@ -287,7 +287,7 @@ jobs:
           cache-dependency-path: zero-spring/frontend/app/package-lock.json
 
       - name: Download backend jar
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: backend-jar
           path: zero-spring/dist
@@ -422,7 +422,7 @@ jobs:
           java-version: '21'
 
       - name: Download backend jar
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: backend-jar
           path: zero-spring/dist
@@ -572,7 +572,7 @@ jobs:
           java-version: '21'
 
       - name: Download backend jar
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: backend-jar
           path: zero-spring/dist
@@ -878,7 +878,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Download backend jar
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: backend-jar
           path: zero-spring/dist
