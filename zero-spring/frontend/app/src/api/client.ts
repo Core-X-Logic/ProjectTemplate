@@ -15,6 +15,19 @@
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '');
 
+// Boş bir base URL PROD'da meşrudur: reverse proxy arkasında tek origin kurulumunda API
+// göreli yoldan (`/api/...`) servis edilir ve RELEASE-RUNBOOK'un önerdiği kurulum budur.
+// DEV'de ise neredeyse her zaman eksik bir `.env` demektir — ve sonucu sessizdir: her istek
+// Vite dev sunucusuna gider, 404 döner, konsolda "neden hiçbir şey yüklenmiyor" sorusundan
+// başka ipucu kalmaz. Şablonu ilk kez klonlayan birinin karşılaştığı ilk duvar buydu.
+if (import.meta.env.DEV && !BASE_URL) {
+  throw new Error(
+    'VITE_API_BASE_URL tanımlı değil. `frontend/app/.env` dosyası oluşturun ' +
+      '(`cp .env.example .env`) ve backend adresini yazın, örn. http://localhost:8080. ' +
+      'Not: üretimde boş bırakmak geçerlidir — o durumda API aynı origin üzerinden servis edilir.',
+  );
+}
+
 const REFRESH_STORAGE_KEY = 'refresh_token';
 export const TENANT_STORAGE_KEY = 'tenant';
 export const LOCALE_STORAGE_KEY = 'locale';

@@ -1,0 +1,29 @@
+# Kod sahipliği.
+#
+# ⚠️ BU DOSYA ŞU AN ETKİSİZ OLABİLİR. CODEOWNERS'ın zorlayıcı olması için branch
+# protection'da "Require review from Code Owners" açık olmalı; private repo + ücretsiz
+# planda branch protection API'si 403 döner ("Upgrade to GitHub Pro or make this repository
+# public"). Bkz. zero-spring/docs/SETUP-NEW-PROJECT.md §2.
+#
+# Dosya yine de burada, çünkü plan yükseltildiğinde ya da repo public yapıldığında tek
+# yapılacak ayarı açmak olsun; ve bugün de "bu kodu kim biliyor" sorusunun yazılı cevabı olsun.
+#
+# Klonladıktan sonra: aşağıdaki @OWNER yer tutucularını gerçek kullanıcı/takımlarla değiştirin.
+
+*                                   @OWNER
+
+# Güvenlik yüzeyi — kiracı izolasyonu, kimlik doğrulama, yetkilendirme, rate limit.
+# Bu dosyalardaki bir hata sessizdir: açık 200 döner.
+/zero-spring/backend/src/main/java/**/identity/auth/   @OWNER
+/zero-spring/backend/src/main/java/**/tenancy/         @OWNER
+/zero-spring/backend/src/main/java/**/config/          @OWNER
+
+# Şema. Uygulanmış bir migration'ı düzenlemek mevcut kurulumları açılışta kırar.
+/zero-spring/backend/src/main/resources/db/migration/  @OWNER
+
+# Release kapıları ve güvenlik taraması.
+/.github/workflows/                                    @OWNER
+/.gitleaks.toml                                        @OWNER
+
+# Yönetişim: risk kaydı ve mimari kararlar.
+/zero-spring/docs/governance/                          @OWNER

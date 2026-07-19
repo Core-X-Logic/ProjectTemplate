@@ -1,0 +1,34 @@
+# Satır sonu normalizasyonu — TÜM depo için, kökten.
+#
+# Bu kurallar bir süre yalnızca `zero-spring/.gitattributes` içindeydi ve alt dizinden aşağı
+# özyinelemeli uygulandığı için ürün kodunu kapsıyordu; ama repo KÖKÜNDEKİ dosyalar
+# (.github/workflows/, CLAUDE.md, .claude/, README) kapsam dışındaydı. İki ayrı kopya tutmak
+# yerine kurallar buraya taşındı — aynı kuralın iki yerde yaşaması, birinin sessizce
+# eskimesinin en kısa yoludur.
+
+* text=auto eol=lf
+
+# Windows kabuk dosyaları CRLF olmak zorunda.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# POSIX kabuk dosyaları LF olmak zorunda: CRLF'li bir script Linux'ta
+# `bad interpreter: /usr/bin/env bash^M` ile ölür.
+*.sh  text eol=lf
+mvnw  text eol=lf
+
+# Maven wrapper `maven-wrapper.properties` dosyasını düz bir `read`/`case` döngüsüyle ayrıştırır.
+# UTF-8 BOM ilk anahtarın parçası olur, `distributionUrl` hiç eşleşmez ve `./mvnw`
+# "cannot read distributionUrl property" ile ölür — tek bir test koşmadan CI'ı düşürür.
+# Bu depoda bir kez yaşandı: dosya BOM'lu commit'lenmişti ve CI hiçbir zaman build edemezdi.
+# LF, BOM yok, her zaman.
+*.properties text eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.jar binary

@@ -424,7 +424,12 @@ Tarayıcıda prod URL → login → kullanıcı listesi. DevTools Network'te **C
 
 ### 3.8 Lifecycle job
 ```bash
-docker exec -it zero-postgres psql -U zero -d zero -c "select * from shedlock;"
+# R-01b: konteyner ADI değil, compose SERVİSİ. `docker-compose.yml`'den sabit
+# `container_name` kaldırıldı (bu şablondan türetilmiş iki proje aynı makinede
+# çalışabilsin diye), dolayısıyla `zero-postgres` diye bir ad ARTIK YOK.
+# `docker compose exec` compose projesinin dizininden koşulmalı — yoksa `-f` ver:
+#   cd zero-spring/backend   ·   ya da   docker compose -f zero-spring/backend/docker-compose.yml ...
+docker compose exec postgres psql -U zero -d zero -c "select * from shedlock;"
 ```
 Beklenen: job ilk tetiklendikten sonra bir satır; `lock_until` geçmişte → job serbest.
 `locked_at` çok eski + `lock_until` gelecekte takılıysa → §5.5.
@@ -498,7 +503,7 @@ Bu surumde YENI migration var mi?
 
 ### 5.2 Senaryo 1 — DB bağlantısı
 *Belirti:* startup'ta `HikariPool-1 - Exception during pool initialization`, health `db: DOWN`, tüm uçlar 500.
-1. `docker exec zero-postgres pg_isready -U zero -d zero` → DB ayakta mı?
+1. `docker compose exec postgres pg_isready -U zero -d zero` → DB ayakta mı? (ad değil servis — §3.8 notu)
 2. Ayakta ise kimlik bilgisi: `DB_USER`/`DB_PASSWORD` env'i doğru mu (§1.2 komutu)?
 3. `FATAL: too many connections` ise → Hikari pool boyutu × instance sayısı > PG `max_connections`.
    İlk müdahale: fazla instance'ı durdur; kalıcı: `spring.datasource.hikari.maximum-pool-size` ayarla.
@@ -507,7 +512,7 @@ Bu surumde YENI migration var mi?
 ### 5.3 Senaryo 2 — Redis down
 *Belirti:* health `redis: DOWN`. **Etki:** impersonation token store (`ImpersonationTokenStore`) ve
 SaaS feature cache Redis'e dayanıyor → impersonation kırılır; feature çözümü cache'siz kalır.
-1. `docker exec zero-redis redis-cli ping` → `PONG` bekleniyor.
+1. `docker compose exec redis redis-cli ping` → `PONG` bekleniyor. (ad değil servis — §3.8 notu)
 2. `PONG` geliyor ama app DOWN diyorsa → adres/port uyuşmazlığı: `REDIS_HOST`/`REDIS_PORT` set
    edilmemişse uygulama `localhost:6379`'a gider. Yönetilen Redis çoğu zaman 6379'da değildir.
    İlk müdahale: doğru `REDIS_HOST`/`REDIS_PORT` ile yeniden başlat.
@@ -528,7 +533,7 @@ Sebep: secret deploy'lar arası değişti → eski token'lar doğrulanamıyor.
 *Belirti:* startup'ta `FlywayException: Migration V<n>__... failed` → uygulama hiç açılmaz.
 1. **Panikleme, DB'ye elle dokunma.** Önce durumu oku:
    ```bash
-   docker exec -it zero-postgres psql -U zero -d zero \
+   docker compose exec postgres psql -U zero -d zero \
      -c "select version, description, success, installed_on from flyway_schema_history order by installed_rank desc limit 5;"
    ```
 2. `success = false` satırı varsa → migration yarıda kaldı, şema **belirsiz** durumda.
@@ -542,7 +547,7 @@ Sebep: secret deploy'lar arası değişti → eski token'lar doğrulanamıyor.
 *Belirti:* abonelik durumları güncellenmiyor (trial bitmiş ama `TRIALING` kalmış), job log'u yok.
 1. Kilit durumunu oku:
    ```bash
-   docker exec -it zero-postgres psql -U zero -d zero -c "select * from shedlock;"
+   docker compose exec postgres psql -U zero -d zero -c "select * from shedlock;"
    ```
 2. `lock_until` **gelecekte** ve `locked_by` artık yaşamayan bir instance ise → kilit takılmış
    (job crash etti, lock süresi dolmadı). `zero.saas.lifecycle.lock-at-most-for` varsayılanı

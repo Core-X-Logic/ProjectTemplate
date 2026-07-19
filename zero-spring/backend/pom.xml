@@ -206,6 +206,13 @@
     </dependencies>
 
     <build>
+        <!-- R-01b: jar adı artifactId'den TÜRETİLMEZ. Bu depo bir şablon; klonlayan
+             artifactId'yi değiştirir ve `zero-platform-0.1.0-SNAPSHOT.jar` adı onunla
+             birlikte kayar. O ad üç ayrı yerde (Dockerfile COPY, ci.yml, ci-local.sh)
+             glob ile aranıyordu; artifactId değişince Docker build gürültülü şekilde,
+             CI ise SESSİZCE (boş `JAR=`) bozuluyordu.
+             Sabit `app.jar` bu bağı tamamen koparır — tüketiciler adı bilir, türetmez. -->
+        <finalName>app</finalName>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>

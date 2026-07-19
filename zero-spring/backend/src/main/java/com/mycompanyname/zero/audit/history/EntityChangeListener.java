@@ -5,6 +5,7 @@ import com.mycompanyname.zero.audit.AuditSupport;
 import com.mycompanyname.zero.audit.domain.EntityChange;
 import com.mycompanyname.zero.audit.domain.EntityChangeType;
 import com.mycompanyname.zero.audit.domain.EntityPropertyChange;
+import com.mycompanyname.zero.shared.domain.TrackChanges;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -27,6 +28,10 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * Hibernate post-commit event listener (registered via {@link AuditHibernateConfigurer}) that turns
  * inserts/updates/deletes of tracked entities into {@code EntityChange} history.
  *
+ * <p>An entity is tracked when it carries {@link TrackChanges} (the authority) or when its
+ * fully-qualified name is listed in {@link AuditProperties} (the escape hatch for types this module
+ * must not modify).
+ *
  * <p>Loop safety: entities in this module's own package are never tracked, so writing history rows
  * cannot re-trigger tracking. Changes are buffered per transaction and flushed by
  * {@link EntityChangeWriter} after commit, so no new rows are pushed into the caller's active flush.
@@ -36,7 +41,16 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 public class EntityChangeListener
         implements PostInsertEventListener, PostUpdateEventListener, PostDeleteEventListener {
 
-    private static final String AUDIT_PACKAGE = "com.mycompanyname.zero.audit";
+    /**
+     * Root package of the audit module, derived from a class that lives in it rather than written
+     * out as a literal. {@code AuditSupport} sits directly in the module root, so this resolves to
+     * the parent of both {@code audit.domain} (where the history rows are mapped) and
+     * {@code audit.history} (this package). Deriving it keeps the loop guard working after a
+     * template clone renames the base package — a stale literal would silently stop matching and
+     * let history writes re-trigger history writes.
+     */
+    private static final String AUDIT_PACKAGE = AuditSupport.class.getPackageName();
+
     private static final ThreadLocal<List<EntityChange>> BUFFER = new ThreadLocal<>();
 
     private final AuditProperties auditProperties;
@@ -148,8 +162,22 @@ public class EntityChangeListener
             return false;
         }
         Class<?> type = entity.getClass();
+        return isTrackedType(type, persister != null ? persister.getEntityName() : type.getName());
+    }
+
+    /**
+     * The tracking decision itself, separated from the Hibernate event plumbing so it can be
+     * exercised directly — with real entity classes and no database — by
+     * {@code EntityChangeTrackingTest}. Visible for testing.
+     *
+     * <p>Order matters: the audit module's own types are rejected first (loop guard) and cannot be
+     * re-enabled by configuration; then the configured escape-hatch list; then {@link TrackChanges}.
+     */
+    boolean isTrackedType(Class<?> type, String entityName) {
+        if (type == null) {
+            return false;
+        }
         String className = type.getName();
-        String entityName = persister != null ? persister.getEntityName() : className;
         if (className.startsWith(AUDIT_PACKAGE) || (entityName != null && entityName.startsWith(AUDIT_PACKAGE))) {
             return false;
         }
@@ -158,6 +186,11 @@ public class EntityChangeListener
             return true;
         }
         return isAnnotated(type);
+    }
+
+    /** The derived audit-module root package used by the loop guard. Visible for testing. */
+    static String auditPackage() {
+        return AUDIT_PACKAGE;
     }
 
     private boolean isAnnotated(Class<?> type) {

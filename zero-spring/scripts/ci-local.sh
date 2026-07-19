@@ -20,7 +20,7 @@
 #   bash zero-spring/scripts/ci-local.sh            # hepsi
 #   bash zero-spring/scripts/ci-local.sh smoke      # tek gate: readiness | smoke | secrets | migration
 #
-# ÖN KOŞUL: docker, ve `zero-spring/backend/target/*.jar` (yoksa `./mvnw -DskipTests package`).
+# ÖN KOŞUL: docker, ve `zero-spring/backend/target/app.jar` (yoksa `./mvnw -DskipTests package`).
 
 set -uo pipefail
 
@@ -30,16 +30,27 @@ export MSYS_NO_PATHCONV=1
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BACKEND="${REPO_ROOT}/zero-spring/backend"
-LOGDIR="${TMPDIR:-/tmp}/zero-ci-local"
+
+# Bu sablondan turetilmis IKI klon ayni makinede olabilir. Konteyner adlari Docker'da
+# GLOBALDIR ve bu script basta `docker rm -f` ediyor — sabit bir ad kullanilsaydi, ikinci
+# klonda ci-local.sh calistirmak BIRINCININ konteynerini oldururdu. Sessiz ve kafa karistirici
+# bir mod: "testim neden yarida dustu?" Ad ve log dizini bu yuzden depo yoluna baglaniyor.
+PROJECT_ID="$(printf '%s' "${REPO_ROOT}" | cksum | cut -d' ' -f1)"
+LOGDIR="${TMPDIR:-/tmp}/ci-local-${PROJECT_ID}"
 mkdir -p "${LOGDIR}"
 
-PG_CONTAINER=zero-ci-local-pg
-PG_PORT=5544
+PG_CONTAINER="ci-local-pg-${PROJECT_ID}"
+# Portlar ise makine genelinde tekil olmak zorunda ve otomatik turetilemez (cakisma
+# ihtimalini hesaplamaktansa acikca override edilebilir olmasi daha durust). Iki klonu
+# ayni anda kosturacaksan ikincisine farkli deger ver:
+#   CI_LOCAL_PG_PORT=5545 CI_LOCAL_APP_PORT=8081 bash zero-spring/scripts/ci-local.sh
+PG_PORT="${CI_LOCAL_PG_PORT:-5544}"
+APP_PORT="${CI_LOCAL_APP_PORT:-8080}"
+
 DB_URL="jdbc:postgresql://localhost:${PG_PORT}/zero"
 DB_USER=zero
 DB_PASSWORD=zero
 SEED_ADMIN_PASSWORD='Ci-Smoke-Passw0rd!'
-APP_PORT=8080
 APP_PID=""
 
 FAILURES=0
@@ -53,8 +64,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# R-01b: jar adı artifactId'den TÜRETİLMEZ — `pom.xml`'de <finalName>app</finalName> sabit.
+# Eski hâl `ls target/zero-platform-*.jar` globuydu: bu depo bir şablon ve klonlayan
+# artifactId'yi değiştirdiğinde glob eşleşmeyi keser, fonksiyon sessizce boş döner.
+# Boş dönüş burada zararsız (start_app aşağıda açık mesajla düşüyor), ama aynı desen
+# CI'da gerçekten sessizdi. Sabit ad bağı tamamen koparır.
 jar_path() {
-  ls "${BACKEND}"/target/zero-platform-*.jar 2>/dev/null | head -n1
+  local jar="${BACKEND}/target/app.jar"
+  [ -f "${jar}" ] && printf '%s\n' "${jar}"
 }
 
 start_pg() {

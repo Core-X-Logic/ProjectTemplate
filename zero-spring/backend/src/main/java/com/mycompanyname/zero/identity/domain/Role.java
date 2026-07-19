@@ -1,6 +1,7 @@
 package com.mycompanyname.zero.identity.domain;
 
 import com.mycompanyname.zero.shared.domain.AbstractAuditedEntity;
+import com.mycompanyname.zero.shared.domain.TrackChanges;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
@@ -19,6 +20,7 @@ import java.util.Set;
 @Table(name = "roles")
 @Filter(name = "tenantFilter", condition = "tenant_id = :tenantId")
 @Filter(name = "hostFilter", condition = "tenant_id is null")
+@TrackChanges
 @Getter
 @Setter
 public class Role extends AbstractAuditedEntity {

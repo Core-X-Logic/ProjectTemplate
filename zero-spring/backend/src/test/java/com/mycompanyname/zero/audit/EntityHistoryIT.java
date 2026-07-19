@@ -2,6 +2,9 @@ package com.mycompanyname.zero.audit;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.mycompanyname.zero.AbstractIntegrationIT;
+import com.mycompanyname.zero.identity.domain.Role;
+import com.mycompanyname.zero.identity.domain.User;
+import com.mycompanyname.zero.identity.ou.OrganizationUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -18,11 +21,17 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * End-to-end coverage of entity change history.
+ * End-to-end coverage of entity change history, through the real HTTP surface.
  *
- * <p>{@code Role} is a tracked entity. Creating then renaming a role must produce a CREATED and an
- * UPDATED entity_change, and the UPDATED change must record the {@code displayName} property with
- * its original and new value.
+ * <p>Each covered entity is created and then updated; both a CREATED and an UPDATED
+ * {@code entity_change} must appear, and the UPDATED change must carry the property that actually
+ * changed with its original and new value.
+ *
+ * <p>Entity types are referenced as {@code X.class.getName()} rather than as name literals on
+ * purpose. Tracking is driven by the {@code @TrackChanges} annotation precisely because a template
+ * clone that renames the base package would otherwise silently lose entity history — a test that
+ * hard-codes those same names would be renamed out of correctness along with the production code and
+ * would keep passing against nothing.
  */
 class EntityHistoryIT extends AbstractIntegrationIT {
 
@@ -63,25 +72,7 @@ class EntityHistoryIT extends AbstractIntegrationIT {
                 .as("role update must succeed, got %s", updated.getStatusCode())
                 .isTrue();
 
-        List<JsonNode> changes = pollForChanges(admin, roleId);
-        assertThat(changes).as("entity_changes must be recorded for the role").isNotEmpty();
-
-        List<String> changeTypes = new ArrayList<>();
-        JsonNode updateChange = null;
-        for (JsonNode change : changes) {
-            String type = change.path("changeType").asText();
-            changeTypes.add(type);
-            if ("UPDATED".equals(type)) {
-                updateChange = change;
-            }
-        }
-        assertThat(changeTypes).contains("CREATED", "UPDATED");
-
-        assertThat(updateChange).as("an UPDATED change must exist").isNotNull();
-        JsonNode displayNameChange = findPropertyChange(updateChange, "displayName");
-        assertThat(displayNameChange).as("the displayName property change must be recorded").isNotNull();
-        assertThat(displayNameChange.path("originalValue").asText()).isEqualTo("HistOrig");
-        assertThat(displayNameChange.path("newValue").asText()).isEqualTo("HistUpdated");
+        assertCreatedAndUpdated(admin, Role.class, roleId, "displayName", "HistOrig", "HistUpdated");
     }
 
     @Test
@@ -105,8 +96,64 @@ class EntityHistoryIT extends AbstractIntegrationIT {
                 .as("organization unit update must succeed, got %s", updated.getStatusCode())
                 .isTrue();
 
-        List<JsonNode> changes = pollForOuChanges(admin, ouId);
-        assertThat(changes).as("entity_changes must be recorded for the organization unit").isNotEmpty();
+        assertCreatedAndUpdated(admin, OrganizationUnit.class, ouId, "displayName", "OuOrig", "OuUpdated");
+    }
+
+    /**
+     * {@code User} is the entity most likely to be asked about in an audit ("who changed this
+     * account?"), and it was previously covered only by the removed fully-qualified-name list, so
+     * nothing in the suite noticed whether it was tracked at all.
+     */
+    @Test
+    void userCreateAndUpdateAreTrackedWithPropertyChanges() {
+        HttpHeaders admin = tenantAdmin();
+
+        String username = unique("histuser");
+        String originalEmail = username + "@example.com";
+        String updatedEmail = username + ".updated@example.com";
+
+        ResponseEntity<JsonNode> created = restTemplate.exchange(
+                "/api/users", HttpMethod.POST,
+                new HttpEntity<>(Map.of(
+                        "username", username,
+                        "email", originalEmail,
+                        "password", "Password123!",
+                        "roleNames", Set.of("Admin")), admin),
+                JsonNode.class);
+        assertThat(created.getStatusCode().is2xxSuccessful())
+                .as("user creation must succeed, got %s: %s", created.getStatusCode(), created.getBody())
+                .isTrue();
+        long userId = created.getBody().path("id").asLong();
+
+        ResponseEntity<JsonNode> updated = restTemplate.exchange(
+                "/api/users/" + userId, HttpMethod.PUT,
+                new HttpEntity<>(Map.of(
+                        "username", username,
+                        "email", updatedEmail,
+                        "password", "Password123!",
+                        "active", true,
+                        "roleNames", Set.of("Admin")), admin),
+                JsonNode.class);
+        assertThat(updated.getStatusCode().is2xxSuccessful())
+                .as("user update must succeed, got %s: %s", updated.getStatusCode(), updated.getBody())
+                .isTrue();
+
+        assertCreatedAndUpdated(admin, User.class, userId, "email", originalEmail, updatedEmail);
+    }
+
+    // --- helpers ---
+
+    /**
+     * Asserts the full contract for one entity: a CREATED change, an UPDATED change, and the named
+     * property recorded on the UPDATED change with the expected before/after values.
+     */
+    private void assertCreatedAndUpdated(HttpHeaders headers, Class<?> entityType, long entityId,
+                                         String propertyName, String originalValue, String newValue) {
+        List<JsonNode> changes = pollForChanges(headers, entityType, entityId);
+        assertThat(changes)
+                .as("entity_changes must be recorded for %s#%s — an empty result here is exactly the "
+                        + "silent failure @TrackChanges exists to prevent", entityType.getSimpleName(), entityId)
+                .isNotEmpty();
 
         List<String> changeTypes = new ArrayList<>();
         JsonNode updateChange = null;
@@ -120,17 +167,18 @@ class EntityHistoryIT extends AbstractIntegrationIT {
         assertThat(changeTypes).contains("CREATED", "UPDATED");
 
         assertThat(updateChange).as("an UPDATED change must exist").isNotNull();
-        JsonNode displayNameChange = findPropertyChange(updateChange, "displayName");
-        assertThat(displayNameChange).as("the displayName property change must be recorded").isNotNull();
-        assertThat(displayNameChange.path("originalValue").asText()).isEqualTo("OuOrig");
-        assertThat(displayNameChange.path("newValue").asText()).isEqualTo("OuUpdated");
+        JsonNode propertyChange = findPropertyChange(updateChange, propertyName);
+        assertThat(propertyChange)
+                .as("the %s property change must be recorded", propertyName)
+                .isNotNull();
+        assertThat(propertyChange.path("originalValue").asText()).isEqualTo(originalValue);
+        assertThat(propertyChange.path("newValue").asText()).isEqualTo(newValue);
     }
 
-    private static final String OU_TYPE = "com.mycompanyname.zero.identity.ou.OrganizationUnit";
-
-    private List<JsonNode> pollForOuChanges(HttpHeaders headers, long ouId) {
+    /** History is written after commit, so give the writer a bounded window to catch up. */
+    private List<JsonNode> pollForChanges(HttpHeaders headers, Class<?> entityType, long entityId) {
         for (int attempt = 0; attempt < 15; attempt++) {
-            List<JsonNode> changes = fetchOuChanges(headers, ouId);
+            List<JsonNode> changes = fetchChanges(headers, entityType, entityId);
             boolean hasCreated = changes.stream().anyMatch(c -> "CREATED".equals(c.path("changeType").asText()));
             boolean hasUpdated = changes.stream().anyMatch(c -> "UPDATED".equals(c.path("changeType").asText()));
             if (hasCreated && hasUpdated) {
@@ -138,47 +186,20 @@ class EntityHistoryIT extends AbstractIntegrationIT {
             }
             sleep(400);
         }
-        return fetchOuChanges(headers, ouId);
+        return fetchChanges(headers, entityType, entityId);
     }
 
-    /** Filters by both entityId and entityTypeName: OU and Role ids come from independent sequences. */
-    private List<JsonNode> fetchOuChanges(HttpHeaders headers, long ouId) {
+    /** Filters by both entityId and entityTypeName: each entity's ids come from its own sequence. */
+    private List<JsonNode> fetchChanges(HttpHeaders headers, Class<?> entityType, long entityId) {
+        String typeName = entityType.getName();
         ResponseEntity<JsonNode> response = restTemplate.exchange(
-                "/api/entity-changes?entityTypeName=" + OU_TYPE + "&entityId=" + ouId + "&page=0&size=100",
+                "/api/entity-changes?entityTypeName=" + typeName + "&entityId=" + entityId + "&page=0&size=100",
                 HttpMethod.GET, new HttpEntity<>(headers), JsonNode.class);
         List<JsonNode> result = new ArrayList<>();
         if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
             for (JsonNode entry : pageContent(response.getBody())) {
-                if (String.valueOf(ouId).equals(entry.path("entityId").asText())
-                        && OU_TYPE.equals(entry.path("entityTypeName").asText())) {
-                    result.add(entry);
-                }
-            }
-        }
-        return result;
-    }
-
-    private List<JsonNode> pollForChanges(HttpHeaders headers, long roleId) {
-        for (int attempt = 0; attempt < 15; attempt++) {
-            List<JsonNode> changes = fetchChanges(headers, roleId);
-            boolean hasCreated = changes.stream().anyMatch(c -> "CREATED".equals(c.path("changeType").asText()));
-            boolean hasUpdated = changes.stream().anyMatch(c -> "UPDATED".equals(c.path("changeType").asText()));
-            if (hasCreated && hasUpdated) {
-                return changes;
-            }
-            sleep(400);
-        }
-        return fetchChanges(headers, roleId);
-    }
-
-    private List<JsonNode> fetchChanges(HttpHeaders headers, long roleId) {
-        ResponseEntity<JsonNode> response = restTemplate.exchange(
-                "/api/entity-changes?entityId=" + roleId + "&page=0&size=200",
-                HttpMethod.GET, new HttpEntity<>(headers), JsonNode.class);
-        List<JsonNode> result = new ArrayList<>();
-        if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-            for (JsonNode entry : pageContent(response.getBody())) {
-                if (String.valueOf(roleId).equals(entry.path("entityId").asText())) {
+                if (String.valueOf(entityId).equals(entry.path("entityId").asText())
+                        && typeName.equals(entry.path("entityTypeName").asText())) {
                     result.add(entry);
                 }
             }

@@ -1,0 +1,34 @@
+# CI'daki `npm audit` kapısı bir zafiyeti YAKALAR ama güncellemez; `ci.yml` ayrıca OWASP
+# bağımlılık taramasını "bu iş Dependabot'a ait" gerekçesiyle kapsam dışı bırakıyor.
+# Dependabot olmadan bu, yarım kalmış bir karardı: kapı kırmızıya döner, kimse güncellemez.
+version: 2
+updates:
+  - package-ecosystem: maven
+    directory: /zero-spring/backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # Spring sürümleri birlikte hareket eder; tek tek PR bakım yükü üretir.
+      spring:
+        patterns: ['org.springframework*', 'org.springdoc*']
+      test:
+        patterns: ['org.testcontainers*', 'org.junit*', 'org.assertj*', 'com.icegreen*']
+
+  - package-ecosystem: npm
+    directory: /zero-spring/frontend/app
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      react:
+        patterns: ['react', 'react-dom', '@types/react*', 'react-router*']
+      tooling:
+        patterns: ['vite*', '@vitejs/*', 'typescript', 'vitest', '@testing-library/*']
+
+  # Workflow'un kendi action'ları. Bu depoda action'lar sürüm etiketiyle sabitli
+  # (@v4); SHA pinleme tercih edilirse Dependabot onu da günceller.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

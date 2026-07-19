@@ -1,0 +1,28 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{js,jsx,ts,tsx,json,yml,yaml,css,scss,html}]
+indent_size = 2
+
+[*.md]
+# Markdown'da satır sonu iki boşluk anlamlıdır.
+trim_trailing_whitespace = false
+
+[*.{bat,cmd}]
+end_of_line = crlf
+
+# Maven wrapper: POSIX kabuğu bunu LF bekler. Bu depoda bir kez CRLF/BOM ile commit'lendi
+# ve `./mvnw` Linux'ta çalışmadı — CI hiçbir zaman build edemezdi. .gitattributes bunu ayrıca
+# zorlar; burası editörün aynı kuralı bozmasını engeller.
+[mvnw]
+end_of_line = lf
+
+[Makefile]
+indent_style = tab

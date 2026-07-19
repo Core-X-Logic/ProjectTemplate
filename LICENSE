@@ -1,0 +1,21 @@
+Copyright (c) 2026 Cafer Aydın. Tüm hakları saklıdır.
+
+ÖZEL MÜLK / PROPRIETARY
+
+Bu depo ve içeriği özel mülktür. Telif hakkı sahibinin yazılı izni olmaksızın
+kopyalanamaz, dağıtılamaz, değiştirilemez veya türev çalışma üretilemez.
+
+---
+
+BU DOSYAYI DEĞİŞTİRİN.
+
+Bu şablondan türetilen her proje kendi lisansını belirler. Varsayılan olarak "özel mülk"
+seçilmiştir çünkü:
+
+  1. Bu, izin verilmeyeni açıkça söyleyen ve yanlışlıkla hak devretmeyen güvenli varsayılandır.
+  2. Frontend'in görsel katmanı Metronic'ten uyarlanmıştır; Metronic ticari bir üründür ve
+     ayrıca lisanslanmalıdır. Bu depoyu izinsiz bir açık kaynak lisansıyla yayımlamak o
+     lisansı ihlal edebilir. Ayrıntı: NOTICE.md.
+
+Projenizi açık kaynak yapacaksanız bu dosyayı seçtiğiniz lisans metniyle (MIT, Apache-2.0 vb.)
+değiştirin ve önce NOTICE.md'deki üçüncü taraf kalemlerini gözden geçirin.

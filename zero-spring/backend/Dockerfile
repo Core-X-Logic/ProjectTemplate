@@ -14,7 +14,11 @@ WORKDIR /app
 
 RUN addgroup -S zero && adduser -S -G zero zero
 
-COPY --from=build /workspace/target/zero-platform-*.jar /app/app.jar
+# R-01b: glob DEĞİL, sabit ad. `pom.xml`'deki <finalName>app</finalName> jar adını
+# artifactId'den bağımsızlaştırdı; bu şablonu klonlayıp artifactId'yi değiştiren biri
+# artık bu satıra dokunmak zorunda kalmaz. (Glob hâlâ dursaydı COPY hedefi bulamaz ve
+# build patlardı — gürültülü, ama gereksiz bir kırılma.)
+COPY --from=build /workspace/target/app.jar /app/app.jar
 
 USER zero
 

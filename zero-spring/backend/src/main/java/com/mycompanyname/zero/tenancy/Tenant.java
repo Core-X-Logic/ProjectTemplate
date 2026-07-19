@@ -1,6 +1,7 @@
 package com.mycompanyname.zero.tenancy;
 
 import com.mycompanyname.zero.shared.domain.AbstractAuditedEntity;
+import com.mycompanyname.zero.shared.domain.TrackChanges;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -9,6 +10,7 @@ import lombok.Setter;
 
 @Entity
 @Table(name = "tenants")
+@TrackChanges
 @Getter
 @Setter
 public class Tenant extends AbstractAuditedEntity {

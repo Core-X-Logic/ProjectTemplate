@@ -1,6 +1,7 @@
 package com.mycompanyname.zero.identity.ou;
 
 import com.mycompanyname.zero.shared.domain.AbstractAuditedEntity;
+import com.mycompanyname.zero.shared.domain.TrackChanges;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -18,6 +19,7 @@ import org.hibernate.annotations.Filter;
 @Table(name = "organization_units")
 @Filter(name = "tenantFilter", condition = "tenant_id = :tenantId")
 @Filter(name = "hostFilter", condition = "tenant_id is null")
+@TrackChanges
 @Getter
 @Setter
 public class OrganizationUnit extends AbstractAuditedEntity {

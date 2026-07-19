@@ -1,28 +1,63 @@
+# Dev bağımlılıkları (uygulamayı DEĞİL — app lokalde `mvnw spring-boot:run` ile koşar).
+#
+# R-01b — NEDEN `container_name` YOK:
+# Container adları Docker'da GLOBALDİR, compose projesine göre kapsamlanmaz. Sabit
+# `zero-postgres` / `zero-redis` / `zero-mailpit` adlarıyla, bu ŞABLONDAN türetilmiş iki
+# proje aynı makinede aynı anda ayağa kalkamazdı: ikincisi "name already in use" ile ölür.
+# `container_name` kaldırılınca compose kendi şemasıyla adlandırır:
+#   <proje>-<servis>-<n>   →  backend-postgres-1, backend-redis-1, ...
+# Bu YAN ETKİ DEĞİL, istenen davranış: ad artık projeye göre kapsamlanır.
+#
+# ⚠️ AMA proje adı da otomatik olarak benzersiz DEĞİL: compose proje adını bulunduğu
+# DİZİNİN adından türetir ve o ad burada `backend` — yani bu şablonun iki klonu da
+# `backend` olur ve çakışma yer değiştirmiş olur, yok olmaz. Kesin çözüm klonlayanın
+# elinde ve dosyayı düzenlemeyi GEREKTİRMEZ:
+#   export COMPOSE_PROJECT_NAME=musteri-x     (ya da `docker compose -p musteri-x up -d`)
+# Buraya bilinçli olarak `name:` yazılmadı: `name:` proje adını — dolayısıyla VOLUME
+# ön ekini — değiştirir ve mevcut `backend_zero-pgdata` hacmindeki dev verisi bir anda
+# başvurulmayan (orphan) hâle gelirdi. Veri kaybı gibi görünen, geri alması can sıkıcı
+# bir sürpriz. Ön ek değişimi bilinçli bir taşıma kararıdır, sessiz bir yan etki değil.
+#
+# R-01b — NEDEN PORTLAR DEĞİŞKEN:
+# Sabit host portları da global bir kaynaktır ve aynı çakışmayı yaşar. Varsayılanlar
+# KASITLI olarak değiştirilmedi (5433/6380/1025/8025): `application-dev.yml` bu portları
+# bekliyor, değiştirmek çalışan dev kurulumunu bozardı. Değişkenler yalnızca ÇIKIŞ yolu açar.
+#
+# Değişken adlarındaki kural: uygulamanın zaten okuduğu bir env varsa AYNI ad kullanılır.
+#   • REDIS_PORT — `application-dev.yml`: `port: ${REDIS_PORT:6380}`. App host'ta, redis
+#     compose'da olduğu için "host portu" ile "app'in bağlandığı port" AYNI şeydir; adı
+#     paylaşmak ikisini tek hamlede tutarlı tutar.
+#   • MAIL_PORT  — `application.yml`: `port: ${MAIL_PORT:1025}`. Aynı gerekçe.
+#   • POSTGRES_PORT — ⚠️ İSTİSNA: app'in Postgres portu için ayrı bir env'i YOK, tam URL
+#     okuyor (`DB_URL:jdbc:postgresql://localhost:5433/zero`). Yani POSTGRES_PORT'u
+#     değiştirirsen DB_URL'i de elle güncellemen gerekir; ikisi OTOMATİK senkron DEĞİL.
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: zero-postgres
     environment:
       POSTGRES_DB: zero
       POSTGRES_USER: zero
       POSTGRES_PASSWORD: zero
     ports:
       # host 5433 — 5432 başka bir lokal proje tarafından kullanılıyor olabilir
-      - "5433:5432"
+      # (bu makinede gerçekten öyle). Değiştirirsen DB_URL'i de güncelle — yukarıdaki nota bak.
+      - "${POSTGRES_PORT:-5433}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U zero -d zero"]
       interval: 5s
       timeout: 3s
       retries: 10
     volumes:
+      # Hacim adı bilinçli olarak SABİT bırakıldı: compose zaten proje adıyla ön ekliyor
+      # (`backend_zero-pgdata`) ve buradaki bir değişiklik mevcut dev verisini koparırdı.
       - zero-pgdata:/var/lib/postgresql/data
 
   redis:
     image: redis:7-alpine
-    container_name: zero-redis
     ports:
-      # host 6380 — 6379 başka bir lokal proje tarafından kullanılıyor olabilir
-      - "6380:6379"
+      # host 6380 — 6379 başka bir lokal proje tarafından kullanılıyor olabilir.
+      # REDIS_PORT'u app de okur (`application-dev.yml`), bu yüzden tek değişken ikisini de taşır.
+      - "${REDIS_PORT:-6380}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -31,10 +66,11 @@ services:
 
   mailpit:
     image: axllent/mailpit
-    container_name: zero-mailpit
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      # SMTP — MAIL_PORT'u app de okur (`application.yml`).
+      - "${MAIL_PORT:-1025}:1025"
+      # Web arayüzü — app tarafında karşılığı yok, compose'a özel.
+      - "${MAILPIT_UI_PORT:-8025}:8025"
 
 volumes:
   zero-pgdata:

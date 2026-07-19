@@ -45,7 +45,18 @@ bash zero-spring/scripts/ci-local.sh            # hepsi
 bash zero-spring/scripts/ci-local.sh readiness  # tek gate
 
 # bağımlılıklar
-cd zero-spring/backend && docker compose up -d   # postgres:5433, redis:6380, mailpit:1025
+cd zero-spring/backend && docker compose up -d   # postgres:5433, redis:6380, mailpit:1025/8025
+
+# Konteynerlere SERVİS adıyla eriş, konteyner adıyla değil — `container_name` bilinçli olarak
+# yok (R-01b: bu şablondan türetilmiş iki proje aynı makinede çalışabilsin diye).
+docker compose exec postgres psql -U zero -d zero
+docker compose exec redis redis-cli ping
+
+# Portlar çakışırsa (varsayılanlar 5433/6380/1025/8025 — application-dev.yml bunları bekler):
+#   POSTGRES_PORT=5434 docker compose up -d   ⚠️ DB_URL'i de güncelle, otomatik senkron DEĞİL
+#   REDIS_PORT=6381    docker compose up -d   (app da aynı env'i okur, tek hamlede tutarlı)
+# Proje adı çakışırsa (varsayılan = dizin adı, yani her klonda `backend`):
+#   COMPOSE_PROJECT_NAME=musteri-x docker compose up -d
 ```
 
 ## Tuzaklar — hepsi bu projede canlı olarak yaşandı
