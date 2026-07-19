@@ -44,8 +44,14 @@ public class SubscriptionController {
     /**
      * The caller's own subscription. Mapped before {@code /{tenantId}} by path-pattern specificity
      * (a literal segment always beats a variable), so "me" is never parsed as a tenant id.
+     *
+     * <p>Authentication only, no permission: the tenant comes from the JWT {@code tenant} claim,
+     * never from a path variable, so the caller cannot name a tenant it does not belong to. Every
+     * tenant user needs to see its own plan, so a permission would have to be granted to all of
+     * them and would decide nothing.
      */
     @GetMapping("/me")
+    @PreAuthorize("isAuthenticated()")
     public SubscriptionDto me(@AuthenticationPrincipal Jwt jwt) {
         return subscriptionService.getOwnSubscription(tenantId(jwt));
     }

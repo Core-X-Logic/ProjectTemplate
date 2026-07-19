@@ -75,7 +75,16 @@ public class SettingController {
 
     // --- Client bootstrap ---
 
+    /**
+     * Bootstrap settings for the SPA. Authentication only, no permission: this is an explicit
+     * allowlist — {@link SettingDefinitions#clientVisible()} — of the values every signed-in user
+     * needs before any screen can render, and scoping is principal-derived (tenant and user come
+     * from the JWT, never from the request). A permission would have to be granted to every user to
+     * keep the app usable, which is a permission that decides nothing; the real control is what the
+     * allowlist contains, and that is enforced in the definitions, not here.
+     */
     @GetMapping("/client")
+    @PreAuthorize("isAuthenticated()")
     @ResponseStatus(HttpStatus.OK)
     public Map<String, String> clientSettings(@AuthenticationPrincipal Jwt jwt) {
         Long tenantId = tenantId(jwt);

@@ -94,7 +94,7 @@ izin gerekirdi.
 | # | Kriter (komut çıktısıyla kanıtlanır) |
 |---|---|
 | **W5-1** | Rule 4 dosyası **12 → 0 satır**; `stored.rules` tam 5 kural; öksüz UUID yok. **Hiçbir `package-info.java` eklenmemiş**: `find src/main -name package-info.java \| wc -l` → **15 → 15**. Kural, 17 entity gördüğünü assert eden bir vacuity guard taşır. |
-| **W5-2a** | Rule 5 **6 → 0**. `git diff` tam 6 `@PreAuthorize("isAuthenticated()")`. `INTENTIONALLY_ANONYMOUS` **8 girdi**, değişmemiş. |
+| **W5-2a** | ✅ **TAMAM.** Rule 5 **6 → 0**. `git diff` tam 6 `@PreAuthorize("isAuthenticated()")`. `INTENTIONALLY_ANONYMOUS` **7 girdi**, değişmemiş — *bu sözleşme ilk hâlinde **8** yazıyordu ve yanlıştı; gerçek liste `AuthController#login/refresh`, `AccountController#forgotPassword/resetPassword/confirmEmail`, `LocalizationController#dictionary/languages`. Yanlış sayı tehlikeliydi: bir denetçi "8 olmalı, biri eksik" deyip **girdi ekleyerek** §2.4'ü tam da yasakladığı yönde ihlal edebilirdi.* |
 | **W5-2b** | 2 yeni IT: `logoutRejectsARefreshTokenBelongingToAnotherUser`, `impersonationTicketRejectsRedemptionByAnotherActor`. |
 | **W5-3** | 4 yeni IT (sınır üstü 400, tam sınır 200 — her iki export yolu için). `ExportLimits` **tek** sınıf, iki tüketici. |
 | **W5-4** | `SecurityConfig` ve `SubscriptionAccessCheck`'te **0 ham yol literali**. Hizalama testi en az **4 controller** gördüğünü assert eder. `/api/settings/client` muafiyeti **ölçülür**, sonuç RISK-REGISTER'a yazılır. |

@@ -31,8 +31,26 @@ Eşikler `../QUALITY-GATES.md`'de. Bu dosya **ölçümleri** tutar.
 | `live-smoke` | assertion koşmadan geçmek | **11 PASS**, içinde **5 negatif**: tenant mismatch `403` · tenant→subscriptions `403` · tenant→editions `403` · anonim `/me` `401` · bilinmeyen tenant `400` |
 | `security-checks` | gitleaks `.git` bulamayıp hatayı yutmak | **`45 commits scanned`** · **`no leaks found`** · 5 desen PASS · `application-prod.yml secrets are env-referenced` · `npm audit: 0 vulnerabilities` — üçü de **blocking** |
 
-`release` **skipped**, başarısız değil: `if: github.event_name == 'push' && ref == main`;
-`workflow_dispatch` ile koşulduğu için koşul false — doğru davranış.
+### `release` — push koşulunda kanıtlandı (`3bd1113`, **8/8**)
+
+İlk koşu `workflow_dispatch` ile yapıldığı için `release` **skipped** olmuştu
+(`if: github.event_name == 'push' && ref == main`). Gerçek bir `push` ile tekrarlandı:
+
+| Gate | Sonuç | Bu koşudaki kanıt |
+|---|---|---|
+| `build` … `security-checks` | 7/7 success | backend `254 IT + 124 unit`; `migration-drift` oldset = **V1..V7**, `applied 7 → v7`, `validated 7` (checksum drift yok), ikinci migrate `No migration necessary` |
+| **`release`** | **success** | jar indirildi, step summary'ye commit / artifact adı / boyut / geçilen gate zinciri yazıldı |
+
+> ⚠️ **`release: success` "deploy edildi" DEMEK DEĞİLDİR.** Job'ın kendi log satırı:
+> *"Gerçek deploy adımı henüz bağlı değil (placeholder)."* Kanıtladığı şey, zincirin uçtan uca
+> tamamlandığı ve artifact'ın hazır olduğudur — bir dağıtım değil. Gerçek deploy adımı
+> bağlanana kadar bu satır bu şekilde okunmalıdır.
+
+**İkinci koşunun `migration-drift`'i farklı bir şeyi kanıtladı:** önceki commit'te V7 zaten
+vardı, yani oldset = V1..V7 ve mevcut set = V1..V7 → uygulanacak yeni migration yok. Bu, bir
+öncekinden **daha zayıf değil, farklı** bir doğrulama: V7'nin checksum'ının **değişmediğini**
+gösteriyor. İlk koşu "V7 dolu şemaya uygulanabiliyor mu", ikincisi "V7 uygulandıktan sonra
+kararlı mı" sorusunu cevapladı.
 
 **Lokal ↔ CI tutarlılığı:** backend 376/376 · frontend 123/123 · coverage geçti/geçti. **Sapma yok.**
 Bu ölçüm önemli: bu depoda iki kez lokal-yeşil/CI-kırmızı yaşandı (mail health indicator, readiness
