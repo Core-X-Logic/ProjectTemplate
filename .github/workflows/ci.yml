@@ -101,6 +101,20 @@ jobs:
   build:
     name: build
     runs-on: ubuntu-latest
+    # Dependabot PR'ları tam zinciri tetikliyordu: 15 açık PR × 8 job, üçü Postgres kaldırıp
+    # jar boot ediyor. Ölçüldü: tek bir dependabot PR'ı 9–10 dakika duvar saati yaktı.
+    #
+    # Neden `on.pull_request.branches-ignore: ['dependabot/**']` DEĞİL: `pull_request` için
+    # `branches` filtresi **base** branch'e bakar, head'e değil. Base her zaman `main` olduğu
+    # için o filtre hiçbir şey elemez ve eleme yaptığını sanırsınız — sessiz no-op.
+    #
+    # `build` atlanınca `needs:` zinciriyle bağlı 7 job'ın hepsi atlanır (skipped job dakika
+    # harcamaz). Guard'ı buraya koymanın nedeni bu; her job'a ayrı ayrı yazmak gerekmiyor.
+    #
+    # ⚠️ TAKAS: dependabot PR'ları artık DOĞRULANMADAN duruyor. Merge etmeden önce Actions →
+    # CI → "Run workflow" ile o branch üzerinde elle koşturun. Bu depoda branch protection
+    # zaten kurulamıyor (PROD-R23), yani kırmızı bir check hiçbir şeyi engellemiyordu.
+    if: github.actor != 'dependabot[bot]'
     steps:
       - name: Checkout
         uses: actions/checkout@v4

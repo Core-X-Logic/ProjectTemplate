@@ -1,13 +1,19 @@
 # CI'daki `npm audit` kapısı bir zafiyeti YAKALAR ama güncellemez; `ci.yml` ayrıca OWASP
 # bağımlılık taramasını "bu iş Dependabot'a ait" gerekçesiyle kapsam dışı bırakıyor.
 # Dependabot olmadan bu, yarım kalmış bir karardı: kapı kırmızıya döner, kimse güncellemez.
+#
+# Sıklık ve limit ÖLÇÜME göre düşürüldü (2026-07-19). Önceki ayar haftalık × 3 ekosistem ×
+# 5 PR = 15 açık PR üretti; her biri `ci.yml`'in 8 job'lık zincirini tetikliyordu ve
+# dependabot'un kendi updater koşuları da ayrıca dakika yakıyordu. `ci.yml`'deki
+# `github.actor != 'dependabot[bot]'` guard'ı CI tarafını kesiyor; buradaki aylık/3 ayarı
+# PR akışının kendisini kesiyor. İkisi ayrı kaldıraç — biri diğerinin yerine geçmez.
 version: 2
 updates:
   - package-ecosystem: maven
     directory: /zero-spring/backend
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+    open-pull-requests-limit: 3
     groups:
       # Spring sürümleri birlikte hareket eder; tek tek PR bakım yükü üretir.
       spring:
@@ -18,8 +24,8 @@ updates:
   - package-ecosystem: npm
     directory: /zero-spring/frontend/app
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+    open-pull-requests-limit: 3
     groups:
       react:
         patterns: ['react', 'react-dom', '@types/react*', 'react-router*']
