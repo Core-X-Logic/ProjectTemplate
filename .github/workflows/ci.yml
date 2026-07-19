@@ -142,7 +142,7 @@ jobs:
       # Sonraki gate'ler bu jar'ı indirip çalıştırır (yeniden derleme yok →
       # test edilen artifact ile smoke edilen artifact birebir aynı).
       - name: Upload backend jar
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-jar
           # R-01b: sabit ad (pom.xml <finalName>app</finalName>). Eskiden burada
@@ -195,7 +195,7 @@ jobs:
 
       - name: Upload test reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-test-reports
           path: |
@@ -237,7 +237,7 @@ jobs:
 
       - name: Upload Vitest reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frontend-test-reports
           path: |
@@ -365,7 +365,7 @@ jobs:
 
       - name: Upload drift diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: openapi-snapshot
           path: |
@@ -529,7 +529,7 @@ jobs:
 
       - name: Upload migration logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: migration-drift-logs
           path: |
@@ -723,7 +723,7 @@ jobs:
 
       - name: Upload backend log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: live-smoke-backend-log
           path: zero-spring/backend.log
@@ -850,7 +850,7 @@ jobs:
 
       - name: Upload gitleaks report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: gitleaks-report
           path: zero-spring/gitleaks.sarif
