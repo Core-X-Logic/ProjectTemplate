@@ -158,8 +158,13 @@ satır aynalıyor; W5-4 o matcher'ları taşır.
 > tanımı dalga ortasında daraldı ve **R-38 / alt-tür A açık kaldı** — sınıfın *en sert* üyesi,
 > tabloda **"en sert"** diye işaretli olan. Somut hâli: `SecurityConfig`, `identity`'nin
 > `allowedDependencies`'inde **olmayan** `localization` üzerinde `permitAll` kararı veriyor ve bunu
-> Modulith de ArchUnit de derleyici de görmüyor. Dalga 5 bunu **kapatmadı**; Dalga 6'nın ilk kalemi
-> olarak devrediyor. Bu satır, kapsamın sessizce daralmış görünmemesi için buradadır.
+> Modulith de ArchUnit de derleyici de görmüyor. Bu satır, kapsamın sessizce daralmış görünmemesi
+> için buradadır.
+>
+> **Aynı gün, kapsam sahibi kararı geri aldı:** çekirdek kalem yeniden yürütmeye alındı.
+> Dalga kapanışının statüsü buna bağlı — W5-3'ün **GO** olması dalganın **kapandığı** anlamına
+> gelmez. Ayrım kayda geçirildi: *W5-3 GO · Wave 5 closure NO-GO (R-38/A açıkken) · Wave 5
+> execution GO to continue.*
 
 Her iş için `stack-reviewer` commit'ten önce; §5 satırları için `gate-auditor` zorunlu.
 

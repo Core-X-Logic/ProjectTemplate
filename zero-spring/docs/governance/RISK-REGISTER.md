@@ -33,7 +33,7 @@ Aşağıdaki kayıtların çoğu bu şablonun **kendi geçmişidir** ve sizi ba�
 
 | Alt-tür | Bulgu | Sınır aşıyor | Modulith görür | Kırılma | Aksiyon |
 |---|---|---|---|---|---|
-| **A — URL yol dizeleri** ⚠️ **en sert** | 7 literal / 4 dosya / 3 modül. `SecurityConfig` `/api/localization/**` için `permitAll` veriyor ama `identity`'nin `allowedDependencies`'inde **`localization` yok**. `SubscriptionAccessCheck` de `/api/auth/**` ve `/api/account/**` muaf tutuyor; `saas`'ın listesinde ikisi de yok | **Evet — beyan edilmemiş yönde** | **Hayır** | **Sessiz + güvenlik etkili** | **W5-4** |
+| ~~**A — URL yol dizeleri**~~ ✅ | ~~7 literal / 4 dosya / 3 modül~~ → gerçek kapsam **5 kenar / 3 modül**: `SecurityConfig:104` (identity→localization), `SubscriptionAccessCheck:34,35,36` (saas→identity ×2, saas→localization), `AuditLogInterceptor:87` (audit→identity — ilk kayıtta **yoktu**) | Evet | Hayır | Sessiz | ✅ **KAPANDI (W5-4).** Detay ve kalan risk aşağıda |
 | **B — i18n anahtarları** | Her iki bundle 100 anahtar; yalnız 45 `Permission.*` korunuyor → **55 korumasız**. Tüketici `getMessage(key, null, key, locale)` yazıyor: eksik anahtar kullanıcıya **ham anahtar** olarak gider. Eşitliği bugün yalnızca bir **yorum satırı** talep ediyor | Evet | Hayır | Sessiz | **W5-5** |
 | **C — Setting adları** | 10 tüketici literali; `SettingDefinitions.` sabit referansı `settings` dışında **sıfır**. `SmtpEmailSender` `catch (RuntimeException)` ile `@Value` fallback'ine **sessizce** düşüyor | Evet | Kenarı evet, içeriği hayır | 8 gürültülü / **2 sessiz** | **W5-6** |
 | **D — Hibernate filtre adları** | 15 nokta; `AccountService` sabitler mevcutken **ham literal** yazıyor | Evet | Hayır | Sessiz | **W5-6** |
@@ -363,6 +363,69 @@ default'suz NOT NULL **yok**; SaaS entity'lerinde JPA association yerine düz FK
 - **İstek gövdeleri sınırlı.** `zero.request.max-body-bytes` 1 MB (`/api/**`), `zero.ratelimit.max-body-bytes`
   16 KB (5 anonim yol). Ayrı bloklar olması bilinçli — F1'i üreten şey, 16 KB'nin *rate limiter'ın
   bir özelliği* olması ve yalnız limiter'ın koştuğu yerde geçerli olmasıydı.
+
+### R-38A — erişim kararları URL **string**'ine bağlı, hiçbir araç göremiyor (2026-07-19)
+
+Beş erişim kararı, **başka bir modülün** URL yüzeyini string olarak adlandırıyordu. Bağ bir string
+olduğu için derleyici, Modulith ve bytecode ArchUnit'in **üçü de kördü**: `/api/localization`
+yeniden adlandırıldığında `permitAll("/api/localization/**")` sessizce eşleşmeyi bırakır, tüm
+gate'ler yeşil kalır ve login ekranı, login formunu çizebilmek için gereken sözlüğü artık
+toplamaya çalıştığı kimlik bilgisinin arkasında bulur.
+
+| ID | Bulgu | Şiddet | Durum |
+|---|---|---|---|
+| R-38A-1 | `AuditLogInterceptor:87` `identity`'nin iki login yolunu hardcode ediyordu; `audit` modülünün `allowedDependencies = {"shared"}` beyanı **yanlıştı** | Orta | **Closed — kenar SİLİNDİ.** Konteyner `preHandle`'a `HandlerMethod`'u zaten veriyor; muafiyet artık `@EndpointPolicy(AUDIT_EXEMPT)` olarak handler'ın kendi beyanı. `audit` içinde başka modülün hiçbir yolu kalmadı. `AuditExemptionIT` (2) |
+| R-38A-2 | `SecurityConfig:104` (`identity` → `localization`) ve `SubscriptionAccessCheck:34-36` (`saas` → `identity`, `localization`) — dört kenar daha | Orta | **Mitigating — bilinçli olarak beyan EDİLMEDİ.** `saas -> identity` beyanı, bir string sorununu çözmek için `saas`'a `identity`'nin **her tipini** açardı ve yeniden adlandırmada yine kırmızıya dönmezdi. Bunun yerine iki yönlü mutabakat: `SecurityPathBindingIT` (6), `SubscriptionExemptPathBindingIT` (4), Rule 6 (donmamış, sıfırdan zorluyor) |
+| R-38A-3 | `application.yml:125` **yanlış bir iddia taşıyordu**: throttle listesinin `SecurityConfig` ile karşılaştırıldığını söylüyordu; `RateLimitMediaTypeFailClosedIT:513` aynı beş yolu hardcode ediyor ve `SecurityConfig`'i hiç okumuyor | Düşük (gürültü) / Orta (yanlış güven) | **Closed** — iddia artık **doğru**: `SecurityPathBindingIT.everyAnonymousBodyHandlerIsThrottled` gereken kümeyi `@RequestBody` alan ANONYMOUS handler'lardan **türetiyor**, listeden kopyalamıyor |
+| R-38A-4 | `ArchitectureRules:66-68` "SecurityConfig kaynaktır, bu liste yalnızca sonucu kaydeder" diyordu; bu iddiayı **hiç kimse** doğrulamıyordu | Düşük | **Closed** — `theIntentionallyAnonymousSetEqualsTheAnnotatedSet` (surefire) + `everyAnonymousClaimIsGrantedByAPermitAllMatcher` (failsafe) zinciri kapatıyor |
+| **R-38A-5** | **`zero.saas.subscription-gate.exempt-paths` = `/api/**` yazan bir operatör, abonelik kapısını TAMAMEN devre dışı bırakır, temiz boot eder ve tek bir WARN satırı alır.** Startup doğrulayıcısı yalnızca **çözülebilirliği** kontrol eder, **genişliği** değil | **Orta — AÇIK** | **Open (bilinçli).** Override, canlı bir olayda operatörün elindeki kaçış kapağı; ölümcül yapmak onu geri alırdı. Yazım hatası **boot'u reddediyor** (`SubscriptionExemptPathsStartupCheck`, 4 birim testi), genişletme **WARN** ile ve kapsadığı talep etmeyen rotaların adıyla loglanıyor. Kapatılmadı, **görünür** kılındı |
+
+**Yük taşıyıcı katman kaynak metni DEĞİL, çalışan filtre zinciri.** Bu, üç ardışık denetim turunda
+**ölçülerek** öğrenildi: metinsel parser'ın her kapatılan yazımı bir sonrakini doğurdu.
+
+| Tur | Kaçış | Ölçülen sonuç |
+|---|---|---|
+| 1 | `String[]` sabiti: `.requestMatchers(PARTNER_PATHS).permitAll()` | 137/271 **yeşil**, tenancy admin yüzeyi `permitAll`'da |
+| 2 | Nokta ile ad arasında satır sonu: `.` ⏎ `requestMatchers(...)` | 138/271 **yeşil** — tarama bitişik token arıyordu |
+| 3 | `.requestMatchers(...)` — javac unicode'u lexing'den **önce** çözer | **yeşil**; iki dedektör de nokta göremediği için *hemfikir* oldu, uyuşmazlık guard'ı ateşlenemedi |
+| 3 | `SecurityConfig` **dışında** kusursuz okunabilir bir literal | **yeşil** — form ve sahiplik kontrollerini geçiyor ama grant kümesine hiç girmiyor |
+
+**Sonuç:** akıcı bir DSL'in kaynak metnini taramak sızdırmaz hâle getirilemez. Metinsel kurallar
+**korunuyor** — dosya ve satır adı verdikleri için hızlı geri bildirim olarak değerliler — ama
+garanti artık `FilterChainReachabilityIT`'de: her maplenmiş pattern'e, o pattern'in **maplemediği**
+bir HTTP metodu, kimlik bilgisiz gönderiliyor. `401` ⟹ zincir kapalı, `401 dışı` ⟹ açık; açıksa her
+handler `@EndpointPolicy(ANONYMOUS)` taşımak **zorunda**.
+
+Ayrımın kendisi de negatif kanıtla kuruldu — aynı istek, iki konfigürasyon:
+
+```
+KAPALI zincir | PATCH /api/tenants | 401
+AÇIK   zincir | PATCH /api/tenants | 405 allow=GET,POST
+KAPALI zincir | GET   /api/tenants | 401
+AÇIK   zincir | GET   /api/tenants | 401     ← naif GET işe yaramaz: aynı statü, zıt anlam
+```
+
+Yan etkisizlik **iddia edilmedi, iki bağımsız yolla kanıtlandı**: dispatcher maplenmemiş metotta
+hiç `HandlerMethod` üretmiyor, ve audit tablosu altı probda **sıfır** satır artıyor (servis edilen
+tek bir GET onu 1 artırıyor — yani ölçüm aleti canlı). `TRACE` ve CORS preflight `OPTIONS`
+**kullanılmıyor**: ikisi de her iki konfigürasyonda aynı cevabı veriyor, yani prob değiller.
+
+Bu katman, iki metinsel katmanın da geçirdiği **dört kaçışı** yakaladı: unicode escape,
+`SecurityConfig` dışı grant, ikinci `SecurityFilterChain`, ve `WebSecurityCustomizer.ignoring()`
+(sonuncusu yolu zincirden tamamen çıkarır — prob *neden*ini değil, **cevap verip vermediğini**
+sorduğu için yine de düşüyor).
+
+| ID | Bulgu | Şiddet | Durum |
+|---|---|---|---|
+| **R-38A-6** | Prob, pattern'in **maplemediği** bir metot atıyor. İkinci bir filter chain üzerinde `securityMatcher` + **metot-kapsamlı** grant (`requestMatchers(HttpMethod.GET, ...)`) bu yüzden görünmüyor | **Düşük — AÇIK** | **Open (kayıtlı).** Kazayla oluşmaz: ikinci filter chain + `securityMatcher` + metot-kapsamlı matcher, üçü de kasıtlı. Gerçek maruziyet için dördüncüsü gerekli — `@PreAuthorize`'sız bir handler — ki **Rule 5 onu build'de engelliyor**. Kapatma yolu biliniyor ve ucuz: bilinen tek `SecurityFilterChain` dışında bean olmadığını assert etmek (E5/E6/E10'u kökünden keser) ya da pattern başına **her maplenmiş metodu** problamak — ikincisi handler'ları çalıştırır, yani yan etkisizliği kaybettirir |
+
+> `429` **yeşil sayılmıyor:** `RateLimitFilter`, `AuthorizationFilter`'ın **önünde** oturuyor ve
+> zincir karar vermeden cevap verebilir. Throttle'a takılan bir prob koşuyu **INCONCLUSIVE**
+> yapıyor, "açık" değil. Aksi hâlde kapalı ama throttle'lı bir yol açık okunurdu.
+
+> Rule 6 **donmuyor** (`FreezingArchRule` yok): bugün sıfır ihlalde, dolayısıyla ham kontrol
+> ediliyor. Yeni bir kuralı dondurmak, ilk koşuda bulduğu neyse onu sessizce borç defterine yazar —
+> bu depoda tam olarak geri alınması gereken hamle. Donmuş depo **beş dosya, hepsi sıfır** kalıyor.
 
 ## Mitigasyon takvimi (özet)
 

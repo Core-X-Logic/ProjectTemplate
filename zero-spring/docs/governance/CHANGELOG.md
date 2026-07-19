@@ -38,6 +38,20 @@ kendi günlüğünüzü yukarıya yazın.
   dosyadır. `zero.export.max-rows` (varsayılan 10 000) boot'ta doğrulanıyor: `0` ile kurulum
   **açılmıyor**, her export'ta 500 üretmiyor.
 - **Korumasız 6 handler'a yetki beyanı eklendi.** ArchUnit Rule 5 donmuş 6 → 0.
+- **Erişim kararları artık string'e bağlı değil.** Beş karar başka bir modülün URL yüzeyini string
+  olarak adlandırıyordu; bağ string olduğu için derleyici, Modulith ve ArchUnit'in üçü de kördü —
+  `/api/localization` yeniden adlandırılsa `permitAll` sessizce eşleşmeyi bırakır ve login ekranı,
+  login formunu çizmek için gereken sözlüğü toplamaya çalıştığı kimlik bilgisinin arkasında bulurdu.
+  Çözüm `@EndpointPolicy`: handler'ın **kendi** beyanı, tarif ettiği şeyin üzerinde yaşıyor.
+  Bu bir **claim**, asla bir **grant** değil — `ANONYMOUS` yazmak hiçbir şey açmaz, grant tek
+  gözden geçirilebilir yerde (`SecurityConfig`) kalır ve testler **iki yönlü** mutabakat arar:
+  grant'sız claim de, claim'siz grant da build'i kırar. `@Target(METHOD)` bilinçli — tip seviyesinde
+  bir claim, controller'a eklenecek bir sonraki metodu sessizce kapsardı.
+  `audit` kenarı **beyan edilmedi, silindi**: konteyner `preHandle`'a `HandlerMethod`'u zaten
+  veriyor, dolayısıyla `audit` başka modülün yolunu adlandırmayı tamamen bıraktı ve
+  `allowedDependencies = {"shared"}` — depodaki en dar sınır — olarak kaldı.
+  `saas → identity` bilinçle beyan **edilmedi**: bir string sorununu çözmek için `saas`'a
+  `identity`'nin her tipini açmak, kapsüllemeyi görünürlüğe feda etmek olurdu.
 - **İzin dizgeleri artık sabitlerle yazılıyor.** 31 ham `hasAuthority('...')` literali
   `AppPermissions` (ve modül sahipli `AuditPermissions` / `SettingsPermissions` /
   `TenantPermissions` / `SaasPermissions`) sabitlerine taşındı. Yazım hatası içeren bir literal
