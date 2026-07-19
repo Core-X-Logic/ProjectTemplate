@@ -15,6 +15,7 @@ import com.mycompanyname.zero.notification.email.EmailSender;
 import com.mycompanyname.zero.notification.email.EmailTemplateService;
 import com.mycompanyname.zero.saas.api.FeatureChecker;
 import com.mycompanyname.zero.saas.api.SaasFeatures;
+import com.mycompanyname.zero.shared.BoundedExport;
 import com.mycompanyname.zero.shared.domain.DomainException;
 import com.mycompanyname.zero.shared.domain.ErrorCode;
 import com.mycompanyname.zero.shared.tenant.TenantContext;
@@ -28,6 +29,7 @@ import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,6 +54,10 @@ public class UserService {
             "Id", "Username", "Email", "Name", "Surname", "PhoneNumber", "Active", "EmailConfirmed", "Roles"
     };
 
+    /** Names this export in the refusal message; a constant, never anything the caller sent. */
+    private static final String EXPORT_SUBJECT = "user";
+
+    private final BoundedExport boundedExport;
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final RefreshTokenRepository refreshTokenRepository;
@@ -238,15 +244,26 @@ public class UserService {
         return toDto(userRepository.save(user));
     }
 
+    /**
+     * W5-3. Bounded by {@code BoundedExport}, in two stages for the reason given on
+     * {@code UserRepository.findExportIdsByTenantId}: the roles fetch cannot sit under a
+     * {@code LIMIT}, so the limit is applied to a query that selects ids only and the roles are
+     * fetched afterwards for the ids that survived it.
+     *
+     * <p>This used to read the caller's entire scope and then resolve every user's roles. Refusing
+     * over the limit rather than truncating is deliberate — see {@code ExportLimitProperties}.
+     */
     @Transactional(readOnly = true)
     public byte[] exportToExcel() {
         Long tenantId = TenantContext.getTenantId();
-        // Unpaginated by intent: the export is the whole scope. The repository says so in its
-        // signature rather than by passing Pageable.unpaged(), so no caller can turn it back into a
-        // paginated collection fetch by accident.
-        List<User> users = tenantId == null
-                ? userRepository.findAllByTenantIdIsNull()
-                : userRepository.findAllByTenantId(tenantId);
+        List<Long> ids = boundedExport.fetch(EXPORT_SUBJECT, Sort.by(Sort.Direction.ASC, "id"),
+                pageable -> tenantId == null
+                        ? userRepository.findExportIdsByTenantIdIsNull(pageable)
+                        : userRepository.findExportIdsByTenantId(tenantId, pageable));
+        // where id in (:ids) carries no order guarantee, exactly as in list(); restore stage 1's.
+        List<User> users = ids.isEmpty()
+                ? List.of()
+                : inOrderOf(ids, userRepository.findAllByIdIn(ids));
 
         try (Workbook workbook = new XSSFWorkbook();
              ByteArrayOutputStream out = new ByteArrayOutputStream()) {

@@ -36,17 +36,31 @@ public interface UserRepository extends JpaRepository<User, Long> {
     long countByTenantId(Long tenantId);
 
     /**
-     * Whole-scope export. Unpaginated by construction, which is what makes the {@code roles} fetch
-     * safe here: a collection fetch is only a problem when a {@code LIMIT} has to be applied on top
-     * of it. Deliberately NOT expressed as {@code Page<User>} with {@code Pageable.unpaged()} — that
-     * signature invites the next caller to pass a real page and re-open Q-03 silently.
+     * Stage 1 of the export, and the reason the export is NOT one query (W5-3).
+     *
+     * <p>The previous form was {@code @EntityGraph(attributePaths = "roles") List<User>
+     * findAllByTenantId(Long)} — no {@code Pageable}, which is what made the collection fetch legal,
+     * and also what made the result the whole tenant. Bounding it is therefore not a matter of
+     * adding a {@code Pageable} to that method: {@code @EntityGraph} plus {@code Pageable} is the
+     * combination Hibernate cannot express (HHH90003004 — it reads every row and applies the limit
+     * in memory), so the bound would have been enforced AFTER the very allocation it exists to
+     * prevent, and architecture rule 1 would have failed the build for it.
+     *
+     * <p>So the export borrows the two-stage shape the paged listing already uses: this query
+     * selects ids only, has no collection fetch, and lets the database apply
+     * {@code fetch first N rows only}. Stage 2 is {@link #findAllByIdIn(Collection)}, which fetches
+     * the roles for the ids that survived — a set already known to be within the bound.
+     *
+     * <p>Returns {@code List} rather than {@code Page} deliberately: a {@code Page} would issue a
+     * count query on every export, and {@code BoundedExport} answers "is there more?" from the one
+     * extra row it asked for instead.
      */
-    @EntityGraph(attributePaths = "roles")
-    List<User> findAllByTenantId(Long tenantId);
+    @Query("select u.id from User u where u.tenantId = :tenantId")
+    List<Long> findExportIdsByTenantId(@Param("tenantId") Long tenantId, Pageable pageable);
 
-    /** Host-scope ({@code tenant_id is null}) counterpart of {@link #findAllByTenantId(Long)}. */
-    @EntityGraph(attributePaths = "roles")
-    List<User> findAllByTenantIdIsNull();
+    /** Host-scope ({@code tenant_id is null}) counterpart of {@link #findExportIdsByTenantId}. */
+    @Query("select u.id from User u where u.tenantId is null")
+    List<Long> findExportIdsByTenantIdIsNull(Pageable pageable);
 
     /**
      * Stage 1 of the two-stage listing: page the IDS of a tenant's users, with an optional

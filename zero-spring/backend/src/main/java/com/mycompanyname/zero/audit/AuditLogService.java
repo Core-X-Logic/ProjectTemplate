@@ -7,6 +7,7 @@ import com.mycompanyname.zero.audit.domain.EntityChangeRepository;
 import com.mycompanyname.zero.audit.web.dto.AuditLogDto;
 import com.mycompanyname.zero.audit.web.dto.EntityChangeDto;
 import com.mycompanyname.zero.audit.web.dto.EntityPropertyChangeDto;
+import com.mycompanyname.zero.shared.BoundedExport;
 import com.mycompanyname.zero.shared.domain.DomainException;
 import com.mycompanyname.zero.shared.domain.ErrorCode;
 import com.mycompanyname.zero.shared.tenant.TenantContext;
@@ -41,6 +42,10 @@ public class AuditLogService {
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     private static final int DEFAULT_PAGE_SIZE = 20;
 
+    /** Names this export in the refusal message; a constant, never anything the caller sent. */
+    private static final String EXPORT_SUBJECT = "audit log";
+
+    private final BoundedExport boundedExport;
     private final AuditLogRepository auditLogRepository;
     private final EntityChangeRepository entityChangeRepository;
 
@@ -74,12 +79,27 @@ public class AuditLogService {
                 Sort.by(Sort.Direction.DESC, "executionTime"));
     }
 
+    /**
+     * W5-3. Bounded by {@code BoundedExport} — this used to read every row matching the filter, and
+     * an audit table is the one table in the product that only ever grows.
+     *
+     * <p>The fetch goes through the fluent {@code findBy} rather than {@code findAll(spec, Pageable)}
+     * because the latter returns a {@code Page}, and a {@code Page} whose content fills the requested
+     * size triggers a {@code count(*)} over the same predicate — precisely on the over-limit path
+     * this bound exists to make cheap. {@code limit()} carries the probe size into SQL as
+     * {@code fetch first N rows only} in one statement.
+     */
     @Transactional(readOnly = true)
     public byte[] export(String userName, Instant startDate, Instant endDate,
                          Integer minDuration, Integer httpStatus) {
-        List<AuditLog> logs = auditLogRepository.findAll(
-                auditLogSpecification(userName, startDate, endDate, minDuration, httpStatus),
-                Sort.by(Sort.Direction.DESC, "executionTime"));
+        Specification<AuditLog> specification =
+                auditLogSpecification(userName, startDate, endDate, minDuration, httpStatus);
+        List<AuditLog> logs = boundedExport.fetch(EXPORT_SUBJECT,
+                Sort.by(Sort.Direction.DESC, "executionTime"),
+                pageable -> auditLogRepository.findBy(specification,
+                        query -> query.sortBy(pageable.getSort())
+                                .limit(pageable.getPageSize())
+                                .all()));
         return toWorkbookBytes(logs);
     }
 

@@ -156,6 +156,19 @@ zero:
     # The stricter of the two rules wins where they overlap: RateLimitFilter runs first and answers
     # the anonymous paths at 16 KB, so listing /api/** here does not loosen them.
     paths: /api/**
+  export:
+    # W5-3: the bound on how many rows ONE export may return. Both xlsx exports
+    # (/api/users/export, /api/audit-logs/export) used to read their entire scope: the first the
+    # caller's whole tenant plus every user's roles, the second every audit row matching the filter.
+    # Neither had a limit of any kind, and an audit table only grows — so the failure was scheduled,
+    # not hypothetical. Over the limit the request is REFUSED with a 400 naming this property, never
+    # truncated: a silently shortened export is a file that looks complete, and whoever trusted it
+    # finds out last.
+    #
+    # 10000 is a heap decision. POI builds the whole workbook in memory before a byte is written to
+    # the socket, so the cost is roughly (rows x ~1 KB) x concurrent exports, on top of the fetched
+    # rows themselves. Raising it raises both.
+    max-rows: ${EXPORT_MAX_ROWS:10000}
   seed:
     # B4: OFF by default, on purpose. This used to be `true`, so a deployment that lost its
     # SPRING_PROFILES_ACTIVE fell back to a base configuration that provisions a host admin, a
