@@ -93,7 +93,14 @@ final class ArchitectureRules {
             // SecurityConfig: "/api/localization/**" — the login screen needs its dictionary before
             // it can offer a login form at all.
             "LocalizationController#languages",
-            "LocalizationController#dictionary");
+            "LocalizationController#dictionary",
+            // SecurityConfig: "/api/billing/webhook/stripe" — Stripe calls it and holds no
+            // credential of ours; authentication IS the Stripe-Signature header, verified in the
+            // handler before anything is stored. On CONTRACT-wave5 §2.4: that contract forbade
+            // additions to this list because the six handlers then under discussion were NOT
+            // permitAll — listing them would have documented an exposure that did not exist. This
+            // endpoint IS permitAll, which is exactly the consequence this list exists to record.
+            "BillingWebhookController#stripeWebhook");
 
     // ---------------------------------------------------------------------------------------
     // Rule 1 — @EntityGraph must not be combined with Pageable

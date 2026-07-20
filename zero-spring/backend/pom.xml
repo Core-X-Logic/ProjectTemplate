@@ -25,6 +25,7 @@
         <shedlock.version>5.16.0</shedlock.version>
         <bucket4j.version>8.10.1</bucket4j.version>
         <archunit.version>1.4.1</archunit.version>
+        <stripe-java.version>33.1.1</stripe-java.version>
     </properties>
 
     <dependencyManagement>
@@ -104,6 +105,16 @@
             <groupId>com.bucket4j</groupId>
             <artifactId>bucket4j-core</artifactId>
             <version>${bucket4j.version}</version>
+        </dependency>
+
+        <!-- P2-A: Stripe billing. The SDK is used for two things only: OFFLINE webhook signature
+             verification (Webhook.constructEvent — no network) and the thin checkout-session API
+             call behind the BillingProvider SPI. Bean registration is conditional on
+             zero.billing.stripe.enabled, so the dependency is inert on a fresh clone. -->
+        <dependency>
+            <groupId>com.stripe</groupId>
+            <artifactId>stripe-java</artifactId>
+            <version>${stripe-java.version}</version>
         </dependency>
 
         <!-- Phase 2: Mail / Templating / Excel / Password policy -->

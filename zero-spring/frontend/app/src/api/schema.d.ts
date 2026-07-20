@@ -196,6 +196,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/billing/checkout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["checkout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/webhook/stripe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["stripeWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/editions": {
         parameters: {
             query?: never;
@@ -916,6 +948,12 @@ export interface components {
             currentPassword: string;
             newPassword: string;
         };
+        CheckoutSessionDto: {
+            /** Format: int64 */
+            paymentId?: number;
+            sessionId?: string;
+            url?: string;
+        };
         ConfirmEmailRequest: {
             code: string;
         };
@@ -1283,6 +1321,15 @@ export interface components {
             empty?: boolean;
             sorted?: boolean;
             unsorted?: boolean;
+        };
+        StartCheckoutRequest: {
+            billingPeriod: string;
+            cancelUrl: string;
+            /** Format: int64 */
+            editionId: number;
+            successUrl: string;
+            /** Format: int64 */
+            tenantId: number;
         };
         SubscriptionDetailDto: {
             events?: components["schemas"]["SubscriptionEventDto"][];
@@ -1679,6 +1726,54 @@ export interface operations {
                 content: {
                     "*/*": components["schemas"]["TokenPairDto"];
                 };
+            };
+        };
+    };
+    checkout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartCheckoutRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CheckoutSessionDto"];
+                };
+            };
+        };
+    };
+    stripeWebhook: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Stripe-Signature"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": string;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

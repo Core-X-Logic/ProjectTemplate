@@ -134,7 +134,14 @@ zero:
     # permitAll POST without adding it here fails the build.
     # /api/auth/logout is deliberately absent: it requires authentication, so it is already bounded
     # by holding a valid token, and throttling it per IP would penalise everyone behind one NAT.
-    paths: /api/auth/login,/api/auth/refresh,/api/account/forgot-password,/api/account/reset-password,/api/account/confirm-email
+    # P2-A: /api/billing/webhook/stripe is anonymous and takes a body, so it belongs here like the
+    # other five (SecurityPathBindingIT.everyAnonymousBodyHandlerIsThrottled derives exactly this
+    # obligation). Its real authentication is the Stripe-Signature header; the throttle bounds how
+    # fast an unauthenticated caller can drive HMAC verification and the dedup insert. Operational
+    # consequence, recorded: Stripe deliveries share the per-IP allowance (capacity above) and the
+    # 16 KB body bound below — a legitimate burst beyond either gets 429/413, which Stripe treats
+    # as failure and retries later. See RISK-REGISTER PROD-R36.
+    paths: /api/auth/login,/api/auth/refresh,/api/account/forgot-password,/api/account/reset-password,/api/account/confirm-email,/api/billing/webhook/stripe
     # D4: the largest request body accepted on any path above, in bytes. Previously this existed only
     # as a default inside RateLimitProperties, which made a load-bearing security parameter invisible
     # to whoever operates the deployment. A body over this is refused with 413 rather than forwarded
@@ -190,6 +197,17 @@ zero:
     # F5-R9: permission reconciliation is NOT seeding. It has to run in prod, where seeding is off,
     # otherwise permissions added by a later release never reach the static Admin roles.
     reconcile-permissions: ${SEED_RECONCILE_PERMISSIONS:true}
+  billing:
+    stripe:
+      # P2-A. Kapalı varsayılan: taze bir klon Stripe hesabı olmadan açılmalı. enabled=false iken
+      # provider bean'i HİÇ kaydolmaz ve /api/billing yüzeyi 404 döner. enabled=true iken
+      # BillingStripeSecretValidator boş/çözülmemiş secret'ta AÇILIŞI reddeder (JwtSecretValidator
+      # deseni) — çözülmemiş ${...} placeholder'ı hatasız literal bağlanır, o yüzden ilk webhook'ta
+      # değil boot'ta patlamalı.
+      enabled: ${STRIPE_ENABLED:false}
+      secret-key: ${STRIPE_SECRET_KEY:}
+      webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+      publishable-key: ${STRIPE_PUBLISHABLE_KEY:}
   saas:
     lifecycle:
       # Trial/period/grace/downgrade taraması. ShedLock ile çok-instance'ta tek çalışır.

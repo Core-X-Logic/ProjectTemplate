@@ -427,6 +427,23 @@ sorduğu için yine de düşüyor).
 > ediliyor. Yeni bir kuralı dondurmak, ilk koşuda bulduğu neyse onu sessizce borç defterine yazar —
 > bu depoda tam olarak geri alınması gereken hamle. Donmuş depo **beş dosya, hepsi sıfır** kalıyor.
 
+## P2-A (Stripe billing dilimi) riskleri — 2026-07-20 eklendi
+
+Dilim: webhook intake + idempotency + sunucu-otoriter aktivasyon (`saas.billing` alt paketi, V8,
+`/api/billing/*`). Kapanan kaynak-sistem hataları: mükerrer webhook → 400 → sonsuz retry
+(dedup `UNIQUE (provider, event_id)` + `on conflict do nothing`; negatif kanıt: dedup mutasyonla
+kapatıldığında `BillingWebhookIT.duplicateDeliveryIsAcknowledgedWithoutReprocessing` **409'la
+kırmızı**), ve aktivasyonun tarayıcı redirect'ine bağlanması (aktivasyon artık webhook
+transaction'ının içinde; `subscription_events.actor = stripe-webhook` ile kanıtlı).
+
+| ID | Bulgu | Şiddet | Durum |
+|---|---|---|---|
+| PROD-R36 | **Webhook, ortak anonim throttle'ın altında — ve iki arıza modu AYNI DEĞİL.** Anonim + `@RequestBody` olduğu için `zero.ratelimit.paths`'e girmesi gate tarafından ZORUNLU (`everyAnonymousBodyHandlerIsThrottled` türetiyor); Stripe teslimatları IP başına kapasiteyi (prod varsayılanı 10/dk) ve 16 KB gövde sınırını login uçlarıyla paylaşır. **429 = sınırlı gecikme:** kova dolduğunda retry başarır, kayıp yok. **413 = KALICI, İZSİZ KAYIP:** 16 KB üstü bir event gövdesi DETERMİNİSTİKTİR — her retry'da aynı 413'ü alır, Stripe'ın retry takvimi tükenir; ve `RateLimitFilter` handler'dan ÖNCE reddettiği için payload `webhook_events`'e hiç yazılmaz. Sonuç: para tahsil edilmiş, payment `NOT_PAID`'de takılı, sunucu tarafında SIFIR iz. Tek görünür yer Stripe dashboard'unun failed-webhooks listesi | Orta | **Open (kayıtlı).** Kapanış yolu: webhook path'ine özel gövde sınırı (gate'i zayıflatmadan). O gelene kadar mitigasyon OPERASYONEL: RELEASE-RUNBOOK §3.9 mutabakatı — Stripe dashboard failed-webhooks listesi, `NOT_PAID`'de takılı `payments` satırlarıyla periyodik karşılaştırılır |
+| PROD-R37 | **`createCheckoutSession`'ın canlı HTTP çağrısı hiçbir otomatik testte koşmuyor.** SPI arkasında bilerek ince; IT'ler onu kayıt eden bir sahteyle değiştiriyor (imza doğrulaması ise GERÇEK `StripeBillingProvider` koduyla test ediliyor — offline HMAC). Gerçek anahtar/hesap/parametre hataları ilk kez canlıda görünür | Orta | **Open (bilinçli — dilim sözleşmesi).** Kapanış yolu: RELEASE-RUNBOOK'a Stripe test-mode checkout smoke'u |
+| PROD-R38 | **`RECURRING_PAYMENT_SUCCEEDED` saklanıyor ama işlenmiyor.** `invoice.paid`/`subscription_cycle` doğru eşleniyor, `IGNORED` + 200 ile kaydediliyor; dönem uzatma sonraki dilim. Payload'lar `webhook_events`'te backfill için duruyor — yenileme gelirse abonelik uzamaz, kayıt kaybolmaz | Düşük | **Open (planlı)** |
+| PROD-R39 | **Zero-decimal para birimleri.** `StripeBillingProvider.minorUnits` ×100 çevirir; JPY/KRW tarzı bir para birimi 100 kat fazla faturalanırdı. Katalog bugün USD/EUR tarzı satıyor; sub-cent tutar `longValueExact` ile gürültülü patlar | Düşük | **Open (kayıtlı)** — yeni para birimi eklemeden önce `minorUnits` genişletilmeli |
+| PROD-R40 | **Tenant self-checkout ve frontend üçlü kilidin 2/3'ü bu dilimde yok.** Checkout host-only (`subscriptions.manage`, mevcut sabit; `CheckoutEndpointIT` negatif yetki testi ile). Frontend `<Can>`/route-guard ve ekran sonraki dilim | Düşük | **Open (dilim sözleşmesi — kayıtlı)** |
+
 ## Mitigasyon takvimi (özet)
 
 - **F1 ✅:** R-01, R-02 Closed; R-10 taşınmama kararı.

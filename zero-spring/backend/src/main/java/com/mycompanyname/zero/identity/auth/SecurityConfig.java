@@ -102,6 +102,13 @@ public class SecurityConfig {
                             .requestMatchers("/api/account/forgot-password", "/api/account/reset-password",
                                     "/api/account/confirm-email").permitAll()
                             .requestMatchers("/api/localization/**").permitAll()
+                            // P2-A. Stripe calls this and holds no credential of ours; the
+                            // authentication is the Stripe-Signature header, verified offline in
+                            // the handler before anything is stored. Exact path, no wildcard — the
+                            // next /api/billing endpoint must NOT inherit this grant. Throttled via
+                            // zero.ratelimit.paths; claimed by @EndpointPolicy(ANONYMOUS) on
+                            // BillingWebhookController#stripeWebhook.
+                            .requestMatchers("/api/billing/webhook/stripe").permitAll()
                             .requestMatchers("/actuator/health/**").permitAll()
                             // PROD-R17. Everything else under /actuator was reachable by *any*
                             // authenticated caller, because it fell through to anyRequest().authenticated()

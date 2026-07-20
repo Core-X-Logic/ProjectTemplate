@@ -434,6 +434,39 @@ docker compose exec postgres psql -U zero -d zero -c "select * from shedlock;"
 Beklenen: job ilk tetiklendikten sonra bir satır; `lock_until` geçmişte → job serbest.
 `locked_at` çok eski + `lock_until` gelecekte takılıysa → §5.5.
 
+### 3.9 Billing mutabakatı (Stripe aktifse — atlanmayın: İZSİZ kayıp sınıfı)
+
+Webhook, anonim gövdeli uç olduğu için ortak throttle'ın altında (PROD-R36). İki arıza modu var
+ve yalnızca biri kendini iyileştirir:
+
+- **429 (kapasite):** geçici. Stripe retry takvimiyle yeniden dener, kova dolunca başarır.
+- **413 (16 KB üstü gövde):** **deterministik ve kalıcı.** Her retry aynı 413'ü alır, takvim
+  tükenir; `RateLimitFilter` handler'dan ÖNCE reddettiği için `webhook_events`'e satır bile
+  düşmez. Sonuç: para tahsil edilmiş, `payments` satırı `NOT_PAID`'de takılı, **sunucu log/DB
+  tarafında hiçbir iz yok.** Tek görünür yer Stripe dashboard'u.
+
+Bu yüzden deploy sonrası ve periyodik (önerilen: günlük) mutabakat zorunlu:
+
+```bash
+# 1 saatten eski, hâlâ NOT_PAID bekleyen ödemeler — her biri açıklanmak zorunda
+docker compose exec postgres psql -U zero -d zero -c \
+  "select id, tenant_id, external_session_id, amount, currency, created_at \
+     from payments where status = 'NOT_PAID' and created_at < now() - interval '1 hour' \
+     order by created_at;"
+```
+
+Stripe Dashboard → **Developers → Webhooks → (endpoint) → Failed** listesiyle karşılaştırın:
+
+- Listede başarısız teslimat var + eşleşen `NOT_PAID` satırı var → **Resend** deneyin. Dedup +
+  tek-transaction rollback tasarımı sayesinde yeniden gönderim güvenlidir (mükerrer işlenmez,
+  başarısız denemeler iz bırakmadan geri alınır — `BillingWebhookIT`).
+- Başarısızlık nedeni **413** ise Resend de 413 alacaktır: PROD-R36 kapanana (webhook path'ine
+  özel gövde sınırı) kadar çözüm manueldir — ödemeyi Stripe kaydına göre elle mutabık kılın ve
+  aboneliği `PUT /api/subscriptions/{tenantId}/edition` + `activate` ile işleyin; işlemi sürüm
+  notuna yazın.
+- `NOT_PAID` satırı var ama Stripe'ta tamamlanmış session yok → terk edilmiş checkout; normaldir,
+  aksiyon gerekmez.
+
 ---
 
 ## 4. Rollback
