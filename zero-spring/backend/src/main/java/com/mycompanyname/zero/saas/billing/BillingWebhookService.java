@@ -65,6 +65,7 @@ public class BillingWebhookService {
     private final WebhookEventRepository webhookEventRepository;
     private final PaymentRepository paymentRepository;
     private final SubscriptionService subscriptionService;
+    private final BillingConfirmationService confirmationService;
     private final Clock clock;
 
     /**
@@ -153,6 +154,28 @@ public class BillingWebhookService {
             log.warn("checkout.session.completed event {} carries no session id; stored as IGNORED",
                     event.eventId());
             return WebhookEventStatus.IGNORED;
+        }
+        if (provider.supportsQueryConfirmation()) {
+            // Retrieve-authoritative funnel (P2'-B). For a provider that CAN be asked directly
+            // (iyzico), the delivered payload's claim of success is treated as a TRIGGER only: the
+            // provider's own query decides, through the same BillingConfirmationService call the
+            // browser callback and the reconciliation job use. A non-confirming answer is still a
+            // PROCESSED event — the authoritative check ran and said "not collected"; the payment
+            // row is untouched and the reconciliation job re-asks (mutation-proved: activating from
+            // the payload here turns IyzicoWebhookIT's retrieve-authoritative test red).
+            BillingConfirmationService.Outcome outcome = confirmationService.confirmBySessionQuery(
+                    provider, event.externalSessionId(), provider.id() + WEBHOOK_ACTOR_SUFFIX);
+            if (outcome == BillingConfirmationService.Outcome.NO_PAYMENT_ROW) {
+                // Same loud 500 as the classic path below, same reasoning: a completed checkout
+                // with no payment row is transient ordering (retry succeeds once the row exists)
+                // or a genuinely lost payment (must not be swallowed). Rollback includes the dedup
+                // row, so the provider's bounded retry reprocesses cleanly.
+                throw new IllegalStateException(
+                        "checkout-completed event for a session with no payment row");
+            }
+            log.info("Event {} handled through the {} query-confirmation path: {}",
+                    event.eventId(), provider.id(), outcome);
+            return WebhookEventStatus.PROCESSED;
         }
         // For-update lookup, deliberately: a concurrent completion event with a DIFFERENT id for
         // the same session must queue behind this row lock and then hit the PAID guard below.

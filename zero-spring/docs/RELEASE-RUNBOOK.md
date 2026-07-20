@@ -434,10 +434,10 @@ docker compose exec postgres psql -U zero -d zero -c "select * from shedlock;"
 Beklenen: job ilk tetiklendikten sonra bir satır; `lock_until` geçmişte → job serbest.
 `locked_at` çok eski + `lock_until` gelecekte takılıysa → §5.5.
 
-### 3.9 Billing mutabakatı (Stripe YA DA PayTR aktifse — atlanmayın: İZSİZ kayıp sınıfı)
+### 3.9 Billing mutabakatı (Stripe / PayTR / iyzico'dan biri aktifse — atlanmayın: İZSİZ kayıp sınıfı)
 
-Webhook, anonim gövdeli uç olduğu için ortak throttle'ın altında (PROD-R36; PayTR yolu da aynı
-listede). İki arıza modu var ve yalnızca biri kendini iyileştirir:
+Webhook, anonim gövdeli uç olduğu için ortak throttle'ın altında (PROD-R36; PayTR ve iyzico
+yolları da aynı listede). İki arıza modu var ve yalnızca biri kendini iyileştirir:
 
 - **429 (kapasite):** geçici. Stripe retry takvimiyle yeniden dener, kova dolunca başarır.
 - **413 (16 KB üstü gövde):** **deterministik ve kalıcı.** Her retry aynı 413'ü alır, takvim
@@ -496,6 +496,27 @@ karşılaştırın:
   bildirimi kaçtıysa satır `FAILED`'de takılıyken para tahsil edilmiştir. Karar her zaman panelin
   İŞLEM durumuyla verilir, satırın durumuyla değil; sorgu bu yüzden `FAILED`'i de tarar.
 - `NOT_PAID` satırı var, panelde işlem yok → terk edilmiş checkout; normaldir.
+
+**iyzico aktifse (P2'-B) — bu bölümün iyzico satırları OTOMATİK mutabık kılınır.**
+`BillingReconciliationJob` (ShedLock `billing-reconciliation`, varsayılan saatlik,
+`zero.billing.reconciliation.*`) yukarıdaki sorgunun otomasyonudur: `NOT_PAID`/`FAILED`'de
+`min-age`'den (varsayılan 1 saat) eski ve `payments.provider = 'iyzico'` olan her satır için
+iyzico'nun KENDİ retrieve API'si sorgulanır; `paymentStatus=SUCCESS` + `fraudStatus=1` ise ödeme
+`PAID` + abonelik aktive edilir (`subscription_events.actor = iyzico-reconciliation`). Elle
+bakılacaklar:
+
+- **Job'un özet satırını okuyun** (her pass'te INFO): `"Billing reconciliation pass: N
+  candidate(s) ... K skipped without a query-capable provider"`. `skipped > 0` ise o satırlar
+  PayTR/Stripe/atfedilmemiş (`provider` null, V9 öncesi) demektir — **onlar için bu bölümün elle
+  adımları aynen geçerlidir**; iyzico satırları için değildir.
+- Pass'ler arasında `NOT_PAID`'de KALAN iyzico satırı = retrieve "tahsil edilmedi" diyor
+  (terk edilmiş checkout ya da `fraudStatus=0` inceleme — WARN satırında ayrıntı var). İnceleme
+  sonuçlanınca sonraki pass kendiliğinden kapatır; panelle çelişiyorsa PROD-R47'ye bakın.
+- `CANCELLED` satıra para geldiğini söyleyen WARN (`money is settled for a written-off payment`)
+  → job BİLEREK dokunmaz; elle mutabık kılın (operatör kararı sağlayıcı trafiğine ezdirilmez).
+- Webhook'lar için not: iyzico teslimatı yalnız HTTP 200 ile kapanır ve retry bütçesi ~3'tür
+  (10 dk arayla) — bütçe tükense bile bu job aynı retrieve'i sorduğu için iyzico'da "izsiz kayıp"
+  sınıfı (413 senaryosu dâhil) job'a düşer, panele değil.
 
 ---
 

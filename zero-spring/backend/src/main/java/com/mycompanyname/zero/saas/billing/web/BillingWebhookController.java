@@ -1,6 +1,7 @@
 package com.mycompanyname.zero.saas.billing.web;
 
 import com.mycompanyname.zero.saas.billing.BillingWebhookService;
+import com.mycompanyname.zero.saas.billing.IyzicoBillingProvider;
 import com.mycompanyname.zero.saas.billing.PayTRBillingProvider;
 import com.mycompanyname.zero.saas.billing.StripeBillingProvider;
 import com.mycompanyname.zero.shared.web.EndpointPolicy;
@@ -73,6 +74,23 @@ public class BillingWebhookController {
     @EndpointPolicy(Exposure.ANONYMOUS)
     public ResponseEntity<String> paytrWebhook(@RequestBody String payload) {
         return ack(webhookService.handle(PayTRBillingProvider.PROVIDER_ID, payload, null));
+    }
+
+    /**
+     * iyzico webhook intake (P2'-B): server-to-server POST, JSON body, proof in the
+     * {@code X-IYZ-SIGNATURE-V3} header (lowercase hex HMAC-SHA256 — verified offline in
+     * {@code IyzicoBillingProvider} before anything is stored). The ack is a bodyless 200: iyzico
+     * settles delivery on the status code alone and retries up to three times (10-minute cadence)
+     * until it sees one. Note this route being third makes the no-wildcard rule visible: a
+     * {@code /webhook/**} matcher would have granted it silently; instead it is registered in all
+     * four gate places by hand, like its two siblings.
+     */
+    @PostMapping("/webhook/iyzico")
+    @EndpointPolicy(Exposure.ANONYMOUS)
+    public ResponseEntity<String> iyzicoWebhook(
+            @RequestBody String payload,
+            @RequestHeader(value = "X-IYZ-SIGNATURE-V3", required = false) String signatureHeader) {
+        return ack(webhookService.handle(IyzicoBillingProvider.PROVIDER_ID, payload, signatureHeader));
     }
 
     /**

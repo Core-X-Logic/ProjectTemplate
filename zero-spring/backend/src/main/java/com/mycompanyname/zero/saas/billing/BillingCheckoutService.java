@@ -73,6 +73,10 @@ public class BillingCheckoutService {
         payment.setCurrency(edition.getCurrency());
         payment.setPeriod(period.name());
         payment.setStatus(PaymentStatus.NOT_PAID);
+        // P2'-B: recorded so the reconciliation job knows whose query API can be asked about this
+        // row if it gets stuck. Set BEFORE the provider call: a session that was created while the
+        // commit failed leaves no row at all, and a row without a session is skipped by the scan.
+        payment.setProvider(provider.id());
         payment = paymentRepository.save(payment);
 
         CheckoutSession session = provider.createCheckoutSession(new CheckoutRequest(

@@ -54,6 +54,16 @@ public class Payment extends AbstractAuditedEntity {
     @Column(name = "status", nullable = false, length = 16)
     private PaymentStatus status;
 
+    /**
+     * {@link BillingProvider#id()} of the provider this checkout ran through (P2'-B, V9). The
+     * reconciliation job needs it to know WHOSE query API can be asked about a stuck row; without
+     * it a stuck iyzico payment and a stuck PayTR payment are indistinguishable. Nullable: rows
+     * from before V9 (and V9's conservative backfill misses) carry {@code null} and are skipped by
+     * the job with a logged count — runbook §3.9 stays their net.
+     */
+    @Column(name = "provider", length = 32)
+    private String provider;
+
     /** Provider checkout session id; unique, and the key the completion webhook looks up. */
     @Column(name = "external_session_id", length = 255)
     private String externalSessionId;

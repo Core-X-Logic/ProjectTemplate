@@ -146,7 +146,15 @@ zero:
     # (RequestBodyFormats.isAccountable + RateLimitFilter.extractFormUsername, changed together per
     # the D1 rule) instead of allowlisting the path. A 429/413 refusal is one PayTR reads as a failed
     # notification; its retry cadence is UNDOCUMENTED, so reconciliation (runbook §3.9) is the net.
-    paths: /api/auth/login,/api/auth/refresh,/api/account/forgot-password,/api/account/reset-password,/api/account/confirm-email,/api/billing/webhook/stripe,/api/billing/webhook/paytr
+    # P2'-B: /api/billing/webhook/iyzico — same derivation (anonymous + JSON @RequestBody), same
+    # shared-allowance consequence; iyzico's retry budget is only 3 redeliveries at 10-minute
+    # intervals, so a throttled delivery leans on the reconciliation job / §3.9 net harder than the
+    # other two. /api/billing/callback/iyzico is throttled too, DELIBERATELY beyond the derived
+    # obligation (it takes no @RequestBody): it is anonymous, reaches the database, and on a known
+    # token triggers an outbound provider query — unmetered, that is a lever. GET arrives with no
+    # body and no Content-Type, which the limiter forwards by design (the C3/405 rule); the POST
+    # form shape is accountable since P2'-A.
+    paths: /api/auth/login,/api/auth/refresh,/api/account/forgot-password,/api/account/reset-password,/api/account/confirm-email,/api/billing/webhook/stripe,/api/billing/webhook/paytr,/api/billing/webhook/iyzico,/api/billing/callback/iyzico
     # D4: the largest request body accepted on any path above, in bytes. Previously this existed only
     # as a default inside RateLimitProperties, which made a load-bearing security parameter invisible
     # to whoever operates the deployment. A body over this is refused with 413 rather than forwarded
@@ -213,6 +221,42 @@ zero:
       secret-key: ${STRIPE_SECRET_KEY:}
       webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
       publishable-key: ${STRIPE_PUBLISHABLE_KEY:}
+    iyzico:
+      # P2'-B. Aynı desen, üçüncü sağlayıcı. base-url varsayılanı BİLEREK prod host'u:
+      # sandbox-varsayılan, override'ı unutan bir deployment'ta test parasının gerçek aktivasyon
+      # satın alması demek olurdu. Dev/test profilleri sandbox'ı AÇIKÇA yazar.
+      enabled: ${IYZICO_ENABLED:false}
+      api-key: ${IYZICO_API_KEY:}
+      secret-key: ${IYZICO_SECRET_KEY:}
+      base-url: ${IYZICO_BASE_URL:https://api.iyzipay.com}
+      # /api/billing/callback/iyzico'nun DIŞARIDAN görünen mutlak URL'i (buyer'ın tarayıcısı buraya
+      # döner, tek parametre: token). Boşsa checkout isteğinin successUrl'i gönderilir ve doğrulamayı
+      # SPA tetikler (P2'-C). Callback yalnız TETİKLEYİCİDİR — otoriter adım retrieve; yanlış URL
+      # gecikme maliyetidir, para kaybı değil (webhook + mutabakat job'u ağ olarak durur).
+      callback-url: ${IYZICO_CALLBACK_URL:}
+    reconciliation:
+      # P2'-B. NOT_PAID/FAILED'de takılı ödemeleri sağlayıcının KENDİ sorgu API'siyle mutabık kılan
+      # zamanlanmış iş (ShedLock: billing-reconciliation). Varsayılan AÇIK — hatırlanması gereken ağ,
+      # ağ değildir; sorgu-yeteneği olan sağlayıcı yoksa her tarama sıfırla döner, zararsız.
+      # Yalnız iyzico sorgulanabilir (retrieve); PayTR/Stripe satırları LOG'lanarak atlanır ve
+      # runbook §3.9 onların ağı olarak kalır.
+      enabled: ${BILLING_RECONCILIATION_ENABLED:true}
+      # Bir ödemenin "takılı" sayılması için yaşı — daha genci muhtemelen checkout ortasındaki alıcı.
+      min-age: ${BILLING_RECONCILIATION_MIN_AGE:PT1H}
+      # Pass başına en çok kaç satır sorgulanır (cap+1 probe; kesilirse WARN — sessiz cap yok).
+      # lock-at-most-for aritmetiğinin girdisi: değiştirirken aşağıdaki hesabı yeniden yap.
+      max-rows-per-pass: ${BILLING_RECONCILIATION_MAX_ROWS:50}
+      # Tek sağlayıcı sorgusunun pass'e maliyet tavanı. SDK'da knob YOK (iyzipay-java 2.0.142
+      # HttpClient 140 sn connect+read hardcode eder — javap ile ölçüldü); sınır bizim katmanda:
+      # daemon worker + future.get(timeout); zaman aşımı satırı "unresolved" sayar, DB bağlantısı
+      # rollback'le hemen bırakılır, asılı SDK çağrısı kendi tavanında tek başına ölür.
+      query-timeout: ${BILLING_RECONCILIATION_QUERY_TIMEOUT:PT30S}
+      initial-delay: PT2M
+      interval: PT1H
+      lock-at-least-for: PT30S
+      # Aritmetik (BillingReconciliationJob'daki yorumla birlikte değişir): en kötü pass ≈
+      # max-rows-per-pass × query-timeout = 50 × 30 sn = 25 dk; DB işi + pay → 45 dk tavan.
+      lock-at-most-for: PT45M
   saas:
     lifecycle:
       # Trial/period/grace/downgrade taraması. ShedLock ile çok-instance'ta tek çalışır.

@@ -117,6 +117,25 @@ public class SecurityConfig {
                             // Throttled via zero.ratelimit.paths; claimed by
                             // @EndpointPolicy(ANONYMOUS) on BillingWebhookController#paytrWebhook.
                             .requestMatchers("/api/billing/webhook/paytr").permitAll()
+                            // P2'-B. Third provider, same shape, third EXACT path — still no
+                            // /api/billing/webhook/** wildcard. iyzico's authentication is the
+                            // X-IYZ-SIGNATURE-V3 header (lowercase hex HMAC-SHA256), verified
+                            // offline in IyzicoBillingProvider before anything is stored; and even
+                            // a verified success payload does NOT activate by itself — the
+                            // retrieve query is authoritative (BillingConfirmationService).
+                            // Throttled via zero.ratelimit.paths; claimed by
+                            // @EndpointPolicy(ANONYMOUS) on BillingWebhookController#iyzicoWebhook.
+                            .requestMatchers("/api/billing/webhook/iyzico").permitAll()
+                            // P2'-B. The iyzico Checkout Form browser-callback: the BUYER'S BROWSER
+                            // arrives here from the iyzico payment page carrying only a `token`
+                            // parameter and no credential of ours — anonymous by necessity. It is
+                            // a TRIGGER only: an unknown token answers 200 touching nothing, and a
+                            // known one activates solely if iyzico's own retrieve confirms the
+                            // money (never off the request itself), so this grant exposes no
+                            // authority. Exact path; claimed by @EndpointPolicy(ANONYMOUS) on
+                            // BillingCallbackController#iyzicoCallback; throttled via
+                            // zero.ratelimit.paths.
+                            .requestMatchers("/api/billing/callback/iyzico").permitAll()
                             .requestMatchers("/actuator/health/**").permitAll()
                             // PROD-R17. Everything else under /actuator was reachable by *any*
                             // authenticated caller, because it fell through to anyRequest().authenticated()

@@ -26,6 +26,7 @@
         <bucket4j.version>8.10.1</bucket4j.version>
         <archunit.version>1.4.1</archunit.version>
         <stripe-java.version>33.1.1</stripe-java.version>
+        <iyzipay-java.version>2.0.142</iyzipay-java.version>
     </properties>
 
     <dependencyManagement>
@@ -115,6 +116,19 @@
             <groupId>com.stripe</groupId>
             <artifactId>stripe-java</artifactId>
             <version>${stripe-java.version}</version>
+        </dependency>
+
+        <!-- P2'-B: iyzico billing (github.com/iyzico/iyzipay-java). The SDK is used for the two
+             LIVE API calls only — checkout-form initialize and the retrieve that is the
+             authoritative payment confirmation (it builds the IYZWSv2 auth header). Webhook
+             signature verification (X-IYZ-SIGNATURE-V3) is implemented in IyzicoBillingProvider
+             itself, offline, so the tests exercise the real verification with dummy secrets.
+             Bean registration is conditional on zero.billing.iyzico.enabled — inert on a fresh
+             clone, same as Stripe/PayTR. -->
+        <dependency>
+            <groupId>com.iyzipay</groupId>
+            <artifactId>iyzipay-java</artifactId>
+            <version>${iyzipay-java.version}</version>
         </dependency>
 
         <!-- Phase 2: Mail / Templating / Excel / Password policy -->

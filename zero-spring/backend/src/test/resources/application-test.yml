@@ -36,6 +36,16 @@ zero:
     # raised far above what the suite generates. RateLimitIT lowers it in its own context.
     enabled: true
     capacity: 10000
+  billing:
+    iyzico:
+      # P2'-B: never the production host in a test JVM, even though the provider ITs fake both
+      # live calls through the SPI — a defence against the next test that forgets to.
+      base-url: https://sandbox-api.iyzipay.com
+    reconciliation:
+      # Same rule as zero.saas.lifecycle below: the suite drives the pass explicitly
+      # (BillingReconciliationJobIT); the scheduler must not race the assertions.
+      initial-delay: PT24H
+      interval: PT24H
   saas:
     lifecycle:
       # The suite drives the lifecycle explicitly; pushing the schedule far out keeps the job from

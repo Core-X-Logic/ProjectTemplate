@@ -28,6 +28,12 @@ zero:
   cors:
     # Vite dev server (frontend/app).
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+  billing:
+    iyzico:
+      # P2'-B: the base default is the PRODUCTION host on purpose (see application.yml); a laptop
+      # wants the sandbox and says so explicitly. Enabling iyzico here still requires real sandbox
+      # credentials via IYZICO_API_KEY/IYZICO_SECRET_KEY — the validator refuses blanks.
+      base-url: ${IYZICO_BASE_URL:https://sandbox-api.iyzipay.com}
   ratelimit:
     # C6. The base default is 1, which describes the documented prod shape: one TLS-terminating
     # proxy that appends the address it saw, so the rightmost X-Forwarded-For entry is trustworthy.

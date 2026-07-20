@@ -58,4 +58,40 @@ public interface BillingProvider {
      * automated test (recorded risk — integration tests replace it with a canned session).
      */
     CheckoutSession createCheckoutSession(CheckoutRequest request);
+
+    /**
+     * Whether this provider can be asked DIRECTLY, server-to-server, what became of a checkout
+     * session ({@link #confirmBySessionQuery}). {@code false} is the default and the truth for
+     * Stripe (dormant, ADR-0017) and PayTR (no query API captured in its public docs — recorded
+     * under PROD-R41; runbook §3.9 is that provider's net).
+     *
+     * <p>Two callers change behaviour on a {@code true}: {@code BillingWebhookService} stops
+     * trusting the webhook payload's claim of success and funnels through the query instead
+     * (retrieve-authoritative, P2'-B contract), and {@code BillingReconciliationService} includes
+     * this provider's stuck payments in its scheduled re-check.
+     */
+    default boolean supportsQueryConfirmation() {
+        return false;
+    }
+
+    /**
+     * Asks the provider's own API — not any payload anyone delivered to us — whether the payment
+     * behind {@code sessionId} was collected. For iyzico this is the checkout-form RETRIEVE call
+     * ({@code POST /payment/iyzipos/checkoutform/auth/ecom/detail}), which docs.iyzico.com names as
+     * the authoritative step of the CF flow: neither the browser callback nor the webhook is to be
+     * believed on its own.
+     *
+     * <p>This IS a live network call (the second one this SPI has, after
+     * {@link #createCheckoutSession}, and under the same recorded-risk rule: integration tests fake
+     * it through the SPI while the reconciliation job and the webhook funnel exercise the real call
+     * sites). A transport failure should propagate as a {@link RuntimeException}: the webhook path
+     * turns it into a 500 whose rollback makes the provider's retry re-ask, and the reconciliation
+     * job catches it per payment and re-asks on the next run.
+     *
+     * @throws UnsupportedOperationException when {@link #supportsQueryConfirmation()} is false
+     */
+    default ProviderPaymentConfirmation confirmBySessionQuery(String sessionId) {
+        throw new UnsupportedOperationException("Billing provider '" + id()
+                + "' does not support query confirmation");
+    }
 }

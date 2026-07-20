@@ -106,7 +106,17 @@ final class ArchitectureRules {
             // the form body, verified offline in PayTRBillingProvider before anything is stored.
             // Named individually, exact path — the per-provider webhook routes are deliberately
             // NOT collapsed into a pattern here or in SecurityConfig.
-            "BillingWebhookController#paytrWebhook");
+            "BillingWebhookController#paytrWebhook",
+            // SecurityConfig: "/api/billing/webhook/iyzico" (P2'-B) — third provider, same shape:
+            // authentication IS the X-IYZ-SIGNATURE-V3 header, verified offline in
+            // IyzicoBillingProvider before anything is stored; the payload is additionally never
+            // trusted for activation (retrieve-authoritative, BillingConfirmationService).
+            "BillingWebhookController#iyzicoWebhook",
+            // SecurityConfig: "/api/billing/callback/iyzico" (P2'-B) — the buyer's BROWSER, not
+            // the provider's server: no credential exists to demand. Carries no proof at all,
+            // which is exactly why the handler treats it as a trigger and activates only on the
+            // provider's own retrieve answer, never on the request.
+            "BillingCallbackController#iyzicoCallback");
 
     // ---------------------------------------------------------------------------------------
     // Rule 1 — @EntityGraph must not be combined with Pageable
