@@ -266,6 +266,21 @@ PROD-R45/R46/R48, checkout UI kesildi (sözleşme §5), PROD-R36..R42 önceki ka
 
 ---
 
+## Checkout UI + sandbox harness — 2026-07-20/21, `a750227`, gerçek `push`, **8/8** (run 29778953412)
+
+| Kapı | Sonuç |
+|---|---|
+| Backend | **502** (186 + 316) — değişmedi, UI-only push; CI yine tam koştu |
+| Frontend | **135 test / 27 dosya** (lokalde ölçüldü; CI frontend job success), `tsc -b` + build yeşil |
+| Davranış kanıtı | Submit gövdesi 6 alanla assert'li; provider radyosu `provider`'ı değiştiriyor; 400'de dialog açık kalıp detail gösteriyor; sonuç sayfası **"activated" DEMEZ** (negatif assert: `queryByText(/activated/i)` boş) — redirect'in hiçbir şey kanıtlamadığı sözleşmesi UI'da da kilitli |
+| RBAC | "Pay & assign" yalnız `subscriptions.manage` ile görünür (testli); sonuç rotaları bilinçli izinsiz (gerekçe rotada yorum olarak) |
+
+**Kalan tek açık kapanış kalemi:** sandbox canlı smoke — `scripts/sandbox-smoke.sh` + runbook
+§3.10 hazır; **PayTR mağaza + iyzico sandbox merchant kimlik bilgileri operatörden bekleniyor.**
+Script PASS'i buraya işlenip PROD-R44/R47 kapatılana kadar TR ödeme fazı COMPLETE değildir.
+
+---
+
 ## Kayıt şablonu
 
 ```markdown
