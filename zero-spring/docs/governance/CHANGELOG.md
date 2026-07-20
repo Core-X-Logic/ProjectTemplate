@@ -11,6 +11,18 @@
 
 ### Eklendi
 
+- **iyzico + retrieve-otoriter doğrulama + mutabakat job'u (P2'-B).** Hiçbir webhook/callback
+  payload'ı tek başına aktive etmez: her tetik tek huniye düşer, iyzico'ya `retrieve` ile sorulur,
+  yalnız `paymentStatus SUCCESS` + `fraudStatus 1` aktive eder (mutasyon kanıtlı). V9:
+  `payments.provider` (çapraz-sağlayıcı yönlendirme reddi). ShedLock'lu saatlik mutabakat:
+  takılı `NOT_PAID/FAILED` satırları sorguyla çözer (50/pass, gürültülü kesme; SDK'nın 140 sn
+  gömülü timeout'una karşı PT30S dekoratör sınırı). Review'da yakalanan bayat-birinci-seviye-cache
+  double-activation yarışı commit öncesi kapatıldı (barrier'lı eşzamanlılık IT'si önce kırmızı).
+- **Tenant oluşturma artık kullanılabilir tenant üretiyor (Issue #1 kapanışı).** Tenant + Admin
+  rolü + admin kullanıcısı tek transaction; parola verilmezse üretilir ve **yalnız bir kez**
+  yanıtta görünür (dialog tek-seferlik gösterim + kopyala). Negatif kanıt eski kodda ölçüldü
+  (admin login 401), canlı smoke + re-boot smoke koşuldu.
+
 - **PayTR bildirimi + çoklu-sağlayıcı registry (P2'-A, ADR-0017).** Güncel sağlayıcılar PayTR +
   iyzico (iyzico sıradaki dilim); Stripe uyuyan global-pazar adaptörü, PayPal dışarıda.
   `POST /api/billing/webhook/paytr`: resmî formülle HMAC doğrulama (sabit-zaman), düz-metin

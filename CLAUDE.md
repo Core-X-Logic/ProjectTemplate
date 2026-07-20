@@ -130,4 +130,4 @@ Küçük ve tek katmanlı işte `tech-lead`'i atla, doğrudan mühendisi çağı
 `docs/governance/RISK-REGISTER.md` tek doğru kaynak. Şablonu klonlarken bakılacaklar:
 `PROD-R23` (branch protection ücretsiz planda
 kurulamıyor — kırmızı check push'u engellemez), `PROD-R27` (Dockerfile'ı hiçbir gate build
-etmiyor), Issue #1 (tenant oluşturma admin kullanıcı üretmiyor → tenant giriş yapılamaz).
+etmiyor).

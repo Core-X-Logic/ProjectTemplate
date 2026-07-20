@@ -9,9 +9,9 @@
 | # | İş | Ne kapatır | Durum |
 |---|---|---|---|
 | **P2'-A** | Çoklu-sağlayıcı registry + PayTR intake | PayTR bildirim hattı, `OK` sözleşmesi, failed→success | ✅ `ea0e13f` |
-| **P2'-B** | iyzico: `IyzicoBillingProvider` (SDK 2.0.142), `/api/billing/webhook/iyzico` (`X-IYZ-SIGNATURE-V3`), CF initialize, **retrieve-otoriter** doğrulama, `iyziReferenceCode` dedup, **mutabakat job'u** (ShedLock; `NOT_PAID/FAILED` tara → sağlayıcı sorgusu; PayTR tarafı sorgu API'si yoksa yalnız iyzico-retrieve + PayTR runbook ağı) | PROD-R43 | bu dilim |
-| **Issue #1** | Tenant create → idempotent admin user+role bootstrap. **Migration YOK** (runtime seed). | Issue #1 | paralel dilim |
-| **P2'-C** | Checkout UI (PayTR iframe + iyzico CF sayfası; typed client, üçlü kilit) + **iki sandbox'ta canlı smoke** | PROD-R44, PROD-R40 (yeni biçimi) | UI: sıradaki · smoke: **operatör-bağımlı** (sandbox merchant hesapları gerekli — kod tarafı hazırlanır, koşum kimlik bilgisi ister) |
+| **P2'-B** | iyzico: `IyzicoBillingProvider` (SDK 2.0.142), `/api/billing/webhook/iyzico` (`X-IYZ-SIGNATURE-V3`), CF initialize, **retrieve-otoriter** doğrulama, `iyziReferenceCode` dedup, **mutabakat job'u** (ShedLock; `NOT_PAID/FAILED` tara → sağlayıcı sorgusu; PayTR tarafı sorgu API'si yoksa yalnız iyzico-retrieve + PayTR runbook ağı) | PROD-R43 | ✅ **BİTTİ** (`ef82ef0`; review: 1 HIGH double-activation yarışı dahil 4 bulgu commit öncesi kapandı) |
+| **Issue #1** | Tenant create → idempotent admin user+role bootstrap. **Migration YOK** (runtime seed). | Issue #1 | ✅ **BİTTİ** (`20247d5` backend + `7914373` frontend; öncesi-kırmızı 401 kanıtı + canlı smoke + re-boot smoke) |
+| **P2'-C** | Checkout UI (PayTR iframe + iyzico CF sayfası; typed client, üçlü kilit) + **iki sandbox'ta canlı smoke** | PROD-R44, PROD-R40 (yeni biçimi) | ✂️ **Checkout UI bu turda §5 kesim sırasıyla KESİLDİ** (sıradaki dilim) · smoke: **operatör-bağımlı AÇIK** — sandbox merchant hesapları (PayTR mağaza + iyzico sandbox kaydı) yalnız operatör açabilir; kimlik bilgisi gelmeden PROD-R44/R47 kapanamaz ve faz tamamlanma kararında blocker sayılır |
 | **P2'-D** | Recurring (PayTR kayıtlı-kart tekrarlayan + iyzico `/v2/subscription`) — `SubscriptionLifecycleJob`'a bağlanır | PROD-R38 sınıfı | backlog, bu sözleşmede AÇILMAZ |
 
 ## 2. Kapsam dışı (yasak)

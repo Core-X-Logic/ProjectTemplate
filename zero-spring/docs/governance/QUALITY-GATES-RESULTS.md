@@ -236,6 +236,36 @@ get-token alıcı alanları placeholder, ilk canlı smoke ölçecek. Canlı PayT
 
 ---
 
+## P2'-B iyzico + Issue #1 + tenant dialog — 2026-07-20, `7914373`, gerçek `push`, **8/8** (run 29762445008)
+
+Dört commit tek push'ta: `ef82ef0` (iyzico + mutabakat), `20247d5` (tenant bootstrap, worktree'den
+cherry-pick), `b1297c9` (gitlink temizliği), `7914373` (dialog + F4/F5 sertleştirme). Ara adımda
+`schema.d.ts` bir commit erken landığı için (F2 bulgusu) push **birlikte** yapıldı; tekrarlanmayacak.
+
+| Kapı | Sonuç |
+|---|---|
+| Backend `clean verify` | **502 test (186 unit + 316 IT)**, 0 fail / 0 skip |
+| Frontend | **129 test** (24→25 dosya), build + typecheck yeşil |
+| `migration-drift` | V9 dahil; dev boot V9'u **gerçek V8 kurulumuna** uyguladı (mevcut-kurulum kuralı) |
+| Diğer 5 job | success (`release` = placeholder) |
+
+**Lokal ↔ CI:** **502 = 502** (186 + 316) · frontend **129 = 129**. **Sapma yok.**
+
+**Negatif kanıtlar:** iyzico — imza-atla, dedup-sil, huni-atla (payload'la aktivasyon) üçü de
+mutasyonla kırmızı; **HIGH yarış bulgusu** `[CONFIRMED_ACTIVATED, CONFIRMED_ACTIVATED]` olarak
+önce kırmızı ölçüldü, scalar-peek düzeltmesiyle kazanan + `ALREADY_PAID`'e döndü. Issue #1 —
+çekirdek IT eski kodda `expected: 200 OK but was: 401 UNAUTHORIZED`; dialog suite'i düzeltilmemiş
+UI'da 6/6 kırmızı. **Canlı smoke (Issue #1 kapanış barı):** create 201(+tek-seferlik parola) →
+tenant login 200 → `/api/users` 200 → yanlış tenant 403 → re-boot → aynı parola 200.
+
+**Stack-review:** iyzico 4 bulgu (1 HIGH dahil) + Issue #1 5 bulgu (F1 frontend, F4/F5 sertleştirme)
+— hepsi push **öncesi** kapatıldı; iki review da temiz alanları isimlendirdi.
+
+**Kalan risk:** PROD-R44/R47 (sandbox canlı çağrılar — **operatör-bağımlı**: merchant hesapları),
+PROD-R45/R46/R48, checkout UI kesildi (sözleşme §5), PROD-R36..R42 önceki kayıtlar.
+
+---
+
 ## Kayıt şablonu
 
 ```markdown
