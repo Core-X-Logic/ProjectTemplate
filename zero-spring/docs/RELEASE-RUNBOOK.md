@@ -518,6 +518,23 @@ bakılacaklar:
   (10 dk arayla) — bütçe tükense bile bu job aynı retrieve'i sorduğu için iyzico'da "izsiz kayıp"
   sınıfı (413 senaryosu dâhil) job'a düşer, panele değil.
 
+### 3.10 Sandbox smoke — PROD-R44 / PROD-R47 kapanış prosedürü (operatör koşar)
+
+Kod tarafındaki her şey offline kanıtlı; **gerçek sağlayıcı çağrısı hiç koşmadı**. Kapanış,
+yalnız operatörün açabileceği hesaplara bağlıdır:
+
+| Sağlayıcı | Hesap | Not |
+|---|---|---|
+| PayTR | Gerçek mağaza başvurusu (merchant_id/key/salt) | Ayrı sandbox hostu YOK; canlı mağazada `test_mode=1`. Bildirim URL panelden tünel adresine çevrilir |
+| iyzico | `sandbox-merchant.iyzipay.com` self-service kayıt | `sandbox-` önekli anahtarlar; İşyeri Bildirimleri HTTPS tünel adresine |
+
+Prosedür: `zero-spring/scripts/sandbox-smoke.sh` — env ile kimlik bilgileri + `cloudflared`
+tüneli, sonra `bash zero-spring/scripts/sandbox-smoke.sh paytr` ve `... iyzico`. Script API
+adımlarını otomatik koşar (checkout başlatma, bozuk-imza negatifi, ACTIVE bekleyişi); kart
+girme adımı doğası gereği interaktiftir (3DS). PASS sonucu QUALITY-GATES-RESULTS'a işlenir ve
+PROD-R44/R47 kapatılır. Duplicate-teslimat negatifi iyzico panelindeki **Resend** ile ölçülür
+(200 dönmeli, `subscription_events` sayacı artmamalı).
+
 ---
 
 ## 4. Rollback
