@@ -212,6 +212,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/billing/webhook/paytr": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["paytrWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/billing/webhook/stripe": {
         parameters: {
             query?: never;
@@ -1327,6 +1343,7 @@ export interface components {
             cancelUrl: string;
             /** Format: int64 */
             editionId: number;
+            provider?: string;
             successUrl: string;
             /** Format: int64 */
             tenantId: number;
@@ -1753,6 +1770,30 @@ export interface operations {
             };
         };
     };
+    paytrWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": string;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+        };
+    };
     stripeWebhook: {
         parameters: {
             query?: never;
@@ -1773,7 +1814,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "*/*": string;
+                };
             };
         };
     };

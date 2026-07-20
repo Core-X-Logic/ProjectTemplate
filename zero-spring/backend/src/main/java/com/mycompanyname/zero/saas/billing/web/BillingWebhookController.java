@@ -1,9 +1,12 @@
 package com.mycompanyname.zero.saas.billing.web;
 
 import com.mycompanyname.zero.saas.billing.BillingWebhookService;
+import com.mycompanyname.zero.saas.billing.PayTRBillingProvider;
+import com.mycompanyname.zero.saas.billing.StripeBillingProvider;
 import com.mycompanyname.zero.shared.web.EndpointPolicy;
 import com.mycompanyname.zero.shared.web.EndpointPolicy.Exposure;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -11,30 +14,39 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.charset.StandardCharsets;
+
 /**
- * Stripe webhook intake. Anonymous BY NECESSITY: Stripe calls it and holds no credential of ours —
- * the authentication is the {@code Stripe-Signature} header, verified offline against the endpoint
- * secret before anything is stored. Full anonymous wiring (all four registrations, each enforced by
- * a gate):
+ * Provider webhook intake — ONE METHOD PER PROVIDER, each on an EXACT path. Anonymous BY NECESSITY:
+ * the provider calls it and holds no credential of ours — the authentication is the provider's own
+ * proof (Stripe: the {@code Stripe-Signature} header; PayTR: the {@code hash} form field), verified
+ * offline in the provider adapter before anything is stored. No path variables and no wildcards, so
+ * the next {@code /api/billing} endpoint cannot inherit the anonymous grant; each path is registered
+ * separately in all four gate places (each enforced by a test):
  *
  * <ul>
- *   <li>{@code @EndpointPolicy(ANONYMOUS)} here — the handler's claim;</li>
- *   <li>{@code SecurityConfig}: {@code permitAll("/api/billing/webhook/stripe")} — the grant;</li>
- *   <li>{@code ArchitectureRules.INTENTIONALLY_ANONYMOUS} — the Rule 5 registration;</li>
+ *   <li>{@code @EndpointPolicy(ANONYMOUS)} here, per handler — the handler's claim;</li>
+ *   <li>{@code SecurityConfig}: one exact {@code permitAll} matcher per path — the grant;</li>
+ *   <li>{@code ArchitectureRules.INTENTIONALLY_ANONYMOUS} — the Rule 5 registration, per handler;</li>
  *   <li>{@code zero.ratelimit.paths} — anonymous + {@code @RequestBody} means throttled
  *       ({@code SecurityPathBindingIT.everyAnonymousBodyHandlerIsThrottled} derives that
  *       obligation, it is not optional).</li>
  * </ul>
  *
- * <p>The body is taken as a RAW {@code String}: signature verification runs over the exact bytes
- * Stripe signed, and any DTO binding before verification would both break the HMAC and process
- * unauthenticated input.
+ * <p>The body is taken as a RAW {@code String}: verification runs over the exact bytes the provider
+ * signed (Stripe's HMAC over the JSON body; PayTR's HMAC over fields of the form body), and any DTO
+ * binding before verification would both break the proof and process unauthenticated input.
  *
- * <p>Responses: 200 for processed, ignored AND duplicate deliveries (a duplicate answered 4xx is
- * the measured source bug that caused infinite Stripe retries); 400 only for a failed signature;
- * 404 when billing is disabled (the surface does not exist — see
- * {@code BillingWebhookService#requireProvider}); 500 when processing fails after verification, in
- * which case the whole transaction — dedup row included — rolled back and Stripe's retry is safe.
+ * <p><b>Responses are the provider's, not ours.</b> 200 for processed, ignored AND duplicate
+ * deliveries (a duplicate answered 4xx is the measured source bug that caused infinite Stripe
+ * retries) — with the BODY the provider requires: Stripe reads the status code only, so its ack is
+ * bodyless; PayTR settles the money ONLY on the literal plain-text body {@code OK}, so its ack is
+ * exactly that, unwrapped ({@link #ack}). 400 only for a failed verification — for PayTR
+ * deliberately NOT {@code OK}: confirming a notification that did not verify would be confirming
+ * money nobody proved was paid. 404 when the named provider is not enabled (the surface does not
+ * exist — see {@code BillingWebhookService#requireProvider}); 500 when processing fails after
+ * verification, in which case the whole transaction — dedup row included — rolled back and the
+ * provider's retry is safe.
  */
 @RestController
 @RequestMapping("/api/billing")
@@ -45,12 +57,40 @@ public class BillingWebhookController {
 
     @PostMapping("/webhook/stripe")
     @EndpointPolicy(Exposure.ANONYMOUS)
-    public ResponseEntity<Void> stripeWebhook(
+    public ResponseEntity<String> stripeWebhook(
             @RequestBody String payload,
             @RequestHeader(value = "Stripe-Signature", required = false) String signatureHeader) {
-        webhookService.handle(payload, signatureHeader);
-        // Deliberately bodyless: Stripe reads the status code and nothing else, and echoing any
-        // detail back to an unauthenticated caller buys nothing.
-        return ResponseEntity.ok().build();
+        return ack(webhookService.handle(StripeBillingProvider.PROVIDER_ID, payload, signatureHeader));
+    }
+
+    /**
+     * PayTR "Bildirim URL" intake: server-to-server POST, {@code application/x-www-form-urlencoded},
+     * hash inside the body — hence no signature header parameter. The form body reaches this handler
+     * as the raw string because the throttle filter caches the stream and nothing ahead of the
+     * handler consumes the request parameters.
+     */
+    @PostMapping("/webhook/paytr")
+    @EndpointPolicy(Exposure.ANONYMOUS)
+    public ResponseEntity<String> paytrWebhook(@RequestBody String payload) {
+        return ack(webhookService.handle(PayTRBillingProvider.PROVIDER_ID, payload, null));
+    }
+
+    /**
+     * The provider-driven success acknowledgement. {@code null} → deliberately bodyless 200
+     * (Stripe reads the status code and nothing else, and echoing any detail back to an
+     * unauthenticated caller buys nothing). Otherwise the EXACT bytes the provider requires, as
+     * {@code text/plain} — for PayTR that is the two characters {@code OK}, and anything else
+     * (a JSON wrapper, a ProblemDetail, even a trailing newline) is read by PayTR as a FAILED
+     * notification: the buyer is charged but the money is never settled to the merchant. The exact
+     * body is pinned by {@code PayTRWebhookIT}; the charset is fixed so no content negotiation can
+     * reshape it.
+     */
+    private static ResponseEntity<String> ack(String ackBody) {
+        if (ackBody == null) {
+            return ResponseEntity.ok().build();
+        }
+        return ResponseEntity.ok()
+                .contentType(new MediaType(MediaType.TEXT_PLAIN, StandardCharsets.UTF_8))
+                .body(ackBody);
     }
 }

@@ -100,7 +100,13 @@ final class ArchitectureRules {
             // additions to this list because the six handlers then under discussion were NOT
             // permitAll — listing them would have documented an exposure that did not exist. This
             // endpoint IS permitAll, which is exactly the consequence this list exists to record.
-            "BillingWebhookController#stripeWebhook");
+            "BillingWebhookController#stripeWebhook",
+            // SecurityConfig: "/api/billing/webhook/paytr" (P2'-A) — same shape, second provider:
+            // PayTR calls it server-to-server and authentication IS the HMAC `hash` field inside
+            // the form body, verified offline in PayTRBillingProvider before anything is stored.
+            // Named individually, exact path — the per-provider webhook routes are deliberately
+            // NOT collapsed into a pattern here or in SecurityConfig.
+            "BillingWebhookController#paytrWebhook");
 
     // ---------------------------------------------------------------------------------------
     // Rule 1 — @EntityGraph must not be combined with Pageable

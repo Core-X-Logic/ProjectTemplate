@@ -10,7 +10,6 @@ import com.mycompanyname.zero.saas.subscription.SubscriptionRepository;
 import com.mycompanyname.zero.shared.domain.DomainException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,7 +33,7 @@ import java.math.BigDecimal;
 @Slf4j
 public class BillingCheckoutService {
 
-    private final ObjectProvider<BillingProvider> billingProviders;
+    private final BillingProviderRegistry providerRegistry;
     private final PaymentRepository paymentRepository;
     private final SubscriptionRepository subscriptionRepository;
     private final EditionRepository editionRepository;
@@ -43,7 +42,7 @@ public class BillingCheckoutService {
     // JPA auditing, and paid_at belongs exclusively to the webhook path.
 
     public CheckoutSessionDto startCheckout(StartCheckoutRequest request, String actor) {
-        BillingProvider provider = requireProvider();
+        BillingProvider provider = resolveProvider(request.provider());
 
         Subscription subscription = subscriptionRepository.findByTenantId(request.tenantId())
                 .orElseThrow(() -> DomainException.notFound(
@@ -83,18 +82,35 @@ public class BillingCheckoutService {
         payment.setExternalSessionId(session.sessionId());
         paymentRepository.save(payment);
 
-        log.info("Checkout started by {}: payment {} for tenant {} -> edition '{}' ({} {} {})",
-                actor, payment.getId(), payment.getTenantId(), edition.getName(),
+        log.info("Checkout started by {} via {}: payment {} for tenant {} -> edition '{}' ({} {} {})",
+                actor, provider.id(), payment.getId(), payment.getTenantId(), edition.getName(),
                 amount, edition.getCurrency(), period);
         return new CheckoutSessionDto(payment.getId(), session.sessionId(), session.url());
     }
 
-    /** Same decision and same reasoning as {@code BillingWebhookService#requireProvider}: 404. */
-    private BillingProvider requireProvider() {
-        BillingProvider provider = billingProviders.getIfAvailable();
-        if (provider == null) {
+    /**
+     * Resolves the provider the checkout should run through (P2'-A).
+     *
+     * <ul>
+     *   <li>Billing off entirely → 404, same decision and reasoning as
+     *       {@code BillingWebhookService#requireProvider}: the surface does not exist.</li>
+     *   <li>Provider omitted → the single enabled provider, so the common one-provider installation
+     *       needs no new request field; with several enabled the request must choose, and the 400
+     *       names the valid ids (configuration facts, not echoed caller input).</li>
+     *   <li>Provider named but not enabled → 400 naming the valid ids. The submitted value itself is
+     *       deliberately not echoed back (house rule).</li>
+     * </ul>
+     */
+    private BillingProvider resolveProvider(String requested) {
+        if (providerRegistry.isEmpty()) {
             throw DomainException.notFound("Billing is not enabled on this installation");
         }
-        return provider;
+        if (requested == null || requested.isBlank()) {
+            return providerRegistry.single().orElseThrow(() -> DomainException.validation(
+                    "More than one billing provider is enabled; 'provider' must be one of "
+                            + providerRegistry.ids()));
+        }
+        return providerRegistry.find(requested).orElseThrow(() -> DomainException.validation(
+                "Unknown billing provider; enabled providers: " + providerRegistry.ids()));
     }
 }

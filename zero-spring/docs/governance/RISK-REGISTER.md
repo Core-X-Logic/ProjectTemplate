@@ -444,6 +444,20 @@ transaction'ının içinde; `subscription_events.actor = stripe-webhook` ile kan
 | PROD-R39 | **Zero-decimal para birimleri.** `StripeBillingProvider.minorUnits` ×100 çevirir; JPY/KRW tarzı bir para birimi 100 kat fazla faturalanırdı. Katalog bugün USD/EUR tarzı satıyor; sub-cent tutar `longValueExact` ile gürültülü patlar | Düşük | **Open (kayıtlı)** — yeni para birimi eklemeden önce `minorUnits` genişletilmeli |
 | PROD-R40 | **Tenant self-checkout ve frontend üçlü kilidin 2/3'ü bu dilimde yok.** Checkout host-only (`subscriptions.manage`, mevcut sabit; `CheckoutEndpointIT` negatif yetki testi ile). Frontend `<Can>`/route-guard ve ekran sonraki dilim | Düşük | **Open (dilim sözleşmesi — kayıtlı)** |
 
+## P2'-A (PayTR + multi-provider dilimi) riskleri — 2026-07-20 eklendi
+
+Dilim: `BillingProviderRegistry` (id çakışması → boot reddi, mutasyon kanıtlı), PayTR bildirim
+intake'i (`/api/billing/webhook/paytr`, form-urlencoded, hash gövdede, offline HMAC doğrulaması),
+`PAYMENT_FAILED` geçişi (`NOT_PAID→FAILED`; `PAID` KALIR — mutasyon kanıtlı), "OK" gövde
+sözleşmesi (byte-eşit; `"ok\n"` mutasyonu kırmızı). Strateji: ADR-0017.
+
+| ID | Bulgu | Şiddet | Durum |
+|---|---|---|---|
+| PROD-R41 | **PayTR bildirim retry takvimi BELGESİZ.** Stripe'ın aksine PayTR, başarısız (non-"OK") bildirimin kaç kez ve hangi aralıklarla yeniden denendiğini yayınlamıyor; 429/413/500 sonrası teslimatın ne zaman tükendiği bilinmiyor. Bu, runbook mutabakatını Stripe'takinden bile daha kritik yapar: takvimin sonu görünmezse tek emniyet düzenli karşılaştırmadır | Orta | **Open (kayıtlı).** Mitigasyon OPERASYONEL: RELEASE-RUNBOOK §3.9 PayTR paneline genişletildi — PayTR mağaza paneli işlem listesi, `NOT_PAID`/`FAILED`'de bekleyen `payments` satırlarıyla periyodik karşılaştırılır. Kalıcı kapanış: sorguyla-mutabakat job'u (PROD-R43 backlog) |
+| PROD-R42 | **"OK" ack sözleşmesi, gelecekteki global hata-işleyici/advice değişikliklerine karşı KIRILGAN.** Tahsilat, 200 durum koduna değil yanıt GÖVDESİNİN byte-eşitliğine bağlı; yarın eklenecek bir `ResponseBodyAdvice`, bir sarmalayıcı, hatta content-negotiation değişikliği parayı sessizce keser (uygulama yeşil, PayTR "failed" okur, esnafa aktarım durur) | Orta | **Mitigated (test ile).** `PayTRWebhookIT` üç yerde ham gövde `isEqualTo("OK")` + `text/plain` iddia eder; mutasyon kanıtı kayıtlı (`"ok\n"` → kırmızı). Bu satır, o testleri "kozmetik" sanıp gevşetecek kişiye uyarıdır: o assertion tahsilatın kendisidir |
+| PROD-R43 | **iyzico dilimi bekliyor; sorguyla-mutabakat (reconciliation-by-query) job'u backlog'da.** ADR-0014'ün ikinci savunma hattı (`BillingProvider.fetchStatus()` benzeri sorgu modeli) hâlâ yok; iyzico'nun retrieve modeli bu job'un doğal tasarım girdisi olduğundan bilerek o dilime ertelendi. O gelene kadar kaçan webhook'un tek telafisi §3.9 elle mutabakatı | Orta | **Open (planlı — sonraki dilim).** iyzico adaptörü + retrieve tabanlı mutabakat job'u birlikte |
+| PROD-R44 | **PayTR get-token isteğinin alıcı kimlik alanları (email, user_ip, ad/adres/telefon) YER TUTUCU.** `CheckoutRequest` host-operated akışta alıcı kimliği modellemiyor; adaptör belgeli placeholder gönderiyor. Canlı çağrı zaten test edilmiyor (PROD-R37 deseni PayTR'a da uygulanır: IT'ler kaydeden sahte kullanır, hash/token formülleri offline vektörle test edilir). Gerçek alıcı verisi bağlanmadan canlı PayTR checkout'u ÇALIŞMAYABİLİR — ilk canlı smoke bunu ölçmeli | Orta | **Open (kayıtlı — dilim sözleşmesi).** Kapanış yolu: checkout DTO'suna alıcı alanları + RELEASE-RUNBOOK'a PayTR test-mode checkout smoke'u |
+
 ## Mitigasyon takvimi (özet)
 
 - **F1 ✅:** R-01, R-02 Closed; R-10 taşınmama kararı.

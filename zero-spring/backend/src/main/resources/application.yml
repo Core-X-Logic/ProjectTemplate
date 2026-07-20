@@ -141,7 +141,12 @@ zero:
     # consequence, recorded: Stripe deliveries share the per-IP allowance (capacity above) and the
     # 16 KB body bound below — a legitimate burst beyond either gets 429/413, which Stripe treats
     # as failure and retries later. See RISK-REGISTER PROD-R36.
-    paths: /api/auth/login,/api/auth/refresh,/api/account/forgot-password,/api/account/reset-password,/api/account/confirm-email,/api/billing/webhook/stripe
+    # P2'-A: /api/billing/webhook/paytr, same derivation, same shared-allowance consequence — and one
+    # extra: PayTR posts application/x-www-form-urlencoded, so the limiter was TAUGHT that format
+    # (RequestBodyFormats.isAccountable + RateLimitFilter.extractFormUsername, changed together per
+    # the D1 rule) instead of allowlisting the path. A 429/413 refusal is one PayTR reads as a failed
+    # notification; its retry cadence is UNDOCUMENTED, so reconciliation (runbook §3.9) is the net.
+    paths: /api/auth/login,/api/auth/refresh,/api/account/forgot-password,/api/account/reset-password,/api/account/confirm-email,/api/billing/webhook/stripe,/api/billing/webhook/paytr
     # D4: the largest request body accepted on any path above, in bytes. Previously this existed only
     # as a default inside RateLimitProperties, which made a load-bearing security parameter invisible
     # to whoever operates the deployment. A body over this is refused with 413 rather than forwarded

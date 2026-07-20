@@ -109,6 +109,14 @@ public class SecurityConfig {
                             // zero.ratelimit.paths; claimed by @EndpointPolicy(ANONYMOUS) on
                             // BillingWebhookController#stripeWebhook.
                             .requestMatchers("/api/billing/webhook/stripe").permitAll()
+                            // P2'-A. Same reasoning, second provider, second EXACT path — never a
+                            // /api/billing/webhook/** wildcard, so the next provider's route must be
+                            // granted here deliberately or stay closed. PayTR's authentication is
+                            // the HMAC `hash` FIELD inside the form body (no signature header),
+                            // verified offline in PayTRBillingProvider before anything is stored.
+                            // Throttled via zero.ratelimit.paths; claimed by
+                            // @EndpointPolicy(ANONYMOUS) on BillingWebhookController#paytrWebhook.
+                            .requestMatchers("/api/billing/webhook/paytr").permitAll()
                             .requestMatchers("/actuator/health/**").permitAll()
                             // PROD-R17. Everything else under /actuator was reachable by *any*
                             // authenticated caller, because it fell through to anyRequest().authenticated()

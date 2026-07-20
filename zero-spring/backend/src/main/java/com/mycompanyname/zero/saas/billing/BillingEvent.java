@@ -26,6 +26,14 @@ public record BillingEvent(
         CHECKOUT_COMPLETED,
         /** A recurring charge for an existing subscription succeeded (renewal, not first purchase). */
         RECURRING_PAYMENT_SUCCEEDED,
+        /**
+         * The provider reports the charge behind {@code externalSessionId} failed (P2'-A, added for
+         * PayTR's {@code status=failed} notification). The core transition is {@code NOT_PAID ->
+         * FAILED} and nothing else: a payment that is already {@code PAID} stays {@code PAID} — a
+         * late "failed" arriving after a settled success must never undo an activation the money
+         * already bought (see {@code BillingWebhookService#onPaymentFailed}).
+         */
+        PAYMENT_FAILED,
         /** Everything else. Stored as {@code IGNORED}, answered 200, never an error. */
         UNKNOWN
     }

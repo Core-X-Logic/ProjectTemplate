@@ -434,10 +434,10 @@ docker compose exec postgres psql -U zero -d zero -c "select * from shedlock;"
 Beklenen: job ilk tetiklendikten sonra bir satır; `lock_until` geçmişte → job serbest.
 `locked_at` çok eski + `lock_until` gelecekte takılıysa → §5.5.
 
-### 3.9 Billing mutabakatı (Stripe aktifse — atlanmayın: İZSİZ kayıp sınıfı)
+### 3.9 Billing mutabakatı (Stripe YA DA PayTR aktifse — atlanmayın: İZSİZ kayıp sınıfı)
 
-Webhook, anonim gövdeli uç olduğu için ortak throttle'ın altında (PROD-R36). İki arıza modu var
-ve yalnızca biri kendini iyileştirir:
+Webhook, anonim gövdeli uç olduğu için ortak throttle'ın altında (PROD-R36; PayTR yolu da aynı
+listede). İki arıza modu var ve yalnızca biri kendini iyileştirir:
 
 - **429 (kapasite):** geçici. Stripe retry takvimiyle yeniden dener, kova dolunca başarır.
 - **413 (16 KB üstü gövde):** **deterministik ve kalıcı.** Her retry aynı 413'ü alır, takvim
@@ -448,11 +448,14 @@ ve yalnızca biri kendini iyileştirir:
 Bu yüzden deploy sonrası ve periyodik (önerilen: günlük) mutabakat zorunlu:
 
 ```bash
-# 1 saatten eski, hâlâ NOT_PAID bekleyen ödemeler — her biri açıklanmak zorunda
+# 1 saatten eski, hâlâ NOT_PAID ya da FAILED bekleyen ödemeler — her biri açıklanmak zorunda.
+# FAILED de taranır: PayTR'da failed → success MEŞRU bir sıralamadır (alıcı iframe içinde kartı
+# yeniden dener); success bildirimi kaçarsa para tahsil edilmiş, satır FAILED'de takılı kalır —
+# yalnız NOT_PAID tarayan sorgu tam bu şekli görmüyordu.
 docker compose exec postgres psql -U zero -d zero -c \
-  "select id, tenant_id, external_session_id, amount, currency, created_at \
-     from payments where status = 'NOT_PAID' and created_at < now() - interval '1 hour' \
-     order by created_at;"
+  "select id, tenant_id, external_session_id, amount, currency, status, created_at \
+     from payments where status in ('NOT_PAID','FAILED') \
+     and created_at < now() - interval '1 hour' order by created_at;"
 ```
 
 Stripe Dashboard → **Developers → Webhooks → (endpoint) → Failed** listesiyle karşılaştırın:
@@ -466,6 +469,33 @@ Stripe Dashboard → **Developers → Webhooks → (endpoint) → Failed** liste
   notuna yazın.
 - `NOT_PAID` satırı var ama Stripe'ta tamamlanmış session yok → terk edilmiş checkout; normaldir,
   aksiyon gerekmez.
+
+**PayTR aktifse (P2'-A) — aynı mutabakat, PayTR mağaza paneliyle.** İki fark, ikisi de mutabakatı
+DAHA kritik yapar:
+
+- **Retry takvimi belgesiz (PROD-R41).** Stripe'ın aksine PayTR, başarısız bildirimin kaç kez
+  yeniden deneneceğini yayınlamıyor — takvimin ne zaman tükendiği görülemez, tek emniyet bu
+  karşılaştırmadır.
+- **Başarı yanıtı gövdeye bağlı (PROD-R42).** Bildirim yalnız literal `OK` gövdesiyle kapanır;
+  esnafa aktarım buna bağlıdır. Panelde "başarısız bildirim" görünüyorsa ama uygulama 200 dönmüşse,
+  gövdenin `OK` dışına kaydığından şüphelenin (advice/handler regresyonu — `PayTRWebhookIT`).
+
+Sorgu aynıdır (yukarıdaki `NOT_PAID` sorgusu PayTR ödemelerini de kapsar; `external_session_id`
+PayTR'da `merchant_oid`'dir, `ZP...` biçimli). PayTR mağaza paneli → İşlemler listesiyle
+karşılaştırın:
+
+- Panelde başarılı işlem + `NOT_PAID` **ya da `FAILED`** satırı → bildirimi panelden yeniden
+  gönderin (dedup + rollback tasarımı yeniden gönderimi güvenli kılar — `PayTRWebhookIT` duplicate
+  testi; `FAILED` satır için de güvenlidir: failed → success sunucu tarafında `FAILED -> PAID` +
+  aktivasyonla işlenir, `PayTRWebhookIT.failedThenSuccessActivates`). Yeniden gönderim de
+  kapanmıyorsa ödemeyi elle mutabık kılın ve aboneliği
+  `PUT /api/subscriptions/{tenantId}/edition` + `activate` ile işleyin; işlemi sürüm notuna yazın.
+- Panelde SON durumu da başarısız olan işlem + `payments.status = FAILED` → gerçek başarısız
+  tahsilat; aksiyon gerekmez. DİKKAT: `FAILED` tek başına "kapandı" demek DEĞİLDİR — alıcı iframe
+  oturumu içinde kartı yeniden deneyebilir (failed → success meşru sıralamadır) ve success
+  bildirimi kaçtıysa satır `FAILED`'de takılıyken para tahsil edilmiştir. Karar her zaman panelin
+  İŞLEM durumuyla verilir, satırın durumuyla değil; sorgu bu yüzden `FAILED`'i de tarar.
+- `NOT_PAID` satırı var, panelde işlem yok → terk edilmiş checkout; normaldir.
 
 ---
 

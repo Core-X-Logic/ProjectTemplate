@@ -5,7 +5,6 @@ import com.mycompanyname.zero.saas.subscription.web.dto.AssignEditionRequest;
 import com.mycompanyname.zero.shared.domain.DomainException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -56,22 +55,33 @@ import java.time.Clock;
 @Slf4j
 public class BillingWebhookService {
 
-    /** Written into {@code subscription_events.actor} so the trail shows WHO activated: the webhook. */
-    private static final String WEBHOOK_ACTOR = "stripe-webhook";
+    /**
+     * Suffix of the {@code subscription_events.actor} entry, so the trail shows WHO activated: the
+     * provider's webhook ("stripe-webhook", "paytr-webhook").
+     */
+    private static final String WEBHOOK_ACTOR_SUFFIX = "-webhook";
 
-    private final ObjectProvider<BillingProvider> billingProviders;
+    private final BillingProviderRegistry providerRegistry;
     private final WebhookEventRepository webhookEventRepository;
     private final PaymentRepository paymentRepository;
     private final SubscriptionService subscriptionService;
     private final Clock clock;
 
     /**
-     * Verifies and processes one delivery. Verification happens INSIDE the transaction but BEFORE
-     * any write, so a rejected signature (→ 400 via {@code DomainException.validation}) rolls back
-     * a transaction that touched nothing — "invalid signature stores nothing" holds by construction.
+     * Verifies and processes one delivery for the provider the route named. Verification happens
+     * INSIDE the transaction but BEFORE any write, so a rejected signature (→ 400 via
+     * {@code DomainException.validation}) rolls back a transaction that touched nothing — "invalid
+     * signature stores nothing" holds by construction.
+     *
+     * @return the provider's success acknowledgement body ({@link BillingProvider#successAckBody()}),
+     *         identical for processed, duplicate and ignored outcomes ON PURPOSE: for PayTR all
+     *         three must answer the literal body {@code OK}, because anything else reads as
+     *         "delivery failed" and the money is not settled — including on a duplicate, which the
+     *         provider cannot distinguish from a first delivery. {@code null} means a bodyless 200
+     *         (Stripe).
      */
-    public void handle(String payload, String signatureHeader) {
-        BillingProvider provider = requireProvider();
+    public String handle(String providerId, String payload, String signatureHeader) {
+        BillingProvider provider = requireProvider(providerId);
 
         BillingEvent event;
         try {
@@ -87,41 +97,56 @@ public class BillingWebhookService {
                 event.type().name(), event.rawPayload(), clock.instant(),
                 WebhookEventStatus.RECEIVED.name());
         if (inserted == 0) {
-            // Duplicate delivery. 200 and nothing else — a 4xx here is the measured source bug that
-            // put Stripe into an infinite retry loop.
+            // Duplicate delivery. Success ack and nothing else — a 4xx here is the measured source
+            // bug that put Stripe into an infinite retry loop, and for PayTR a non-"OK" body on a
+            // redelivery would read as failure on the provider side.
             log.info("Duplicate {} webhook event {} acknowledged without reprocessing",
                     provider.id(), event.eventId());
-            return;
+            return provider.successAckBody();
         }
 
         WebhookEvent stored = webhookEventRepository
                 .findByProviderAndEventId(provider.id(), event.eventId())
                 .orElseThrow(() -> new IllegalStateException(
                         "The webhook event row this transaction just inserted is not visible"));
-        stored.setStatus(dispatch(event));
+        stored.setStatus(dispatch(provider, event));
         stored.setProcessedAt(clock.instant());
         webhookEventRepository.save(stored);
+        return provider.successAckBody();
     }
 
-    private WebhookEventStatus dispatch(BillingEvent event) {
+    private WebhookEventStatus dispatch(BillingProvider provider, BillingEvent event) {
         return switch (event.type()) {
-            case CHECKOUT_COMPLETED -> onCheckoutCompleted(event);
+            case CHECKOUT_COMPLETED -> onCheckoutCompleted(provider, event);
+            case PAYMENT_FAILED -> onPaymentFailed(event);
             // Renewal-driven period extension is a later slice. The event is stored (payload and
-            // all) so it can be backfilled; acknowledging with 200 keeps Stripe from retrying an
-            // event this version has no handler for.
+            // all) so it can be backfilled; acknowledging with 200 keeps the provider from retrying
+            // an event this version has no handler for.
             case RECURRING_PAYMENT_SUCCEEDED -> WebhookEventStatus.IGNORED;
             case UNKNOWN -> WebhookEventStatus.IGNORED;
         };
     }
 
     /**
-     * The server-authoritative activation path. Payment found and {@code NOT_PAID}: mark it PAID and
+     * The server-authoritative activation path. Payment found and collectable: mark it PAID and
      * move the subscription onto the paid package via the EXISTING SubscriptionService API —
      * {@code assignEdition} (snapshot + {@code PENDING_PAYMENT}, state-table row S3) followed by
      * {@code activate} ({@code PENDING_PAYMENT -> ACTIVE}, row S4), so the guard and the event trail
      * are exactly the ones every other transition uses.
+     *
+     * <p><b>Which prior states activate — the asymmetry is deliberate and load-bearing.</b>
+     * {@code NOT_PAID} AND {@code FAILED} activate; {@code CANCELLED} does not. The rule:
+     * <em>webhook-written states are reversible by the webhook; operator-written states are not.</em>
+     * {@code FAILED} is written by {@link #onPaymentFailed} off a provider notification, and
+     * failed → success for the SAME session is a LEGITIMATE sequence, not an anomaly — PayTR's
+     * iframe lets the buyer retry the card inside the session, so a first attempt's {@code failed}
+     * can be followed by a hash-valid {@code success} for the same {@code merchant_oid}. That hash
+     * PROVES the money moved; refusing to activate on it left money settled with no activation, in
+     * a row shape (FAILED) that the NOT_PAID-focused reconciliation also missed. {@code CANCELLED}
+     * is an operator's decision about this installation's intent, which no amount of provider
+     * traffic may override — money arriving for it is recorded loudly for reconciliation instead.
      */
-    private WebhookEventStatus onCheckoutCompleted(BillingEvent event) {
+    private WebhookEventStatus onCheckoutCompleted(BillingProvider provider, BillingEvent event) {
         if (event.externalSessionId() == null || event.externalSessionId().isBlank()) {
             // Signed but malformed beyond use. Retrying cannot fix it, so a 5xx would only schedule
             // three days of identical failures; store it, say so, move on.
@@ -148,14 +173,22 @@ public class BillingWebhookService {
                     payment.getId(), event.eventId());
             return WebhookEventStatus.PROCESSED;
         }
-        if (payment.getStatus() != PaymentStatus.NOT_PAID) {
-            // Money arrived for a payment this side had already written off. Do not activate off a
-            // state the operator decided against; record it loudly for reconciliation.
-            log.warn("Payment {} is {} but received completion event {}; no activation performed",
-                    payment.getId(), payment.getStatus(), event.eventId());
+        if (payment.getStatus() == PaymentStatus.CANCELLED) {
+            // Operator-written state: money arrived for a payment this side deliberately wrote off.
+            // Do not activate off a state the operator decided against; record it loudly for
+            // reconciliation (see the method javadoc for why FAILED is treated differently).
+            log.warn("Payment {} is CANCELLED but received completion event {}; no activation "
+                    + "performed", payment.getId(), event.eventId());
             return WebhookEventStatus.PROCESSED;
         }
+        if (payment.getStatus() == PaymentStatus.FAILED) {
+            // Webhook-written state, reversed by the webhook: the buyer retried inside the provider
+            // session and THIS verified event proves the retry collected. See the method javadoc.
+            log.info("Payment {} was FAILED but completion event {} proves collection (buyer retry); "
+                    + "activating", payment.getId(), event.eventId());
+        }
 
+        String actor = provider.id() + WEBHOOK_ACTOR_SUFFIX;
         payment.setStatus(PaymentStatus.PAID);
         payment.setPaidAt(clock.instant());
         payment.setExternalPaymentId(event.externalPaymentId());
@@ -164,9 +197,9 @@ public class BillingWebhookService {
         if (payment.getTargetEditionId() != null) {
             subscriptionService.assignEdition(payment.getTenantId(),
                     new AssignEditionRequest(payment.getTargetEditionId(), payment.getPeriod(), false),
-                    WEBHOOK_ACTOR);
+                    actor);
         }
-        subscriptionService.activate(payment.getTenantId(), WEBHOOK_ACTOR);
+        subscriptionService.activate(payment.getTenantId(), actor);
 
         log.info("Payment {} confirmed by event {}; tenant {} activated on edition {}",
                 payment.getId(), event.eventId(), payment.getTenantId(), payment.getTargetEditionId());
@@ -174,17 +207,61 @@ public class BillingWebhookService {
     }
 
     /**
-     * 404 when billing is disabled, chosen over 503. 503 tells the sender "temporarily down, retry"
-     * — but a webhook arriving at an installation with billing OFF is a configuration mistake that
-     * no amount of retrying fixes, so inviting three days of retries only manufactures log noise.
-     * 404 states the truth: with the flag off, this surface does not exist (the provider bean is not
-     * registered at all), and it also discloses nothing about whether billing COULD be enabled here.
+     * The failure path (P2'-A, PayTR {@code status=failed}). One transition and one only:
+     * {@code NOT_PAID -> FAILED}. Everything else is recorded without being acted on:
+     *
+     * <ul>
+     *   <li><b>{@code PAID} stays {@code PAID}.</b> A late "failed" arriving AFTER a settled success
+     *       (contradictory notifications for one {@code merchant_oid} — each carries its own event
+     *       id, so dedup admits both) must never undo an activation the money already bought. The
+     *       for-update lookup makes the guard hold under concurrency, same as the completion path.</li>
+     *   <li><b>No payment row → {@code IGNORED}, loudly.</b> Deliberately NOT the completion path's
+     *       500: there, money moved and a retry can settle it once the row appears; here nothing was
+     *       collected, so a 5xx would only schedule retries of a report about nothing. The payload
+     *       is stored for reconciliation either way.</li>
+     * </ul>
      */
-    private BillingProvider requireProvider() {
-        BillingProvider provider = billingProviders.getIfAvailable();
-        if (provider == null) {
-            throw DomainException.notFound("Billing is not enabled on this installation");
+    private WebhookEventStatus onPaymentFailed(BillingEvent event) {
+        if (event.externalSessionId() == null || event.externalSessionId().isBlank()) {
+            log.warn("Payment-failed event {} carries no session id; stored as IGNORED",
+                    event.eventId());
+            return WebhookEventStatus.IGNORED;
         }
-        return provider;
+        Payment payment = paymentRepository.findByExternalSessionIdForUpdate(event.externalSessionId())
+                .orElse(null);
+        if (payment == null) {
+            log.warn("Payment-failed event {} names a session with no payment row; stored as IGNORED "
+                    + "for reconciliation", event.eventId());
+            return WebhookEventStatus.IGNORED;
+        }
+        if (payment.getStatus() == PaymentStatus.PAID) {
+            log.warn("Payment {} is PAID but received failure event {}; the activation stands — a "
+                    + "late 'failed' must not undo a settled success", payment.getId(), event.eventId());
+            return WebhookEventStatus.PROCESSED;
+        }
+        if (payment.getStatus() != PaymentStatus.NOT_PAID) {
+            log.info("Payment {} is already {}; failure event {} recorded without a transition",
+                    payment.getId(), payment.getStatus(), event.eventId());
+            return WebhookEventStatus.PROCESSED;
+        }
+        payment.setStatus(PaymentStatus.FAILED);
+        paymentRepository.save(payment);
+        log.info("Payment {} marked FAILED by event {}; no activation performed",
+                payment.getId(), event.eventId());
+        return WebhookEventStatus.PROCESSED;
+    }
+
+    /**
+     * 404 when the named provider is not enabled, chosen over 503. 503 tells the sender "temporarily
+     * down, retry" — but a webhook arriving at an installation with that provider OFF is a
+     * configuration mistake that no amount of retrying fixes, so inviting three days of retries only
+     * manufactures log noise. 404 states the truth: with the flag off, this surface does not exist
+     * (the provider bean is not registered at all), and it also discloses nothing about whether
+     * billing COULD be enabled here.
+     */
+    private BillingProvider requireProvider(String providerId) {
+        return providerRegistry.find(providerId)
+                .orElseThrow(() -> DomainException.notFound(
+                        "Billing is not enabled on this installation"));
     }
 }

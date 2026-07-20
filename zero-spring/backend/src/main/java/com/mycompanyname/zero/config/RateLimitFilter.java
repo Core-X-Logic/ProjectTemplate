@@ -23,7 +23,10 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter;
 
 import java.io.IOException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -227,7 +230,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return;
         }
 
-        String username = extractUsername(body);
+        String username = extractUsername(body, mediaType);
         if (username != null) {
             ConsumptionProbe userProbe = bucketFor("user|" + path + "|" + username)
                     .tryConsumeAndReturnRemaining(1);
@@ -363,10 +366,18 @@ public class RateLimitFilter extends OncePerRequestFilter {
      * and answered {@code LOGIN_FAILED} — while charging no username bucket at all. Quoting the same
      * value was limited; leaving the quotes off was not. Any scalar the controller can bind is
      * therefore counted here, with {@code asText()} producing the same string the controller sees.
+     *
+     * <p><b>P2'-A.</b> Form-urlencoded bodies are parsed too, with the SAME field vocabulary —
+     * {@link RequestBodyFormats#isAccountable} admits the format solely because this method reads
+     * it (the PayTR webhook's transport). The invariant is unchanged: every media type accountable
+     * there is parseable here, or D1 reopens.
      */
-    private String extractUsername(byte[] body) {
+    private String extractUsername(byte[] body, MediaType mediaType) {
         if (body.length == 0) {
             return null;
+        }
+        if (mediaType != null && MediaType.APPLICATION_FORM_URLENCODED.isCompatibleWith(mediaType)) {
+            return extractFormUsername(body);
         }
         try {
             JsonNode root = objectMapper.readTree(body);
@@ -383,6 +394,42 @@ public class RateLimitFilter extends OncePerRequestFilter {
         } catch (IOException ex) {
             // A malformed body is the controller's problem to report; the IP limit already applied.
             log.debug("Rate limiter could not parse the request body for a username: {}", ex.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * The form-encoded reading of the same identity fields, FIRST occurrence wins, and — the part
+     * that is load-bearing — malformed pairs are dropped PER PAIR, exactly as
+     * {@code CachedBodyHttpServletRequest.parseFormBody} drops them. The two parsers must agree on
+     * every input, not just on well-formed ones: when this method used to wrap the WHOLE loop in
+     * one try, {@code username=...&x=%zz} charged no username bucket while the wrapper handed the
+     * handler that same username intact — one junk pair appended to every request was a free
+     * multiplier on the username dimension (the C2 gap, re-cut in the form format; pinned by
+     * {@code RateLimitFormBodyAccountingTest.aMalformedPairDoesNotUncountTheUsername}).
+     */
+    private static String extractFormUsername(byte[] body) {
+        Map<String, String> fields = new LinkedHashMap<>();
+        for (String pair : new String(body, StandardCharsets.UTF_8).split("&")) {
+            int split = pair.indexOf('=');
+            if (split <= 0) {
+                continue;
+            }
+            try {
+                fields.putIfAbsent(
+                        URLDecoder.decode(pair.substring(0, split), StandardCharsets.UTF_8),
+                        URLDecoder.decode(pair.substring(split + 1), StandardCharsets.UTF_8));
+            } catch (IllegalArgumentException ex) {
+                // Only THIS pair is undecodable. The rest of the body still carries the identity
+                // the handler will read, so it must still be counted.
+                log.debug("Rate limiter dropped an undecodable form pair: {}", ex.getMessage());
+            }
+        }
+        for (String field : USERNAME_FIELDS) {
+            String candidate = fields.get(field);
+            if (candidate != null && !candidate.isBlank()) {
+                return candidate.trim().toLowerCase(Locale.ROOT);
+            }
         }
         return null;
     }

@@ -83,13 +83,19 @@ final class RequestBodyFormats {
      * Whether {@link RateLimitFilter} can read an identity out of a body in this format — which is
      * the only ground on which it may let one through.
      *
-     * <p>JSON and the {@code +json} structured suffix RFC 6839 defines, because that is precisely
-     * what {@code extractUsername} parses. Widening this without also teaching the filter to parse
-     * the new format would reopen D1 exactly as it was.
+     * <p>JSON and the {@code +json} structured suffix RFC 6839 defines, plus (P2'-A)
+     * {@code application/x-www-form-urlencoded} — because that is precisely what
+     * {@code extractUsername} parses, and no more. The form entry exists for the PayTR notification
+     * webhook, whose transport is form-encoded by the provider's contract; it is not a per-path
+     * special case, so the filter had to LEARN the format rather than allowlist the path — widening
+     * this without also teaching {@code extractUsername} the new format would reopen D1 exactly as
+     * it was, which is why the two changed in the same commit and
+     * {@code RateLimitFormBodyAccountingTest} pins both halves.
      */
     static boolean isAccountable(MediaType mediaType) {
         return MediaType.APPLICATION_JSON.isCompatibleWith(mediaType)
-                || mediaType.getSubtype().endsWith("+json");
+                || mediaType.getSubtype().endsWith("+json")
+                || MediaType.APPLICATION_FORM_URLENCODED.isCompatibleWith(mediaType);
     }
 
     /**
