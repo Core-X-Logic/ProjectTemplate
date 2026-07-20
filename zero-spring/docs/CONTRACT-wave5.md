@@ -98,9 +98,9 @@ izin gerekirdi.
 | **W5-2b** | 2 yeni IT: `logoutRejectsARefreshTokenBelongingToAnotherUser`, `impersonationTicketRejectsRedemptionByAnotherActor`. |
 | **W5-3** | 4 yeni IT (sınır üstü 400, tam sınır 200 — her iki export yolu için). `ExportLimits` **tek** sınıf, iki tüketici. |
 | **W5-4** | `SecurityConfig` ve `SubscriptionAccessCheck`'te **0 ham yol literali**. Hizalama testi en az **4 controller** gördüğünü assert eder. `/api/settings/client` muafiyeti **ölçülür**, sonuç RISK-REGISTER'a yazılır. |
-| **W5-5** | `messageBundlesHaveIdenticalKeySets` + `everyMessageKeyResolvesInEveryBundle`; anahtar sayısının **0 olmadığı** ayrıca assert edilir. |
-| **W5-6** | `App.*` literali `settings` dışında **10 → 0**; `"tenantFilter"`/`"hostFilter"` **16 → 14**. |
-| **Toplam** | Frozen **18 → 0**. Backend **376 → ≥389**. Frontend **123** (değişmez). `ci-local.sh` tüm gate'ler yeşil. |
+| **W5-5** | ✂️ **KESİLDİ (§6 kesim sırası uyarınca).** Kod tabanında yok — 2026-07-20 ölçümü: `messageBundlesHaveIdenticalKeySets` için grep **0 sonuç**. Dalga 6 adayı. *Orijinal kriter: `messageBundlesHaveIdenticalKeySets` + `everyMessageKeyResolvesInEveryBundle`; anahtar sayısının **0 olmadığı** ayrıca assert edilir.* |
+| **W5-6** | ✂️ **KESİLDİ (§6 kesim sırası uyarınca).** Kod tabanında yok — 2026-07-20 ölçümü: `SettingNames` için grep **0 sonuç**. Dalga 6 adayı. *Orijinal kriter: `App.*` literali `settings` dışında **10 → 0**; `"tenantFilter"`/`"hostFilter"` **16 → 14**.* |
+| **Toplam** | Frozen **18 → 0** ✅. Backend **376 → 389** (kapanış `c3b7673`) → **410** (sabitleme, `f879a63` sonrası). Frontend **123** (değişmez) ✅. |
 
 ---
 
@@ -165,6 +165,12 @@ satır aynalıyor; W5-4 o matcher'ları taşır.
 > Dalga kapanışının statüsü buna bağlı — W5-3'ün **GO** olması dalganın **kapandığı** anlamına
 > gelmez. Ayrım kayda geçirildi: *W5-3 GO · Wave 5 closure NO-GO (R-38/A açıkken) · Wave 5
 > execution GO to continue.*
+>
+> **2026-07-20 — koşul ortadan kalktı, kapanış:** R-38/A kapandı (`@EndpointPolicy` iki yönlü
+> mutabakat + `FilterChainReachabilityIT`, `f879a63`; kayıt `RISK-REGISTER` R-38A tablosu).
+> W5-5/W5-6 §6 kesim sırasına uygun kesildi ve §4'te işaretlendi. **Wave 5 closure: GO** —
+> kanıt: `c59cd5a` gerçek push **8/8**, lokal ↔ CI **410 = 410**. Açık kalanlar (R-38A-5,
+> R-38A-6, R-41, R-42, R-43) release-blocker değil; `release` adımı zaten placeholder.
 
 Her iş için `stack-reviewer` commit'ten önce; §5 satırları için `gate-auditor` zorunlu.
 
@@ -181,7 +187,7 @@ Her iş için `stack-reviewer` commit'ten önce; §5 satırları için `gate-aud
 | **R-38 / I** | 132 frontend izin dizesi, merkezî sabit yok | Frontend kapsam dışı; ayrı dalga |
 | **Rule 5 ayırt etme gücü** | Kardeş kural — *"`isAuthenticated()` taşıyan handler, çağırandan gelen tanımlayıcı kabul etmemeli"* — **yazılmıyor**; yazılabilirliği doğrulanmadı | `/actuator/metrics` vakasının sınıfını kapatan gerçek invaryant budur. Yeni kural = ratchet'e yeni yüzey; Dalga 5 borç kapatıyor, yüzey açmıyor. Dalga 6 |
 | **`/api/settings/client`** | Muafiyet listesinde **yok** (ölçüldü); süresi dolmuş kiracı 403 alır ama toparlanma ekranının bootstrap ayarları orada. **UI'yi gerçekten kırdığı doğrulanamadı** | W5-4'te ölçülür; düzeltmesi davranış değişikliği, ölçüme bağlı |
-| **Miras** | PROD-R21, PROD-R23, PROD-R27, Issue #1 | Kapsam dışı, değişmeden devrediliyor |
+| **Miras** | ~~PROD-R21~~, PROD-R23, PROD-R27, Issue #1 | Kapsam dışı, değişmeden devrediliyor. *Düzeltme (2026-07-20): PROD-R21 bu satır yazılırken zaten kapalıydı (Q-03, iki aşamalı sorgu + Rule 1) — bayat işaretçi temizlendi* |
 
 **Yönetişim (dalga kapanışının parçası):** R-37'nin kapsam hatası düzeltilir ve W5-1 ile kapatılır;
 R-38 alt-tür tablosuyla genişletilir; R-39/R-40 açılır; R-35 "sınırlandı, akış açık" olarak

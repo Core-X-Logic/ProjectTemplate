@@ -449,15 +449,12 @@ Bu bir hata değil, uyarıdır. Uygulama çalışır, testler geçer, sonuçlar 
 verisiyle fark edilmez. 200.000 kullanıcılı bir kurulumda `GET /api/users?page=0&size=10` çağrısı
 200.000 satırı belleğe alır.
 
-**Bu depoda hâlen açık (PROD-R21):** doğrulama
-`grep -rn "EntityGraph" --include=*.java src/main/java/` →
-
-- `identity/repo/UserRepository.java` satır 36, 39, 48, 62 — dördü de `@EntityGraph("roles")` +
-  `Page<User>` + `Pageable`
-- `identity/repo/RoleRepository.java` satır 22, 25 — `@EntityGraph("permissions")` + `Page<Role>`
-
-`CONTRACT-phase5.md` bu kalemi bilinçli olarak açık bıraktığını kayda geçirmiştir (feature freeze
-kapsamı dışı, repository/sorgu tasarımı değişikliği gerektiriyor).
+**Bu depoda kapatıldı (PROD-R21 → Q-03):** yukarıdaki desen `identity`'nin iki repository'sinde
+dört noktada yaşıyordu; iki aşamalı sorguya taşındı (aşağıdaki A yolu), sayfa sırası açıkça geri
+yükleniyor. Nöbeti iki katman tutuyor: ArchUnit Rule 1 (`@EntityGraph` + `Pageable` birlikte →
+build kırmızı) ve test profilinde `hibernate.query.fail_on_pagination_over_collection_fetch=true`
+(ArchUnit'in göremediği `join fetch` şeklini de yakalar). `CONTRACT-phase5.md` kalemi feature
+freeze nedeniyle açık bırakmıştı; kapatma kaydı `governance/RISK-REGISTER.md`'de.
 
 **Yeni modülde bu deseni kopyalama.** İki doğru yol var:
 

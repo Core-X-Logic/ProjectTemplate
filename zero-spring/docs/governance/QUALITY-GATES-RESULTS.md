@@ -159,6 +159,23 @@ geri alındı, `ModularityTests` yeşil.
 
 ---
 
+## Dalga sonrası sabitleme — 2026-07-20, `c59cd5a`, gerçek `push`, **8/8** (run 29704567348)
+
+Kapanış (`c3b7673`) sonrası iki commit daha koştu: `f879a63` (anonim maruziyet artık build'in
+görebildiği bir şey — `FilterChainReachabilityIT` + `@EndpointPolicy` iki yönlü mutabakatı) ve
+`c59cd5a` (yönetişim kaydı). Backend test sayısı bu yüzden 389 → **410**.
+
+| Kapı | Bu koşudaki kanıt |
+|---|---|
+| `backend` | **138 unit + 272 IT = 410**, 0 fail / 0 error / 0 skip · `All coverage checks have been met` |
+| `frontend` | 24 dosya / **123 test** |
+| `build` · `typed-client-drift` · `migration-drift` · `live-smoke` · `security-checks` · `release` | 6/6 success (API üzerinden job sonuçları ölçüldü). **Log seviyesinde kanıt bu koşu için yalnız backend/frontend'den çekildi**; diğer kapıların vakum-yeşil kanıtı `c3b7673` koşusundan devralınıyor — o koşudan bu yana ilgili girdiler (migration seti, smoke betiği, gitleaks konfigi) değişmedi. `release` hâlâ placeholder, deploy değil |
+
+**Lokal ↔ CI (2026-07-20, HEAD `c59cd5a`):** backend **410 = 410** (138 unit + 272 IT),
+`BUILD SUCCESS`, coverage geçti/geçti. **Sapma yok.**
+
+---
+
 ## Kayıt şablonu
 
 ```markdown
