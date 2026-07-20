@@ -15,11 +15,13 @@ import {
   getSubscription,
   getTenantFeatures,
   listSubscriptions,
+  startCheckout,
   updateTenantFeatures,
 } from './api';
 import type {
   AssignEditionRequest,
   FeatureValueDto,
+  StartCheckoutRequest,
   SubscriptionListParams,
 } from './types';
 
@@ -136,6 +138,35 @@ export function useCancelSubscription() {
   return useMutation({
     mutationFn: (tenantId: number) => cancelSubscription(tenantId),
     ...handlers,
+  });
+}
+
+/**
+ * `POST /api/billing/checkout` — hosted payment session. No success toast: the
+ * checkout dialog itself renders the "payment started" state (fallback link +
+ * server-side-activation warning), which carries more than a toast could. The
+ * list family is still invalidated because starting a checkout may move the
+ * subscription to `PENDING_PAYMENT` server-side. Errors surface the
+ * ProblemDetail `detail` (e.g. the 400 naming the enabled providers) in a
+ * toast; the dialog additionally shows it inline with a retry button.
+ */
+export function useStartCheckout() {
+  const intl = useIntl();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (body: StartCheckoutRequest) => startCheckout(body),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: subscriptionKeys.all });
+    },
+    onError: (error: unknown) => {
+      const fallback = intl.formatMessage({
+        id: 'subscriptions.checkout.toast.error',
+      });
+      toast.error(
+        error instanceof ApiError ? error.detail || fallback : fallback,
+      );
+    },
   });
 }
 

@@ -1,8 +1,10 @@
 import { apiFetch } from '@/api/client';
 import type {
   AssignEditionRequest,
+  CheckoutSessionDto,
   FeatureValueDto,
   PageSubscriptionDto,
+  StartCheckoutRequest,
   SubscriptionDetailDto,
   SubscriptionDto,
   SubscriptionListParams,
@@ -19,6 +21,7 @@ import type {
 
 const SUBSCRIPTIONS_URL = '/api/subscriptions';
 const TENANT_FEATURES_URL = '/api/tenant-features';
+const CHECKOUT_URL = '/api/billing/checkout';
 
 /** `GET /api/subscriptions` — paged tenant/edition/status list. */
 export function listSubscriptions(
@@ -97,6 +100,24 @@ export function getTenantFeatures(
   tenantId: number,
 ): Promise<TenantFeatureDto[]> {
   return apiFetch<TenantFeatureDto[]>(`${TENANT_FEATURES_URL}/${tenantId}`);
+}
+
+/**
+ * `POST /api/billing/checkout` — starts a hosted payment session
+ * (CONTRACT-payments-tr P2'-C). Returns the provider's payment page `url`
+ * (PayTR iframe URL or iyzico `paymentPageUrl`); the caller opens it in a NEW
+ * TAB — never an iframe (CSP + external iframeResizer script). Activation is
+ * strictly server-side (webhook/reconciliation): nothing about the redirect
+ * back to `successUrl` proves payment. Host-only (`subscriptions.manage`); a
+ * disabled/unknown `provider` yields a 400 ProblemDetail naming enabled ids.
+ */
+export function startCheckout(
+  body: StartCheckoutRequest,
+): Promise<CheckoutSessionDto> {
+  return apiFetch<CheckoutSessionDto>(CHECKOUT_URL, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
 }
 
 /** `PUT /api/tenant-features/{tenantId}` — batch override assignment. */

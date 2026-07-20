@@ -5,7 +5,14 @@ import {
   PaginationState,
   useReactTable,
 } from '@tanstack/react-table';
-import { EllipsisVertical, Package, Play, SlidersHorizontal, X } from 'lucide-react';
+import {
+  CreditCard,
+  EllipsisVertical,
+  Package,
+  Play,
+  SlidersHorizontal,
+  X,
+} from 'lucide-react';
 import { Helmet } from 'react-helmet-async';
 import { FormattedMessage, useIntl } from 'react-intl';
 import {
@@ -40,6 +47,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Can } from '@/auth/rbac';
 import { AssignEditionDialog } from '../components/assign-edition-dialog';
+import { CheckoutDialog } from '../components/checkout-dialog';
 import { TenantFeaturesPanel } from '../components/tenant-features-panel';
 import {
   useActivateSubscription,
@@ -101,6 +109,7 @@ function StatusBadge({ status }: { status?: string }) {
 interface SubscriptionRowActionsProps {
   subscription: SubscriptionDto;
   onAssign: (subscription: SubscriptionDto) => void;
+  onCheckout: (subscription: SubscriptionDto) => void;
   onActivate: (subscription: SubscriptionDto) => void;
   onCancel: (subscription: SubscriptionDto) => void;
   onFeatures: (subscription: SubscriptionDto) => void;
@@ -109,6 +118,7 @@ interface SubscriptionRowActionsProps {
 function SubscriptionRowActions({
   subscription,
   onAssign,
+  onCheckout,
   onActivate,
   onCancel,
   onFeatures,
@@ -132,6 +142,12 @@ function SubscriptionRowActions({
           <DropdownMenuItem onSelect={() => onAssign(subscription)}>
             <Package />
             <FormattedMessage id="subscriptions.actions.assign" />
+          </DropdownMenuItem>
+          {/* Checkout (P2'-C) shares the assign permission: it is the paid
+              variant of the same host-side operation. */}
+          <DropdownMenuItem onSelect={() => onCheckout(subscription)}>
+            <CreditCard />
+            <FormattedMessage id="subscriptions.actions.checkout" />
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => onActivate(subscription)}>
             <Play />
@@ -188,6 +204,9 @@ function SubscriptionsListContent() {
   const cancel = useCancelSubscription();
 
   const [assignTarget, setAssignTarget] = useState<SubscriptionDto | null>(null);
+  const [checkoutTarget, setCheckoutTarget] = useState<SubscriptionDto | null>(
+    null,
+  );
   const [cancelTarget, setCancelTarget] = useState<SubscriptionDto | null>(null);
   const [featuresTarget, setFeaturesTarget] = useState<SubscriptionDto | null>(
     null,
@@ -318,6 +337,7 @@ function SubscriptionsListContent() {
           <SubscriptionRowActions
             subscription={row.original}
             onAssign={setAssignTarget}
+            onCheckout={setCheckoutTarget}
             onActivate={handleActivate}
             onCancel={setCancelTarget}
             onFeatures={setFeaturesTarget}
@@ -395,6 +415,16 @@ function SubscriptionsListContent() {
           }
         }}
         subscription={assignTarget}
+      />
+
+      <CheckoutDialog
+        open={checkoutTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCheckoutTarget(null);
+          }
+        }}
+        subscription={checkoutTarget}
       />
 
       <TenantFeaturesPanel

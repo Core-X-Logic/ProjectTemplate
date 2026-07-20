@@ -42,6 +42,7 @@ export const subscriptionsEn = {
   // Row actions
   'subscriptions.actions.menu': 'Open subscription actions',
   'subscriptions.actions.assign': 'Assign edition',
+  'subscriptions.actions.checkout': 'Pay & assign',
   'subscriptions.actions.activate': 'Activate',
   'subscriptions.actions.cancel': 'Cancel subscription',
   'subscriptions.actions.features': 'Feature overrides',
@@ -62,6 +63,45 @@ export const subscriptionsEn = {
   'subscriptions.assign.loadError': 'Editions could not be loaded.',
   'subscriptions.assign.empty': 'No editions are available to assign.',
   'subscriptions.assign.required': 'Select an edition to continue.',
+
+  // Checkout ("Pay & assign") dialog
+  'subscriptions.checkout.title': 'Pay & assign',
+  'subscriptions.checkout.description':
+    'Opens the provider’s hosted payment page for "{tenant}". The edition is assigned only after the provider confirms the payment.',
+  'subscriptions.checkout.provider': 'Payment provider',
+  'subscriptions.checkout.provider.paytr': 'PayTR',
+  'subscriptions.checkout.provider.iyzico': 'iyzico',
+  'subscriptions.checkout.submit': 'Start payment',
+  'subscriptions.checkout.starting': 'Starting…',
+  'subscriptions.checkout.cancel': 'Cancel',
+  'subscriptions.checkout.close': 'Close',
+  'subscriptions.checkout.error': 'The payment could not be started.',
+  'subscriptions.checkout.retry': 'Retry',
+  'subscriptions.checkout.toast.error':
+    'The payment could not be started. Please try again.',
+  'subscriptions.checkout.started.title': 'Payment started',
+  'subscriptions.checkout.started.description':
+    'The payment page opened in a new tab.',
+  'subscriptions.checkout.started.warning':
+    'Activation completes on the server once the provider confirms the payment (webhook / reconciliation). Closing the payment tab or this dialog neither cancels nor confirms anything — the subscription status appears on the subscriptions list.',
+  'subscriptions.checkout.started.paymentId': 'Payment reference: {id}',
+  'subscriptions.checkout.started.fallback':
+    'If the payment page did not open, use this link:',
+  'subscriptions.checkout.started.fallbackLink': 'Open the payment page',
+
+  // Payment result landing pages (provider redirect targets)
+  'subscriptions.paymentResult.success.title':
+    'Payment received by the provider',
+  'subscriptions.paymentResult.success.description':
+    'The payment provider accepted the payment.',
+  'subscriptions.paymentResult.success.warning':
+    'Activation completes server-side once the payment is confirmed (webhook / reconciliation) — this page does not mean the subscription is active yet. Check the current status on the subscriptions list.',
+  'subscriptions.paymentResult.cancel.title': 'Payment not completed',
+  'subscriptions.paymentResult.cancel.description':
+    'The payment was cancelled or could not be completed.',
+  'subscriptions.paymentResult.cancel.warning':
+    'Nothing was changed. You can start a new payment from the subscriptions page.',
+  'subscriptions.paymentResult.goToSubscriptions': 'Go to subscriptions',
 
   // Cancel confirmation
   'subscriptions.cancelConfirm.title': 'Cancel subscription',
@@ -124,6 +164,7 @@ export const subscriptionsTr: Record<SubscriptionsMessageId, string> = {
   // Row actions
   'subscriptions.actions.menu': 'Abonelik işlemlerini aç',
   'subscriptions.actions.assign': 'Paket ata',
+  'subscriptions.actions.checkout': 'Öde ve ata',
   'subscriptions.actions.activate': 'Etkinleştir',
   'subscriptions.actions.cancel': 'Aboneliği iptal et',
   'subscriptions.actions.features': 'Özellik override',
@@ -144,6 +185,44 @@ export const subscriptionsTr: Record<SubscriptionsMessageId, string> = {
   'subscriptions.assign.loadError': 'Paketler yüklenemedi.',
   'subscriptions.assign.empty': 'Atanabilecek paket yok.',
   'subscriptions.assign.required': 'Devam etmek için bir paket seçin.',
+
+  // Checkout ("Pay & assign") dialog
+  'subscriptions.checkout.title': 'Öde ve ata',
+  'subscriptions.checkout.description':
+    '"{tenant}" için sağlayıcının güvenli ödeme sayfası açılır. Paket, yalnızca sağlayıcı ödemeyi onayladıktan sonra atanır.',
+  'subscriptions.checkout.provider': 'Ödeme sağlayıcısı',
+  'subscriptions.checkout.provider.paytr': 'PayTR',
+  'subscriptions.checkout.provider.iyzico': 'iyzico',
+  'subscriptions.checkout.submit': 'Ödemeyi başlat',
+  'subscriptions.checkout.starting': 'Başlatılıyor…',
+  'subscriptions.checkout.cancel': 'İptal',
+  'subscriptions.checkout.close': 'Kapat',
+  'subscriptions.checkout.error': 'Ödeme başlatılamadı.',
+  'subscriptions.checkout.retry': 'Tekrar dene',
+  'subscriptions.checkout.toast.error':
+    'Ödeme başlatılamadı. Lütfen tekrar deneyin.',
+  'subscriptions.checkout.started.title': 'Ödeme başlatıldı',
+  'subscriptions.checkout.started.description':
+    'Ödeme sayfası yeni sekmede açıldı.',
+  'subscriptions.checkout.started.warning':
+    'Etkinleştirme, sağlayıcı ödemeyi onayladıktan sonra sunucu tarafında tamamlanır (webhook / mutabakat). Ödeme sekmesini veya bu pencereyi kapatmak hiçbir şeyi iptal etmez ya da onaylamaz — abonelik durumu abonelikler listesinde görünür.',
+  'subscriptions.checkout.started.paymentId': 'Ödeme referansı: {id}',
+  'subscriptions.checkout.started.fallback':
+    'Ödeme sayfası açılmadıysa bu bağlantıyı kullanın:',
+  'subscriptions.checkout.started.fallbackLink': 'Ödeme sayfasını aç',
+
+  // Payment result landing pages (provider redirect targets)
+  'subscriptions.paymentResult.success.title': 'Ödeme sağlayıcıya ulaştı',
+  'subscriptions.paymentResult.success.description':
+    'Ödeme sağlayıcısı ödemeyi kabul etti.',
+  'subscriptions.paymentResult.success.warning':
+    'Etkinleştirme, ödeme onaylandıktan sonra sunucu tarafında tamamlanır (webhook / mutabakat) — bu sayfa aboneliğin etkinleştiği anlamına gelmez. Güncel durumu abonelikler listesinden kontrol edin.',
+  'subscriptions.paymentResult.cancel.title': 'Ödeme tamamlanmadı',
+  'subscriptions.paymentResult.cancel.description':
+    'Ödeme iptal edildi veya tamamlanamadı.',
+  'subscriptions.paymentResult.cancel.warning':
+    'Hiçbir değişiklik yapılmadı. Abonelikler sayfasından yeni bir ödeme başlatabilirsiniz.',
+  'subscriptions.paymentResult.goToSubscriptions': 'Abonelikler sayfasına git',
 
   // Cancel confirmation
   'subscriptions.cancelConfirm.title': 'Aboneliği iptal et',

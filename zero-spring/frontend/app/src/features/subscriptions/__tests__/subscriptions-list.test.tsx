@@ -164,6 +164,10 @@ describe('SubscriptionsListPage row actions (RBAC)', () => {
     expect(
       await screen.findByRole('menuitem', { name: 'Assign edition' }),
     ).toBeInTheDocument();
+    // Checkout (P2'-C) rides the same `subscriptions.manage` permission.
+    expect(
+      screen.getByRole('menuitem', { name: 'Pay & assign' }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole('menuitem', { name: 'Activate' }),
     ).toBeInTheDocument();
@@ -185,6 +189,10 @@ describe('SubscriptionsListPage row actions (RBAC)', () => {
 
     expect(
       screen.queryByRole('menuitem', { name: 'Assign edition' }),
+    ).not.toBeInTheDocument();
+    // A read-only operator must not see the checkout entry point either.
+    expect(
+      screen.queryByRole('menuitem', { name: 'Pay & assign' }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole('menuitem', { name: 'Activate' }),

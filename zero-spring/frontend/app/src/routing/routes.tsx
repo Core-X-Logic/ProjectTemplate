@@ -20,6 +20,10 @@ import { SettingsPage } from '@/features/settings/pages/settings';
 import { EditionsListPage } from '@/features/editions/pages/editions-list';
 import { EditionFormPage } from '@/features/editions/pages/edition-form';
 import { SubscriptionsListPage } from '@/features/subscriptions/pages/subscriptions-list';
+import {
+  PaymentResultCancelPage,
+  PaymentResultSuccessPage,
+} from '@/features/subscriptions/pages/payment-result';
 import { NotFoundPage } from '@/routing/not-found';
 
 /**
@@ -182,6 +186,23 @@ export function AppRoutes() {
                 <SubscriptionsListPage />
               </RequireAuth>
             }
+          />
+
+          {/* Payment result landing pages (CONTRACT-payments-tr P2'-C). These
+              are the `successUrl`/`cancelUrl` targets sent to PayTR/iyzico, so
+              the paths are a contract with every checkout session already
+              started. Authenticated only, deliberately NO permission: the
+              provider redirect may land on any signed-in session, and a 403
+              here would read as a payment failure. Both pages are purely
+              informational — activation is decided server-side by
+              webhook/reconciliation, never by this redirect. */}
+          <Route
+            path="payment/result/success"
+            element={<PaymentResultSuccessPage />}
+          />
+          <Route
+            path="payment/result/cancel"
+            element={<PaymentResultCancelPage />}
           />
 
           <Route path="forbidden" element={<ForbiddenPage />} />

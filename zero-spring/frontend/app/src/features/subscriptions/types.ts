@@ -16,6 +16,9 @@ export type AssignEditionRequest =
   components['schemas']['AssignEditionRequest'];
 export type TenantFeatureDto = components['schemas']['TenantFeatureDto'];
 export type FeatureValueDto = components['schemas']['FeatureValueDto'];
+export type StartCheckoutRequest =
+  components['schemas']['StartCheckoutRequest'];
+export type CheckoutSessionDto = components['schemas']['CheckoutSessionDto'];
 
 /** Spring `Pageable` request, flattened to the query-string wire format. */
 export interface SubscriptionListParams {
@@ -57,3 +60,13 @@ export function toSubscriptionStatus(
 export const BILLING_PERIODS = ['MONTHLY', 'ANNUAL'] as const;
 
 export type BillingPeriod = (typeof BILLING_PERIODS)[number];
+
+/**
+ * Hosted-checkout providers the UI offers (`StartCheckoutRequest.provider` is
+ * a plain string on the wire). The backend rejects a disabled or unknown id
+ * with a 400 ProblemDetail naming the enabled providers, so this list is a UI
+ * convenience, not the source of truth.
+ */
+export const PAYMENT_PROVIDERS = ['paytr', 'iyzico'] as const;
+
+export type PaymentProvider = (typeof PAYMENT_PROVIDERS)[number];
