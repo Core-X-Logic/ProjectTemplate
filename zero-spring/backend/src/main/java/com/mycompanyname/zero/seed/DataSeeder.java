@@ -243,12 +243,12 @@ public class DataSeeder implements ApplicationRunner {
 
     /**
      * Tenant Admin gets every permission except the HOST-ONLY ones (tenants.manage,
-     * settings.host.manage, languages.manage and the whole SaaS group).
+     * settings.host.manage, languages.manage and the whole SaaS group). Delegates to
+     * {@link PermissionDefinitions#tenantAdminPermissionNames()} — the same recipe the
+     * tenant-creation bootstrap uses — so seeded and bootstrapped Admin roles cannot drift.
      */
     private static Set<String> tenantAdminPermissions() {
-        Set<String> permissions = new HashSet<>(AppPermissions.all());
-        permissions.removeAll(PermissionDefinitions.hostOnlyPermissionNames());
-        return permissions;
+        return new HashSet<>(PermissionDefinitions.tenantAdminPermissionNames());
     }
 
     private void seedIdentity() {

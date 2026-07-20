@@ -123,6 +123,19 @@ public final class PermissionDefinitions {
         return names;
     }
 
+    /**
+     * Permissions grantable to a TENANT-side static {@code Admin} role: everything in
+     * {@link AppPermissions#all()} minus the HOST-only names. The single source for both the
+     * startup seeder ({@code DataSeeder}) and the tenant-creation bootstrap
+     * ({@code TenantAdminBootstrapper}), so the two recipes can never drift apart — a drift here
+     * is invisible to a clean-database suite and surfaces as an unexplained 403 in one path only.
+     */
+    public static Set<String> tenantAdminPermissionNames() {
+        Set<String> names = new LinkedHashSet<>(AppPermissions.all());
+        names.removeAll(hostOnlyPermissionNames());
+        return names;
+    }
+
     /** Host-only permission names: leaf nodes whose side is {@link Side#HOST}. */
     public static Set<String> hostOnlyPermissionNames() {
         Set<String> names = new LinkedHashSet<>();

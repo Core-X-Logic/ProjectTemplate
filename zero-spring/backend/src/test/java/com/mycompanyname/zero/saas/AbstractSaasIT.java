@@ -42,7 +42,8 @@ abstract class AbstractSaasIT extends AbstractIntegrationIT {
     protected long ensureTenant(String name) {
         HttpHeaders headers = host();
         ResponseEntity<JsonNode> created = restTemplate.exchange("/api/tenants", HttpMethod.POST,
-                new HttpEntity<>(Map.of("name", name, "displayName", name), headers), JsonNode.class);
+                new HttpEntity<>(Map.of("name", name, "displayName", name,
+                        "adminEmail", "admin@" + name + ".local"), headers), JsonNode.class);
         if (created.getStatusCode() == HttpStatus.CREATED) {
             assertThat(created.getBody()).isNotNull();
             return created.getBody().path("id").asLong();

@@ -3,6 +3,7 @@ package com.mycompanyname.zero.tenancy.web;
 import com.mycompanyname.zero.tenancy.TenantPermissions;
 import com.mycompanyname.zero.tenancy.TenantService;
 import com.mycompanyname.zero.tenancy.web.dto.CreateTenantRequest;
+import com.mycompanyname.zero.tenancy.web.dto.CreateTenantResponse;
 import com.mycompanyname.zero.tenancy.web.dto.TenantDto;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -32,8 +33,8 @@ public class TenantController {
     }
 
     @PostMapping
-    public ResponseEntity<TenantDto> create(@Valid @RequestBody CreateTenantRequest request) {
-        TenantDto created = tenantService.createTenant(request);
+    public ResponseEntity<CreateTenantResponse> create(@Valid @RequestBody CreateTenantRequest request) {
+        CreateTenantResponse created = tenantService.createTenant(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 

@@ -229,9 +229,10 @@ class SessionOwnershipIT extends AbstractIntegrationIT {
     /**
      * Creates the {@code acme} tenant and a plain user inside it, idempotently (the Spring context and
      * its database are shared across IT classes). The user is written through the repository rather
-     * than the API because a freshly created tenant has no user able to log in and no endpoint accepts
-     * a foreign tenant id — the open Issue #1. The username differs from {@code admin} so that
-     * {@code TenantIsolationIT}'s "a fresh tenant has nobody to log in with" assertion is untouched.
+     * than the API: tenant creation now bootstraps an {@code admin} whose password is random when the
+     * request does not supply one (Issue #1 is closed), so this fixture stays independent of that
+     * credential by using its own username and password. The username differs from {@code admin} so
+     * the bootstrapped admin is left untouched.
      *
      * @return the acme tenant id
      */
@@ -239,7 +240,8 @@ class SessionOwnershipIT extends AbstractIntegrationIT {
         HttpHeaders hostHeaders = bearerHeaders(accessToken(null, SEED_ADMIN_USERNAME, SEED_ADMIN_PASSWORD), null);
         ResponseEntity<JsonNode> created = restTemplate.exchange(
                 "/api/tenants", HttpMethod.POST,
-                new HttpEntity<>(Map.of("name", OTHER_TENANT, "displayName", "Acme Inc"), hostHeaders),
+                new HttpEntity<>(Map.of("name", OTHER_TENANT, "displayName", "Acme Inc",
+                        "adminEmail", "admin@" + OTHER_TENANT + ".local"), hostHeaders),
                 JsonNode.class);
         assertThat(created.getStatusCode())
                 .as("the second tenant must exist (freshly created or already present)")

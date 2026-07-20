@@ -138,10 +138,12 @@ class ExportRowBoundIT extends AbstractIntegrationIT {
     void theUserExportIsServedAtTheLimitAndRefusedOneRowOver() {
         String suffix = unique();
         Fixture fixture = freshTenantWithAdmin(suffix);
-        List<Long> expectedIds = new ArrayList<>(List.of(fixture.adminUserId()));
-        // The admin itself is one of the tenant's users, so N-1 more reach exactly the limit.
-        for (int i = 1; i < MAX_ROWS; i++) {
-            expectedIds.add(insertUser(fixture.tenantId(), "u" + i + suffix, Set.of()));
+        // The fixture reader AND the bootstrapped tenant admin (Issue #1: tenant creation now
+        // provisions one) are both users of the tenant, so N-2 fillers reach exactly the limit.
+        List<Long> expectedIds = new ArrayList<>(
+                List.of(fixture.adminUserId(), fixture.bootstrappedAdminId()));
+        while (expectedIds.size() < MAX_ROWS) {
+            expectedIds.add(insertUser(fixture.tenantId(), "u" + expectedIds.size() + suffix, Set.of()));
         }
         // Fixture guard, read back through the API rather than the repository: the boundary below
         // means nothing unless the tenant holds EXACTLY the limit at this point, and this test is
@@ -238,8 +240,12 @@ class ExportRowBoundIT extends AbstractIntegrationIT {
     void theUserExportCarriesItsBoundIntoSql() {
         String suffix = unique();
         Fixture fixture = freshTenantWithAdmin(suffix);
-        for (int i = 1; i < MAX_ROWS; i++) {
-            insertUser(fixture.tenantId(), "u" + i + suffix, Set.of());
+        // Fill to the limit, not past it: the fixture already holds the reader and the
+        // bootstrapped admin, and one row over would make the export refuse before emitting the
+        // SQL under assertion.
+        for (long existing = userRepository.countByTenantId(fixture.tenantId());
+                existing < MAX_ROWS; existing++) {
+            insertUser(fixture.tenantId(), "u" + existing + suffix, Set.of());
         }
 
         List<String> statements = captureSqlDuring(fixture.tenantId(), () -> userService.exportToExcel());
@@ -426,7 +432,8 @@ class ExportRowBoundIT extends AbstractIntegrationIT {
 
     // ------------------------------------------------------------------ fixture
 
-    private record Fixture(long tenantId, long adminUserId, HttpHeaders headers) {
+    private record Fixture(long tenantId, long adminUserId, long bootstrappedAdminId,
+                           HttpHeaders headers) {
     }
 
     private static String unique() {
@@ -437,14 +444,16 @@ class ExportRowBoundIT extends AbstractIntegrationIT {
      * A tenant nobody else touches, plus one user in it holding the two read permissions the exports
      * require. Created through the API so the tenant gets its default subscription (the subscription
      * gate answers 403 on {@code /api/**} otherwise); the role and user are written through the
-     * repositories because a freshly created tenant has nobody who can log in to create them — the
-     * open Issue #1, worked around the same way {@code SessionOwnershipIT} does.
+     * repositories because this fixture needs a NARROW role — the bootstrapped Admin that tenant
+     * creation now provisions (Issue #1 is closed) holds far more than the two permissions under
+     * test, and its password is random when the create request does not supply one.
      */
     private Fixture freshTenantWithAdmin(String suffix) {
         String tenantName = "expbound" + suffix;
         HttpHeaders host = bearerHeaders(accessToken(null, SEED_ADMIN_USERNAME, SEED_ADMIN_PASSWORD), null);
         ResponseEntity<JsonNode> created = restTemplate.exchange("/api/tenants", HttpMethod.POST,
-                new HttpEntity<>(Map.of("name", tenantName, "displayName", "Export Bound " + suffix), host),
+                new HttpEntity<>(Map.of("name", tenantName, "displayName", "Export Bound " + suffix,
+                        "adminEmail", "admin@" + tenantName + ".local"), host),
                 JsonNode.class);
         assertThat(created.getStatusCode())
                 .as("fixture tenant must be created, got %s", created.getBody())
@@ -464,10 +473,15 @@ class ExportRowBoundIT extends AbstractIntegrationIT {
 
         String username = "expadmin" + suffix;
         long adminUserId = insertUser(tenantId, username, Set.of(role));
+        long bootstrappedAdminId = userRepository
+                .findByTenantIdAndUsernameIgnoreCase(tenantId, "admin")
+                .orElseThrow(() -> new AssertionError(
+                        "tenant creation must bootstrap an admin user (Issue #1)"))
+                .getId();
 
         HttpHeaders headers = bearerHeaders(
                 accessToken(tenantName, username, FIXTURE_PASSWORD), tenantName);
-        return new Fixture(tenantId, adminUserId, headers);
+        return new Fixture(tenantId, adminUserId, bootstrappedAdminId, headers);
     }
 
     /** @return the generated id, so the exported rows can be matched against the fixture exactly. */

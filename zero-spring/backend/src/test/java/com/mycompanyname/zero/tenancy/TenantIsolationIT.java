@@ -56,14 +56,21 @@ class TenantIsolationIT extends AbstractIntegrationIT {
         }
     }
 
+    /**
+     * Since Issue #1's fix, a fresh tenant DOES get a bootstrapped admin — but with the password
+     * from the create request, or a random generated one. Neither may ever be the well-known seed
+     * password, so the "default"-tenant credential must not unlock a freshly created tenant.
+     * ({@code TenantBootstrapIT} owns the positive proof that the bootstrapped admin works.)
+     */
     @Test
-    void hostCreatesTenantAndFreshTenantHasNoUsersToLoginWith() {
+    void hostCreatesTenantAndSeedPasswordDoesNotUnlockItsBootstrappedAdmin() {
         String hostToken = accessToken(null, SEED_ADMIN_USERNAME, SEED_ADMIN_PASSWORD);
         HttpHeaders headers = bearerHeaders(hostToken, null);
 
         Map<String, String> body = Map.of(
                 "name", "acme",
-                "displayName", "Acme Inc");
+                "displayName", "Acme Inc",
+                "adminEmail", "admin@acme.local");
         ResponseEntity<JsonNode> created = restTemplate.exchange(
                 "/api/tenants", HttpMethod.POST, new HttpEntity<>(body, headers), JsonNode.class);
 
@@ -76,7 +83,8 @@ class TenantIsolationIT extends AbstractIntegrationIT {
 
         ResponseEntity<JsonNode> acmeLogin = login("acme", SEED_ADMIN_USERNAME, SEED_ADMIN_PASSWORD);
         assertThat(acmeLogin.getStatusCode())
-                .as("new tenant has no seeded users, login must fail")
+                .as("the bootstrapped admin's password is request-supplied or random, never the "
+                        + "well-known seed default")
                 .isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 

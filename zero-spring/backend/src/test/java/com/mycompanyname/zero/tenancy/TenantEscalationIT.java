@@ -81,7 +81,8 @@ class TenantEscalationIT extends AbstractIntegrationIT {
         HttpHeaders headers = bearerHeaders(hostToken, null);
         Map<String, String> body = Map.of(
                 "name", name,
-                "displayName", "Acme Inc");
+                "displayName", "Acme Inc",
+                "adminEmail", "admin@" + name + ".local");
         ResponseEntity<JsonNode> created = restTemplate.exchange(
                 "/api/tenants", HttpMethod.POST, new HttpEntity<>(body, headers), JsonNode.class);
         assertThat(created.getStatusCode())
