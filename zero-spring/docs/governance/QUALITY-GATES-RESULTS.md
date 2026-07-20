@@ -204,6 +204,38 @@ koşmadı (SPI arkasında, sandbox smoke bekliyor) ve 413 gövde-sınırı modu 
 
 ---
 
+## PayTR dilimi P2'-A (çoklu-sağlayıcı + PayTR intake) — 2026-07-20, `ea0e13f`, gerçek `push`, **8/8** (run 29743681191)
+
+> Kapsam kararı ADR-0017: güncel sağlayıcılar **PayTR + iyzico**; Stripe uyuyan global-pazar
+> adaptörü (bu dilimde sıfır Stripe işi — beş sınıfı ve IT'leri dokunulmamış); PayPal dışarıda.
+
+| Kapı | Eşik | Sonuç | Durum |
+|---|---|---|---|
+| Backend `clean verify` | yeşil | **461 test (168 unit + 293 IT)**, 0 fail / 0 skip | ✅ |
+| Frontend | değişiklik yalnız üretilmiş `schema.d.ts` | build + 123/123 | ✅ |
+| Typed client senkron | drift yok | `typed-client-drift` success | ✅ |
+| Negatif yetki | her yeni uçta | paytr webhook: geçersiz hash → 400 + 0 satır; disabled → 404 | ✅ |
+| Canlı smoke | — | `live-smoke` 11 PASS | ✅ |
+
+**Lokal ↔ CI:** **461 = 461** (168 + 293). **Sapma yok.**
+
+**Altı mutasyon kanıtı (hepsi koşuldu-kırmızı-geri alındı):** dedup silme → 409≠200 · hash atlama →
+200≠400 · ack `"ok\n"` → byte-eşit `OK` testi kırmızı (tahsilat sözleşmesi) · PAID koruması →
+FAILED≠PAID · failed→success aktivasyonu geri alınınca → PAID bekleyen test kırmızı · per-pair
+form parse eski kodda → 200≠429. Ek: registry mutasyonu ilk koşuda **bayat bytecode yüzünden
+yanlış yeşil** kaldı — CLAUDE.md tuzağı bire bir; `test-compile` ile tekrarlanıp kırmızı görüldü.
+
+**Stack-review:** 1 orta-yüksek (failed→success meşru sırada para tahsil edilip aktivasyon
+kaçıyordu — üç katmanda kapatıldı: durum makinesi + IT + runbook SQL'i `NOT_PAID,FAILED`),
+2 düşük (deterministik `+`'lı hash vektörü `ZPPLUSVEC00`; form parser uyumu) — üçü de commit'ten
+**önce** kapatıldı.
+
+**Kalan risk:** PROD-R41..R44 — PayTR retry takvimi belgesiz (§3.9 mutabakat ağı genişletildi);
+`OK` sözleşmesi kırılgan (byte-eşit test nöbette); iyzico + sorguyla-mutabakat sonraki dilim;
+get-token alıcı alanları placeholder, ilk canlı smoke ölçecek. Canlı PayTR çağrısı **hiç koşmadı**.
+
+---
+
 ## Kayıt şablonu
 
 ```markdown

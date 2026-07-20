@@ -11,6 +11,14 @@
 
 ### Eklendi
 
+- **PayTR bildirimi + çoklu-sağlayıcı registry (P2'-A, ADR-0017).** Güncel sağlayıcılar PayTR +
+  iyzico (iyzico sıradaki dilim); Stripe uyuyan global-pazar adaptörü, PayPal dışarıda.
+  `POST /api/billing/webhook/paytr`: resmî formülle HMAC doğrulama (sabit-zaman), düz-metin
+  byte-eşit `OK` ack'i (aksi = tahsilat yok — mutasyonla belgelendi), duplicate → `OK` +
+  tek işleme, webhook-yazımlı `FAILED` sonrası hash-geçerli `success` → aktivasyon (iframe içi
+  retry meşru). Throttle filtresi form gövdesini tükettiği için `CachedBodyHttpServletRequest`
+  form POST'larda parametre API'sini önbellekten yanıtlıyor. Sınırlar: PROD-R41..R44.
+
 - **Stripe billing çekirdeği (P2-A).** `BillingProvider` SPI + `StripeBillingProvider`
   (stripe-java 33.1.1), `POST /api/billing/webhook/stripe` (kimlik = imza; dört gate-kaydı tam),
   host-side `POST /api/billing/checkout` (`SUBSCRIPTIONS_MANAGE`), `V8__billing.sql`
