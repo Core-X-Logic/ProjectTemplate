@@ -1034,8 +1034,20 @@ export interface components {
             permissions?: string[];
         };
         CreateTenantRequest: {
+            adminEmail: string;
+            adminPassword?: string;
             displayName: string;
             name: string;
+        };
+        CreateTenantResponse: {
+            active?: boolean;
+            /** Format: date-time */
+            createdAt?: string;
+            displayName?: string;
+            generatedAdminPassword?: string;
+            /** Format: int64 */
+            id?: number;
+            name?: string;
         };
         CreateUserRequest: {
             email: string;
@@ -2923,7 +2935,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["TenantDto"];
+                    "*/*": components["schemas"]["CreateTenantResponse"];
                 };
             };
         };

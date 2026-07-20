@@ -36,7 +36,7 @@ export const tenantsEn = {
   // Create dialog
   'tenants.create.title': 'Create tenant',
   'tenants.create.description':
-    'The tenant is activated immediately and receives the default subscription.',
+    'The tenant is activated immediately, receives the default subscription, and gets a bootstrap admin user (username: admin).',
   'tenants.create.name': 'Name',
   'tenants.create.namePlaceholder': 'e.g. acme',
   'tenants.create.nameHint':
@@ -45,17 +45,32 @@ export const tenantsEn = {
     'Use 2-30 characters: lowercase letters, digits or hyphens.',
   'tenants.create.displayName': 'Display name',
   'tenants.create.displayNamePlaceholder': 'e.g. Acme Inc.',
+  'tenants.create.adminEmail': 'Admin email',
+  'tenants.create.adminEmailPlaceholder': 'e.g. admin@acme.com',
+  'tenants.create.adminEmailHint':
+    'The tenant’s bootstrap admin user is created with this email.',
+  'tenants.create.adminEmailInvalid': 'Enter a valid email address.',
+  'tenants.create.adminPassword': 'Admin password',
+  'tenants.create.adminPasswordHint':
+    'Optional. Leave empty to generate a strong password automatically — it will be shown once after creation.',
   'tenants.create.submit': 'Create',
   'tenants.create.submitting': 'Creating…',
   'tenants.create.cancel': 'Cancel',
 
-  // Known gap (Issue #1) — surfaced in the create dialog and after creation.
-  'tenants.create.noAdminTitle': 'No admin user is created',
-  'tenants.create.noAdminDescription':
-    'Creating a tenant does not create a user for it, so nobody can sign in to it yet. Add a user under Users and assign it to this tenant.',
+  // One-time reveal of the generated admin password (closes Issue #1).
+  'tenants.create.successTitle': 'Tenant created',
+  'tenants.create.successDescription':
+    'The tenant and its admin user (username: admin) have been created. The admin must change this password at first sign-in.',
+  'tenants.create.generatedPasswordLabel': 'Generated admin password',
+  'tenants.create.oneTimeTitle': 'Shown only once',
+  'tenants.create.oneTimeWarning':
+    'This password will not be shown again and cannot be retrieved later. Copy it now and hand it to the tenant admin over a secure channel.',
+  'tenants.create.copyPassword': 'Copy password',
+  'tenants.create.copied': 'Copied',
+  'tenants.create.close': 'Close',
 
   // Toasts
-  'tenants.toast.created': 'Tenant created. Remember to add its first user.',
+  'tenants.toast.created': 'Tenant created together with its admin user.',
   'tenants.toast.activated': 'Tenant activated.',
   'tenants.toast.deactivated': 'Tenant deactivated.',
   'tenants.toast.error': 'Operation failed. Please try again.',
@@ -93,7 +108,7 @@ export const tenantsTr: Record<TenantsMessageId, string> = {
   // Create dialog
   'tenants.create.title': 'Kiracı oluştur',
   'tenants.create.description':
-    'Kiracı hemen aktifleştirilir ve varsayılan aboneliği alır.',
+    'Kiracı hemen aktifleştirilir, varsayılan aboneliği alır ve bir başlangıç yönetici kullanıcısı (kullanıcı adı: admin) oluşturulur.',
   'tenants.create.name': 'Ad',
   'tenants.create.namePlaceholder': 'örn. acme',
   'tenants.create.nameHint':
@@ -102,18 +117,33 @@ export const tenantsTr: Record<TenantsMessageId, string> = {
     '2-30 karakter kullanın: küçük harf, rakam veya tire.',
   'tenants.create.displayName': 'Görünen ad',
   'tenants.create.displayNamePlaceholder': 'örn. Acme A.Ş.',
+  'tenants.create.adminEmail': 'Yönetici e-postası',
+  'tenants.create.adminEmailPlaceholder': 'örn. admin@acme.com',
+  'tenants.create.adminEmailHint':
+    'Kiracının başlangıç yönetici kullanıcısı bu e-posta ile oluşturulur.',
+  'tenants.create.adminEmailInvalid': 'Geçerli bir e-posta adresi girin.',
+  'tenants.create.adminPassword': 'Yönetici parolası',
+  'tenants.create.adminPasswordHint':
+    'İsteğe bağlı. Boş bırakılırsa güçlü bir parola otomatik oluşturulur ve oluşturma sonrasında bir kez gösterilir.',
   'tenants.create.submit': 'Oluştur',
   'tenants.create.submitting': 'Oluşturuluyor…',
   'tenants.create.cancel': 'İptal',
 
-  // Known gap (Issue #1)
-  'tenants.create.noAdminTitle': 'Yönetici kullanıcı oluşturulmaz',
-  'tenants.create.noAdminDescription':
-    'Kiracı oluşturmak ona ait bir kullanıcı oluşturmaz; bu nedenle henüz kimse giriş yapamaz. Kullanıcılar bölümünden bir kullanıcı ekleyip bu kiracıya atayın.',
+  // Oluşturulan yönetici parolasının tek seferlik gösterimi (Issue #1 kapanışı).
+  'tenants.create.successTitle': 'Kiracı oluşturuldu',
+  'tenants.create.successDescription':
+    'Kiracı ve yönetici kullanıcısı (kullanıcı adı: admin) oluşturuldu. Yönetici ilk girişte bu parolayı değiştirmek zorundadır.',
+  'tenants.create.generatedPasswordLabel': 'Oluşturulan yönetici parolası',
+  'tenants.create.oneTimeTitle': 'Yalnızca bir kez gösterilir',
+  'tenants.create.oneTimeWarning':
+    'Bu parola bir daha gösterilmez ve sonradan geri alınamaz. Şimdi kopyalayın ve kiracı yöneticisine güvenli bir kanaldan iletin.',
+  'tenants.create.copyPassword': 'Parolayı kopyala',
+  'tenants.create.copied': 'Kopyalandı',
+  'tenants.create.close': 'Kapat',
 
   // Toasts
   'tenants.toast.created':
-    'Kiracı oluşturuldu. İlk kullanıcısını eklemeyi unutmayın.',
+    'Kiracı, yönetici kullanıcısıyla birlikte oluşturuldu.',
   'tenants.toast.activated': 'Kiracı aktifleştirildi.',
   'tenants.toast.deactivated': 'Kiracı pasifleştirildi.',
   'tenants.toast.error': 'İşlem başarısız. Lütfen tekrar deneyin.',

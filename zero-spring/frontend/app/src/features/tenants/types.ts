@@ -11,6 +11,16 @@ export type CreateTenantRequest =
   components['schemas']['CreateTenantRequest'];
 
 /**
+ * Response of `POST /api/tenants`. `generatedAdminPassword` is a ONE-TIME
+ * disclosure: non-null only when the request omitted `adminPassword` (the
+ * server then generated the bootstrap admin's credential). It can never be
+ * retrieved again — only its hash is persisted — so the dialog must show it
+ * once and let it go: no storage, no logging.
+ */
+export type CreateTenantResponse =
+  components['schemas']['CreateTenantResponse'];
+
+/**
  * `CreateTenantRequest.name` is `@Pattern(regexp = "[a-z0-9-]{2,30}")` —
  * lowercase letters, digits and hyphens, 2-30 characters. Mirrored here so the
  * dialog can explain the rule instead of bouncing the user off a 400.

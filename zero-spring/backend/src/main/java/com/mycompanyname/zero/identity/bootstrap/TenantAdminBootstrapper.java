@@ -75,14 +75,19 @@ public class TenantAdminBootstrapper {
     @Transactional
     public void bootstrapAdmin(Long tenantId, String adminEmail, String rawPassword, boolean passwordGenerated) {
         if (!passwordGenerated) {
+            // Validated up front even though the repair path below ignores it: rejecting a weak
+            // credential before looking anything up keeps the failure mode independent of whether
+            // the admin already exists (a repair caller learns nothing about tenant state from it).
             passwordPolicyValidator.validate(
                     passwordPolicyValidator.resolvePolicy(tenantId, null), rawPassword);
         }
         Session session = entityManager.unwrap(Session.class);
-        disableTenantFilters(session);
         Long previousTenantId = TenantContext.getTenantId();
         TenantContext.setTenantId(tenantId);
         try {
+            // Inside the try so any future statement between disable and the protected region
+            // cannot leave the session filterless: the finally below always restores.
+            disableTenantFilters(session);
             Role adminRole = roleRepository.findByTenantIdAndNameIgnoreCase(tenantId, ADMIN_ROLE_NAME)
                     .orElseGet(() -> createAdminRole(tenantId));
             boolean userCreated = false;

@@ -245,22 +245,23 @@ describe('CreateTenantDialog', () => {
     await user.click(screen.getByRole('button', { name: 'New tenant' }));
   }
 
-  it('warns that no admin user is created (known gap, Issue #1)', async () => {
+  it('announces that a bootstrap admin is created and asks for its email (Issue #1 closed)', async () => {
     grant(['tenants.manage']);
     renderWithProviders(<TenantsListPage />, { route: '/tenants' });
     await openDialog();
 
-    // The operator must learn this BEFORE creating a tenant nobody can log in
-    // to — not by discovering the empty tenant afterwards.
+    // The old "no admin user is created" warning is gone: the backend now
+    // creates the tenant together with its admin, and the dialog says so.
     expect(
-      await screen.findByText('No admin user is created'),
+      await screen.findByText(/gets a bootstrap admin user/i),
     ).toBeInTheDocument();
+    expect(screen.getByLabelText('Admin email')).toBeInTheDocument();
     expect(
-      screen.getByText(/does not create a user for it/i),
-    ).toBeInTheDocument();
+      screen.queryByText('No admin user is created'),
+    ).not.toBeInTheDocument();
   });
 
-  it('creates a tenant with the entered name and display name', async () => {
+  it('creates a tenant with name, display name and admin email', async () => {
     const user = userEvent.setup();
     grant(['tenants.manage']);
     renderWithProviders(<TenantsListPage />, { route: '/tenants' });
@@ -268,6 +269,10 @@ describe('CreateTenantDialog', () => {
 
     await user.type(await screen.findByLabelText('Name'), 'initech');
     await user.type(screen.getByLabelText('Display name'), 'Initech LLC');
+    await user.type(
+      screen.getByLabelText('Admin email'),
+      'admin@initech.com',
+    );
     await user.click(screen.getByRole('button', { name: 'Create' }));
 
     await waitFor(() => {
@@ -278,6 +283,7 @@ describe('CreateTenantDialog', () => {
           body: JSON.stringify({
             name: 'initech',
             displayName: 'Initech LLC',
+            adminEmail: 'admin@initech.com',
           }),
         }),
       );
@@ -324,6 +330,7 @@ describe('CreateTenantDialog', () => {
 
     await user.type(await screen.findByLabelText('Name'), 'acme');
     await user.type(screen.getByLabelText('Display name'), 'Acme');
+    await user.type(screen.getByLabelText('Admin email'), 'admin@acme.com');
     await user.click(screen.getByRole('button', { name: 'Create' }));
 
     await waitFor(() => {

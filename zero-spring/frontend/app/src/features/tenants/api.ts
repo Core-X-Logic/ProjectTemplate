@@ -1,5 +1,9 @@
 import { apiFetch } from '@/api/client';
-import type { CreateTenantRequest, TenantDto } from './types';
+import type {
+  CreateTenantRequest,
+  CreateTenantResponse,
+  TenantDto,
+} from './types';
 
 /**
  * Tenants endpoint wrappers (`TenantController`).
@@ -29,17 +33,20 @@ export function listTenants(): Promise<TenantDto[]> {
 }
 
 /**
- * `POST /api/tenants` — 201 with the created tenant.
+ * `POST /api/tenants` — 201 with the created tenant AND its bootstrap admin
+ * (Issue #1 closed by backend 20247d5: `adminEmail` is now required, and the
+ * tenant is created together with an `admin` user so someone can sign in).
  *
  * A duplicate `name` is a 409 whose ProblemDetail `detail` names the clash.
  *
- * KNOWN GAP (Issue #1): this creates the tenant row and provisions a default
- * subscription (via `TenantCreatedEvent`) but does NOT create an admin user for
- * it. The new tenant therefore has nobody who can sign in. The create dialog
- * says so out loud rather than leaving the operator to discover it.
+ * When the request omits `adminPassword`, the response's
+ * `generatedAdminPassword` carries the server-generated credential EXACTLY
+ * ONCE — the caller shows it and forgets it (never stored, never logged).
  */
-export function createTenant(body: CreateTenantRequest): Promise<TenantDto> {
-  return apiFetch<TenantDto>(TENANTS_URL, {
+export function createTenant(
+  body: CreateTenantRequest,
+): Promise<CreateTenantResponse> {
+  return apiFetch<CreateTenantResponse>(TENANTS_URL, {
     method: 'POST',
     body: JSON.stringify(body),
   });
