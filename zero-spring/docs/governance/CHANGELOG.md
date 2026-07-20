@@ -10,6 +10,15 @@
 ## [Yayınlanmamış]
 
 ### Eklendi
+
+- **Stripe billing çekirdeği (P2-A).** `BillingProvider` SPI + `StripeBillingProvider`
+  (stripe-java 33.1.1), `POST /api/billing/webhook/stripe` (kimlik = imza; dört gate-kaydı tam),
+  host-side `POST /api/billing/checkout` (`SUBSCRIPTIONS_MANAGE`), `V8__billing.sql`
+  (`payments` + `webhook_events`). Kaynak sistemin iki ölçülmüş kusuru sınıf olarak kapandı:
+  duplicate webhook artık idempotent (UNIQUE event id + tek transaction; 200, yeniden işleme yok)
+  ve edition aktivasyonu tarayıcı redirect'ine değil webhook'un kendisine bağlı
+  (server-authoritative). İkisi de mutasyon kanıtlı. Sınırlar: PROD-R36..R40.
+
 ### Değişti
 ### Kaldırıldı
 ### Düzeltildi

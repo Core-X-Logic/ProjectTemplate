@@ -176,6 +176,34 @@ görebildiği bir şey — `FilterChainReachabilityIT` + `@EndpointPolicy` iki y
 
 ---
 
+## Billing dilimi P2-A (Stripe webhook + idempotency) — 2026-07-20, `678bfd9`, gerçek `push`, **8/8** (run 29737933182)
+
+| Kapı | Eşik | Sonuç | Durum |
+|---|---|---|---|
+| Backend `clean verify` | yeşil | **428 test (145 unit + 283 IT)**, 0 fail / 0 skip | ✅ |
+| Frontend build + test | yeşil | 123 test + `schema.d.ts` yeniden üretildi (+95 satır, yalnız billing yüzeyi) | ✅ |
+| Typed client senkron | drift yok | `typed-client-drift` success | ✅ |
+| `migration-drift` | boş sette yeşil riski | oldset **V1..V7** üzerine V8 uygulandı (mevcut-kurulum simülasyonu); backend job'da `Successfully validated 8 migrations` | ✅ |
+| Negatif yetki testi | her yeni uçta | checkout: tenant admin → **403** + payment satırı yok; anonim → 401 | ✅ |
+| Canlı smoke | şema değişikliğinde zorunlu | `live-smoke` 11 PASS + dev boot: V8 uygulandı, readiness UP, billing-kapalı webhook → 404 | ✅ |
+
+**Lokal ↔ CI:** **428 = 428** (145 + 283). **Sapma yok.**
+
+**Negatif kanıtlar (mutasyonla, ikisi de kayıtlı):** (1) dedup `on conflict do nothing` kaldırıldı →
+duplicate-teslimat testi **kırmızı** (409, beklenen 200) — kaynak sistemin "duplicate → 400 → sonsuz
+retry" bug'ının kapandığının kanıtı. (2) işleme istisnası yutulup 200 dönüldü → rollback testi
+**kırmızı** (200, beklenen 500) — "başarısız işleme dedup satırını geri sarar, retry temiz işler"
+iddiasının kanıtı.
+
+**Stack-review:** 3 bulgu (PROD-R36 yanlış sınıflandırma; rollback iddiasının negatif kanıtı yok;
+farklı-event-id yarışı) — üçü de commit'ten **önce** kapatıldı. 7 alan temiz raporlandı.
+
+**Kalan risk:** PROD-R36..R40 (RISK-REGISTER) — en önemlisi: canlı Stripe session çağrısı hiç
+koşmadı (SPI arkasında, sandbox smoke bekliyor) ve 413 gövde-sınırı modu kalıcı-izsiz kayıp
+(runbook §3.9 mutabakatı ara önlem).
+
+---
+
 ## Kayıt şablonu
 
 ```markdown
