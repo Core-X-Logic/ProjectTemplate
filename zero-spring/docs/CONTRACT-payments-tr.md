@@ -11,7 +11,11 @@
 | **P2'-A** | Çoklu-sağlayıcı registry + PayTR intake | PayTR bildirim hattı, `OK` sözleşmesi, failed→success | ✅ `ea0e13f` |
 | **P2'-B** | iyzico: `IyzicoBillingProvider` (SDK 2.0.142), `/api/billing/webhook/iyzico` (`X-IYZ-SIGNATURE-V3`), CF initialize, **retrieve-otoriter** doğrulama, `iyziReferenceCode` dedup, **mutabakat job'u** (ShedLock; `NOT_PAID/FAILED` tara → sağlayıcı sorgusu; PayTR tarafı sorgu API'si yoksa yalnız iyzico-retrieve + PayTR runbook ağı) | PROD-R43 | ✅ **BİTTİ** (`ef82ef0`; review: 1 HIGH double-activation yarışı dahil 4 bulgu commit öncesi kapandı) |
 | **Issue #1** | Tenant create → idempotent admin user+role bootstrap. **Migration YOK** (runtime seed). | Issue #1 | ✅ **BİTTİ** (`20247d5` backend + `7914373` frontend; öncesi-kırmızı 401 kanıtı + canlı smoke + re-boot smoke) |
-| **P2'-C** | Checkout UI (PayTR iframe + iyzico CF sayfası; typed client, üçlü kilit) + **iki sandbox'ta canlı smoke** | PROD-R44, PROD-R40 (yeni biçimi) | **UI ✅ BİTTİ** (`b3c8c4a`: dialog + hand-off + sonuç rotaları, "activated" asla denmez, 135 FE testi; PROD-R40 kapandı) · smoke: **operatör-bağımlı AÇIK** — harness hazır (`scripts/sandbox-smoke.sh` + runbook §3.10); PayTR mağaza + iyzico sandbox merchant hesaplarını yalnız operatör açabilir; script PASS kaydı girmeden PROD-R44/R47 kapanamaz ve faz COMPLETE ilan edilemez |
+| **P2'-C** | Checkout UI (PayTR iframe + iyzico CF sayfası; typed client, üçlü kilit) + **iki sandbox'ta canlı smoke** | PROD-R44, PROD-R40 (yeni biçimi) | **UI ✅ BİTTİ** (`b3c8c4a`; PROD-R40 kapandı) · **PayTR token formülü ✅ PayTR'nin KENDİ Hash Hesaplama aracıyla harici doğrulandı** (2026-07-21, byte-birebir — PROD-R44a kapandı) · **PayTR canlı round-trip: operatör-bağımlı AÇIK** (PROD-R44b — paylaşılan test kredensiyali yok, mağaza hesabı şart) · **iyzico canlı: ⏸️ SONRAKİ FAZA ERTELENDİ** (iş kararı 2026-07-21, PROD-R47 — kimlik bilgisi yok) |
+
+> **Kapsam kararı (2026-07-21):** Bu faz **PayTR-only** canlı doğrulamayla ilerliyor. iyzico canlı
+> doğrulaması **bilinçli olarak sonraki faza ertelendi** (kimlik bilgisi yok) — kod tarafı hazır ve
+> offline kanıtlı, **canlı kanıt olmadan COMPLETE denmeyecek**. Stripe kapsam dışı (ADR-0017).
 | **P2'-D** | Recurring (PayTR kayıtlı-kart tekrarlayan + iyzico `/v2/subscription`) — `SubscriptionLifecycleJob`'a bağlanır | PROD-R38 sınıfı | backlog, bu sözleşmede AÇILMAZ |
 
 ## 2. Kapsam dışı (yasak)

@@ -39,6 +39,14 @@
   ve edition aktivasyonu tarayıcı redirect'ine değil webhook'un kendisine bağlı
   (server-authoritative). İkisi de mutasyon kanıtlı. Sınırlar: PROD-R36..R40.
 
+### Doğrulandı
+
+- **PayTR get-token token formülü, PayTR'nin resmî Hash Hesaplama aracıyla harici doğrulandı**
+  (byte-birebir). Canlı get-token/bildirim/aktivasyon round-trip'i **koşulamadı** — PayTR paylaşılan
+  test kimlik bilgisi yayınlamıyor, mağaza hesabı şart; operatör-bağımlı açık kalıyor (PROD-R44b).
+  **iyzico canlı doğrulaması bilinçli olarak sonraki faza ertelendi** (kimlik bilgisi yok, PROD-R47) —
+  kapatılmadı, kod tarafı offline kanıtlı.
+
 ### Değişti
 ### Kaldırıldı
 ### Düzeltildi

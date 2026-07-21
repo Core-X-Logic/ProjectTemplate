@@ -281,6 +281,31 @@ Script PASS'i buraya işlenip PROD-R44/R47 kapatılana kadar TR ödeme fazı COM
 
 ---
 
+## PayTR token formülü — PayTR'nin resmî aracıyla harici doğrulama, 2026-07-21
+
+Canlı get-token/bildirim/aktivasyon **koşulamadı**: PayTR paylaşılan test kimlik bilgisi yayınlamıyor
+(resmî Postman env `XXXXXX`; `test_mode=1` gerçek mağaza hesabına biniyor) — kredensiyalsiz canlı
+çağrı imkânsız (kaynak: dev.paytr.com sayfaları, oturum içinde fetch edildi). Bu yüzden **yapılabilecek
+en güçlü kredensiyalsiz kanıt** üretildi: token formülünün PayTR'nin **kendi** hesaplayıcısına karşı
+çapraz-kontrolü — kendine-tutarlılık değil, harici oracle.
+
+| Adım | Sonuç |
+|---|---|
+| Araç | `dev.paytr.com/servis-test-araclari/hash-hesaplama`, **iFrame API** sekmesi (PayTR'ın kendi kodu) |
+| Girdi | `PayTRTokenRequestTest`'in pinlediği birebir vektör (merchant_id=123456, oid=ZP42TESTOID01, amount=999 kuruş, user_basket=`W1siUHJvIChNT05USExZKSIsIjkuOTkiLDFdXQ==`, currency=TL, test_mode=1, salt/key=test-*) |
+| PayTR aracı çıktısı | `G0IZ3V/qo38nReuI/yukiPXL0LAjzu/1WtEbFX7h7nQ=` |
+| Bizim `checkoutToken(...)` (commit'li beklenti) | `G0IZ3V/qo38nReuI/yukiPXL0LAjzu/1WtEbFX7h7nQ=` |
+| Karşılaştırma | **byte-birebir EŞİT** |
+
+Kapsam: HMAC dizilimi + salt-sonda konumu + `user_basket` base64 serileştirmesi PayTR'ın beklediğiyle
+aynı → **hash artık canlı bir başarısızlık nedeni değil** (PROD-R44a kapandı). **Doğrulanmayan (açık):**
+canlı ağ round-trip'i, gerçek bildirim teslimi, gerçek aktivasyon, alıcı/adres alanları — tümü
+operatör mağaza hesabına bağlı (PROD-R44b). Bildirim-hash'i (webhook tarafı) bu aracın kapsamında
+DEĞİL — yalnız `PayTRWebhookIT`'in gerçek-imzalı offline testleriyle doğrulanıyor. **iyzico canlı:
+sonraki faza ertelendi (PROD-R47).**
+
+---
+
 ## Kayıt şablonu
 
 ```markdown
