@@ -89,7 +89,29 @@ Bu ikisi **fail-closed**'dır ve öyle kalmalıdır. Eksikse container başlamaz
 
 - `RELEASE-RUNBOOK.md` §1.2 kapısını koşun.
 - `RISK-REGISTER.md`'deki **devralınan bilinen kısıtları** okuyun ve kabul edip etmediğinize
-  karar verin. Özellikle: rate limit çok-instance'ta bölünür, access token 15 dk iptal edilemez,
-  `/api/users` bellekte sayfalar.
+  karar verin. Özellikle: rate limit çok-instance'ta bölünür (PROD-R6), access token 15 dk iptal
+  edilemez (PROD-R16). (`/api/users` bellek-sayfalama kısıtı Q-03'te kapandı.)
 - Reverse proxy kuralları (`client_max_body_size`, `/actuator/**` kapatma, `X-Forwarded-*`
   ezme) uygulama tarafından **garanti edilemez** — runbook §1.3-I ve §1.3-J.
+
+## 6. Deploy — minimum adımlar (klonlayan doldurur)
+
+CI `docker-build` gate'i imajı build edip sertleştirmesini doğrular ama **push ETMEZ**; `release`
+job'ı **parametrik bir deploy scaffold**'udur — `DEPLOY_ENABLED=true` olana dek yalnız bir "Deploy
+plan (dry-run)" yazar, gerçek deploy KOŞMAZ. Canlıya çıkmak için:
+
+1. **Registry:** Settings → Variables → `IMAGE_REGISTRY` (ör. `ghcr.io/<org>`), `IMAGE_NAME`
+   (varsayılan `zero-backend`); Secrets → registry kimlik bilgisi.
+2. **İmajı push et:** `docker-build` job'una registry login + `push: true` ekle (veya ayrı publish
+   adımı). Şablon bilinçle push etmiyor — hedef sizin.
+3. **Deploy komutu:** Settings → Secrets → `DEPLOY_COMMAND` — cloud-agnostic, ör.
+   `kubectl apply -f k8s/`, `flyctl deploy`, `aws ecs update-service …`. `IMAGE_REF`
+   (`<registry>/<name>:sha-<kısa-sha>`) env olarak komuta hazır verilir.
+4. **Environment:** Settings → Variables → `DEPLOY_ENVIRONMENT` = `dev` | `stage` | `prod`
+   (istenirse GitHub Environments + protection rules).
+5. **Uygulama sırları:** prod profili `${VAR}` bekler (DB_URL, JWT secret, Redis, mail…) —
+   orchestrator/secret store'dan gelir, **repoya yazılmaz**; `application-prod.yml` env-referanslı.
+6. **Aç:** Settings → Variables → `DEPLOY_ENABLED=true`. İlk push'ta önce dry-run planını okuyun,
+   sonra gerçek deploy koşar.
+7. **Doğrula:** imajın HEALTHCHECK'i `/actuator/health/readiness`'e bakar; orchestrator readiness
+   probe'unu **aynı yola** bağlayın (liveness'a değil — health/readiness ayrımı, runbook).

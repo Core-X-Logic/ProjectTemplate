@@ -61,6 +61,19 @@
 
 ### Kaldırıldı
 ### Düzeltildi
+
+- **Docker imajı artık CI'da build ediliyor ve sertleştirmesi doğrulanıyor (PROD-R27 kapandı).**
+  Yeni `docker-build` gate'i backend imajını buildx ile build edip `docker image inspect` ile dört
+  şeyi assert ediyor: non-root kullanıcı (`zero`), HEALTHCHECK, `SPRING_PROFILES_ACTIVE=prod`,
+  container-farkındalı heap tavanı. Daha önce imajı hiçbir kapı build etmiyordu; sertleştirmeler
+  sessizce çürüyebilirdi. Push yok — registry hedefi klonlayanın. CI 9/9 (run 29831107658).
+- **Placeholder `release` adımı → parametrik, cloud-agnostic deploy scaffold.** `release` artık
+  `docker-build`'i de bekliyor; bir "Deploy plan (dry-run)" adımı environment/image-ref/secret
+  noktalarını yazıyor, guarded bir adım `DEPLOY_ENABLED=true` yapılana dek güvenli no-op kalıyor
+  (gerçek komut `DEPLOY_COMMAND` secret'i ile enjekte edilir — hiçbir cloud CLI hardcode değil).
+  **Davranış değişikliği yok** (uygulama/domain/API/permission dokunulmadı); klonlayan için
+  `SETUP-NEW-PROJECT.md §6` deploy checklist'i eklendi.
+
 ### Güvenlik
 
 ---

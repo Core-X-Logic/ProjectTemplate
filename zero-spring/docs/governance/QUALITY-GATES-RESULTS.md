@@ -381,3 +381,26 @@ geçti; sequential gate mantığı korundu.
 upload-artifact v4→v7, download-artifact v4→v8; yalnız version tag'i) · `tsconfig.app.json`
 (baseUrl kaldırıldı, paths TS5+'ta göreli çözülür) · `scrollable.css` (`var(--breakpoint-lg)` →
 `64rem`, media-feature'da CSS var geçersizdi). **Davranış değişmedi** (build 0 warning, 502+140 test yeşil).
+
+---
+
+## Foundation hardening — Docker gate + deploy scaffold — 2026-07-21, `77a9fa9`, gerçek `push`, **9/9** (run 29831107658)
+
+Uygulama/domain/API/permission değişikliği yok; yalnız CI/CD + deploy scaffold. Amaç: template'i
+klonlayan her ekip için **container güveni** (imaj gerçekten build oluyor + sertleştirmesi doğrulanıyor)
+ve **deploy edilebilirlik** (placeholder yerine parametrik iskelet). Kanıt:
+[run 29831107658](https://github.com/Core-X-Logic/ProjectTemplate/actions/runs/29831107658).
+
+| Gate | Amaç | Bu koşudaki kanıt |
+|---|---|---|
+| **`docker-build`** (YENİ) | PROD-R27: imaj hiçbir kapıda build/doğrulanmıyordu | buildx ile backend imajı build edildi (GHA layer cache); `docker image inspect` ile **dört sertleştirme assert edildi** → log: *"Image hardening doğrulandı: non-root · healthcheck · prod profil · heap tavanı."* Push YOK |
+| **`release`** (scaffold) | Placeholder → parametrik deploy | `needs: [security-checks, docker-build]`; "Deploy plan (dry-run)" env/image-ref/secret noktalarını yazdı; guarded adım *"DEPLOY_ENABLED != true → scaffold no-op … Deploy KOŞMADI"* — **gerçek deploy koşmadı**, güvenli |
+
+**Zincir 8 → 9 job**, tamamı success: build · **docker-build** · frontend · backend · typed-client-drift ·
+migration-drift · live-smoke · security-checks · release. Mevcut artifact zinciri ve `needs:` sırası
+korundu; `docker-build` **paralel** (`needs: build`), release ikisini birden bekliyor → **bozuk/sertleşmemiş
+imaj release'i bloklar** (kabul kriteri 2, needs grafiğiyle garantili).
+
+**Negatif taraf (tasarımla):** `docker-build` başarısız olursa release job'ı hiç tetiklenmez (`needs`).
+**Lokal ön-doğrulama:** imaj lokalde de build edildi ve dört assert (User=zero, Healthcheck=yes,
+prod-profile=OK, heap=OK) **PASS** — CI'dan önce ölçüldü.
