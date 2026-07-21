@@ -12,14 +12,8 @@ import { FormattedMessage, useIntl } from 'react-intl';
 import { Helmet } from 'react-helmet-async';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardHeading,
-  CardTable,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardTable } from '@/components/ui/card';
+import { PageHeader } from '@/components/common/page-header';
 import { DataGrid, DataGridContainer } from '@/components/ui/data-grid';
 import { DataGridPagination } from '@/components/ui/data-grid-pagination';
 import { DataGridTable } from '@/components/ui/data-grid-table';
@@ -68,7 +62,7 @@ function normalizeChangeType(value?: string): EntityChangeType | undefined {
   return undefined;
 }
 
-const cellSkeleton = <Skeleton className="h-5 w-full max-w-[120px]" />;
+const cellSkeleton = <Skeleton className="h-5 w-full max-w-30" />;
 
 /** Expanded-row detail: the property-level diff for one entity change. */
 function PropertyChangesTable({
@@ -327,6 +321,11 @@ export function EntityHistoryPage() {
         <title>{intl.formatMessage({ id: 'audit.entityHistory.title' })}</title>
       </Helmet>
 
+      <PageHeader
+        title={<FormattedMessage id="audit.entityHistory.title" />}
+        description={<FormattedMessage id="audit.entityHistory.subtitle" />}
+      />
+
       <DataGrid
         table={table}
         recordCount={recordCount}
@@ -334,17 +333,6 @@ export function EntityHistoryPage() {
         emptyMessage={intl.formatMessage({ id: 'audit.entityHistory.empty' })}
       >
         <Card>
-          <CardHeader className="flex-wrap gap-2 py-4">
-            <CardHeading>
-              <CardTitle>
-                <FormattedMessage id="audit.entityHistory.title" />
-              </CardTitle>
-              <CardDescription>
-                <FormattedMessage id="audit.entityHistory.subtitle" />
-              </CardDescription>
-            </CardHeading>
-          </CardHeader>
-
           {/* Filter panel */}
           <div className="flex flex-wrap items-end gap-3 border-b border-border px-5 py-4">
             <div className="flex flex-col gap-1.5">

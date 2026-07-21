@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  Bell,
   Check,
   CheckCheck,
   ChevronLeft,
@@ -11,15 +12,13 @@ import { useIntl } from 'react-intl';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardFooter, CardTable } from '@/components/ui/card';
 import {
-  Card,
-  CardFooter,
-  CardHeader,
-  CardHeading,
-  CardTable,
-  CardTitle,
-  CardToolbar,
-} from '@/components/ui/card';
+  DataEmpty,
+  DataError,
+  TableSkeleton,
+} from '@/components/common/data-state';
+import { PageHeader } from '@/components/common/page-header';
 import {
   Table,
   TableBody,
@@ -66,7 +65,7 @@ export function NotificationsInboxPage() {
   const t = useNotificationsMessages();
   const [page, setPage] = useState(0);
 
-  const { data, isLoading, isError } = useNotifications(page);
+  const { data, isLoading, isError, refetch } = useNotifications(page);
   const { data: unreadCount = 0 } = useUnreadCount();
   const markRead = useMarkRead();
   const markAllRead = useMarkAllRead();
@@ -77,53 +76,56 @@ export function NotificationsInboxPage() {
   const isLast = data?.last ?? true;
 
   return (
-    <div className="container-fluid space-y-5">
+    <div className="container-fluid">
       <Helmet>
         <title>{t('notifications.title')}</title>
       </Helmet>
 
-      <Card>
-        <CardHeader>
-          <CardHeading>
-            <CardTitle className="flex items-center gap-2">
-              {t('notifications.title')}
-              {unreadCount > 0 && (
-                <Badge variant="primary" appearance="light" size="sm">
-                  {unreadCount}
-                </Badge>
-              )}
-            </CardTitle>
-          </CardHeading>
-          <CardToolbar>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={markAllRead.isPending}
-              onClick={() => markAllRead.mutate()}
-            >
-              {markAllRead.isPending ? (
-                <LoaderCircle className="size-4 animate-spin" />
-              ) : (
-                <CheckCheck className="size-4" />
-              )}
-              {t('notifications.markAllRead')}
-            </Button>
-          </CardToolbar>
-        </CardHeader>
+      <PageHeader
+        title={
+          <span className="flex items-center gap-2">
+            {t('notifications.title')}
+            {unreadCount > 0 && (
+              <Badge variant="primary" appearance="light" size="sm">
+                {unreadCount}
+              </Badge>
+            )}
+          </span>
+        }
+        actions={
+          <Button
+            variant="outline"
+            disabled={markAllRead.isPending}
+            onClick={() => markAllRead.mutate()}
+          >
+            {markAllRead.isPending ? (
+              <LoaderCircle className="size-4 animate-spin" />
+            ) : (
+              <CheckCheck className="size-4" />
+            )}
+            {t('notifications.markAllRead')}
+          </Button>
+        }
+      />
 
+      <Card>
         <CardTable>
           {isLoading ? (
-            <div className="flex items-center justify-center py-14">
-              <LoaderCircle className="size-6 animate-spin text-muted-foreground" />
+            <div className="p-5">
+              <TableSkeleton rows={6} cols={4} />
             </div>
           ) : isError ? (
-            <p role="alert" className="py-14 text-center text-sm text-destructive">
-              {t('notifications.loadError')}
-            </p>
+            <div className="p-5">
+              <DataError
+                message={t('notifications.loadError')}
+                onRetry={() => refetch()}
+              />
+            </div>
           ) : notifications.length === 0 ? (
-            <p className="py-14 text-center text-sm text-muted-foreground">
-              {t('notifications.empty')}
-            </p>
+            <DataEmpty
+              icon={<Bell />}
+              title={t('notifications.empty')}
+            />
           ) : (
             <Table>
               <TableHeader>

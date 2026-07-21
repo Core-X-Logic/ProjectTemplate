@@ -15,6 +15,8 @@ import {
   CardHeading,
   CardTitle,
 } from '@/components/ui/card';
+import { DataError } from '@/components/common/data-state';
+import { PageHeader } from '@/components/common/page-header';
 import {
   Form,
   FormControl,
@@ -25,6 +27,7 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ChangePasswordCard } from '../components/change-password-card';
 import { useProfile, useUpdateProfile } from '../hooks';
 import { PROFILE_LIMITS } from '../types';
@@ -50,7 +53,7 @@ interface ProfileFormValues {
  */
 export function ProfilePage() {
   const intl = useIntl();
-  const { data: profile, isLoading, isError } = useProfile();
+  const { data: profile, isLoading, isError, refetch } = useProfile();
   const updateProfile = useUpdateProfile();
 
   const schema = useMemo(
@@ -137,22 +140,36 @@ export function ProfilePage() {
   const roles = profile?.roles ?? [];
 
   return (
-    <div className="container-fluid flex flex-col gap-5">
+    <div className="container-fluid">
       <Helmet>
         <title>{intl.formatMessage({ id: 'profile.title' })}</title>
       </Helmet>
 
+      <PageHeader
+        title={<FormattedMessage id="profile.title" />}
+        description={<FormattedMessage id="profile.description" />}
+      />
+
       {isLoading ? (
-        <p className="flex items-center gap-2 text-sm text-muted-foreground">
-          <LoaderCircle className="size-4 animate-spin" />
-          <FormattedMessage id="profile.loading" />
-        </p>
+        <Card>
+          <CardContent className="flex flex-col gap-4 py-8">
+            <Skeleton className="h-6 w-40" />
+            <Skeleton className="h-9 w-full max-w-md" />
+            <Skeleton className="h-9 w-full max-w-md" />
+            <Skeleton className="h-9 w-full max-w-md" />
+          </CardContent>
+        </Card>
       ) : isError ? (
-        <p role="alert" className="text-sm text-destructive">
-          <FormattedMessage id="profile.loadError" />
-        </p>
+        <Card>
+          <CardContent className="py-8">
+            <DataError
+              message={intl.formatMessage({ id: 'profile.loadError' })}
+              onRetry={() => refetch()}
+            />
+          </CardContent>
+        </Card>
       ) : (
-        <>
+        <div className="flex flex-col gap-6">
           <Card>
             <CardHeader className="py-5">
               <CardHeading>
@@ -306,7 +323,7 @@ export function ProfilePage() {
           </Card>
 
           <ChangePasswordCard />
-        </>
+        </div>
       )}
     </div>
   );

@@ -8,6 +8,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
 import { ApiError } from '@/api/client';
 import { Can } from '@/auth/rbac';
+import { PageHeader } from '@/components/common/page-header';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -239,6 +240,7 @@ function EditionFormContent() {
   if (isEdit && detailLoading) {
     return (
       <div className="container-fluid">
+        <PageHeader title={title} />
         <Card>
           <CardContent className="flex flex-col gap-4 py-8">
             <Skeleton className="h-8 w-56" />
@@ -253,6 +255,7 @@ function EditionFormContent() {
   if (isEdit && detailError) {
     return (
       <div className="container-fluid">
+        <PageHeader title={title} />
         <Card>
           <CardContent className="flex flex-col items-start gap-4 py-8">
             <p role="alert" className="text-sm text-destructive">
@@ -268,24 +271,27 @@ function EditionFormContent() {
   }
 
   return (
-    <div className="container-fluid flex flex-col gap-5">
+    <div className="container-fluid">
       <Helmet>
         <title>{title}</title>
       </Helmet>
 
-      <Card>
-        <CardHeader className="py-5">
-          <CardHeading>
-            <CardTitle>{title}</CardTitle>
-            {isEdit && detail?.edition?.name ? (
-              <CardDescription>{detail.edition.name}</CardDescription>
-            ) : null}
-          </CardHeading>
-        </CardHeader>
+      <PageHeader
+        title={title}
+        description={
+          isEdit && detail?.edition?.name ? detail.edition.name : undefined
+        }
+      />
 
-        <Form {...form}>
+      <div className="flex flex-col gap-6">
+        <Card>
+          <Form {...form}>
           <form onSubmit={submit} noValidate>
-            <CardContent className="flex flex-col gap-5 py-5">
+            <CardContent className="flex flex-col gap-6 py-5">
+              <section className="flex flex-col gap-5">
+              <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                <FormattedMessage id="editions.form.sectionGeneral" />
+              </h2>
               <FormField
                 control={form.control}
                 name="name"
@@ -356,6 +362,12 @@ function EditionFormContent() {
                 )}
               />
 
+              </section>
+
+              <section className="flex flex-col gap-5">
+              <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                <FormattedMessage id="editions.form.sectionPricing" />
+              </h2>
               <div className="grid gap-5 sm:grid-cols-3">
                 <FormField
                   control={form.control}
@@ -430,6 +442,12 @@ function EditionFormContent() {
                 />
               </div>
 
+              </section>
+
+              <section className="flex flex-col gap-5">
+              <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                <FormattedMessage id="editions.form.sectionLifecycle" />
+              </h2>
               <div className="grid gap-5 sm:grid-cols-3">
                 <FormField
                   control={form.control}
@@ -564,6 +582,7 @@ function EditionFormContent() {
                   </FormItem>
                 )}
               />
+              </section>
             </CardContent>
 
             <CardFooter className="justify-end gap-2.5 py-5">
@@ -618,7 +637,8 @@ function EditionFormContent() {
             </p>
           )}
         </CardContent>
-      </Card>
+        </Card>
+      </div>
     </div>
   );
 }

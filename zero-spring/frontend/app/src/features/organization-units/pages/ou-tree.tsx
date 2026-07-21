@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { LoaderCircle, Plus, TriangleAlert } from 'lucide-react';
+import { Building2, LoaderCircle, Plus } from 'lucide-react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { Helmet } from 'react-helmet-async';
 import { Can } from '@/auth/rbac';
@@ -14,12 +14,13 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+  DataEmpty,
+  DataError,
+  TableSkeleton,
+} from '@/components/common/data-state';
+import { PageHeader } from '@/components/common/page-header';
 import {
   Dialog,
   DialogContent,
@@ -226,59 +227,56 @@ function OuTreeScreen() {
   };
 
   return (
-    <div className="container-fluid space-y-5">
+    <div className="container-fluid">
       <Helmet>
         <title>{intl.formatMessage({ id: 'organizationUnits.title' })}</title>
       </Helmet>
 
-      <Card>
-        <CardHeader className="flex-wrap gap-2.5">
-          <div className="flex flex-col gap-1">
-            <CardTitle>
-              <FormattedMessage id="organizationUnits.title" />
-            </CardTitle>
-            <span className="text-sm text-muted-foreground">
-              <FormattedMessage id="organizationUnits.description" />
-            </span>
-          </div>
+      <PageHeader
+        title={<FormattedMessage id="organizationUnits.title" />}
+        description={<FormattedMessage id="organizationUnits.description" />}
+        actions={
           <Can permission={OU_MANAGE_PERMISSION}>
             <Button
               type="button"
-              size="sm"
               onClick={() => setDialog({ kind: 'create' })}
             >
               <Plus className="size-4" />
               <FormattedMessage id="organizationUnits.newRoot" />
             </Button>
           </Can>
-        </CardHeader>
+        }
+      />
 
-        <CardContent>
-          {isPending && (
-            <div className="flex items-center justify-center py-16">
-              <LoaderCircle className="size-6 animate-spin text-muted-foreground" />
-            </div>
-          )}
-
-          {isError && !isPending && (
-            <div className="flex flex-col items-center gap-3 py-16 text-center">
-              <TriangleAlert className="size-8 text-destructive" />
-              <p className="text-sm text-muted-foreground">
-                <FormattedMessage id="organizationUnits.loadError" />
-              </p>
-              <Button type="button" variant="outline" onClick={() => refetch()}>
-                <FormattedMessage id="organizationUnits.retry" />
-              </Button>
-            </div>
-          )}
-
-          {!isPending && !isError && tree.length === 0 && (
-            <p className="py-16 text-center text-sm text-muted-foreground">
-              <FormattedMessage id="organizationUnits.empty" />
-            </p>
-          )}
-
-          {!isPending && !isError && tree.length > 0 && (
+      <Card>
+        <CardContent className="py-5">
+          {isPending ? (
+            <TableSkeleton rows={5} cols={1} />
+          ) : isError ? (
+            <DataError
+              message={intl.formatMessage({
+                id: 'organizationUnits.loadError',
+              })}
+              onRetry={() => refetch()}
+              retryLabel={intl.formatMessage({ id: 'organizationUnits.retry' })}
+            />
+          ) : tree.length === 0 ? (
+            <DataEmpty
+              icon={<Building2 />}
+              title={intl.formatMessage({ id: 'organizationUnits.empty' })}
+              action={
+                <Can permission={OU_MANAGE_PERMISSION}>
+                  <Button
+                    type="button"
+                    onClick={() => setDialog({ kind: 'create' })}
+                  >
+                    <Plus className="size-4" />
+                    <FormattedMessage id="organizationUnits.newRoot" />
+                  </Button>
+                </Can>
+              }
+            />
+          ) : (
             <ul
               role="tree"
               aria-label={intl.formatMessage({

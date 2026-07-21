@@ -82,9 +82,26 @@ const tr: Record<string, string> = {
 
   // Dashboard
   'dashboard.welcome': 'Hoş geldiniz, {name}',
+  'dashboard.subtitle': 'Yönetebileceklerinize hızlı bir bakış.',
   'dashboard.tenantLabel': 'Aktif kiracı',
   'dashboard.comingSoonSlice':
     'Özellik modülleri bir sonraki dikey dilimde gelecek.',
+  'dashboard.quickAccess': 'Hızlı erişim',
+  'dashboard.quickAccessEmpty':
+    'Henüz hiçbir modüle erişiminiz yok. Yöneticinizle iletişime geçin.',
+  'dashboard.card.users':
+    'Kişileri davet edin, hesapları yönetin ve erişimi sıfırlayın.',
+  'dashboard.card.roles': 'Rolleri ve verdikleri izinleri tanımlayın.',
+  'dashboard.card.organizationUnits':
+    'Ekibinizi birim hiyerarşisi olarak düzenleyin.',
+  'dashboard.card.tenants': 'Platformdaki kiracıları oluşturun ve yönetin.',
+  'dashboard.card.notifications': 'En son bildirimlerinizi gözden geçirin.',
+  'dashboard.card.audit': 'Tüm sunucu işlemlerini ve değişiklikleri izleyin.',
+  'dashboard.card.editions':
+    'Kiracıların abone olabileceği paketleri tanımlayın.',
+  'dashboard.card.subscriptions':
+    'Kiracı bazında paket atayın ve faturalandırmayı yönetin.',
+  'dashboard.card.settings': 'Kiracı ve host tercihlerini yapılandırın.',
 
   // Feature catalogues (slice B + C + F5-A) — namespaced, no key collisions
   ...usersMessagesTr,

@@ -18,6 +18,12 @@ export const settingsEn = {
   'settings.subtitle': 'Manage tenant and host configuration.',
   'settings.tabs.tenant': 'Tenant',
   'settings.tabs.host': 'Host',
+  'settings.scope.tenant.title': 'Tenant settings',
+  'settings.scope.tenant.description':
+    'Configuration that applies to the current tenant.',
+  'settings.scope.host.title': 'Host settings',
+  'settings.scope.host.description':
+    'Platform-wide configuration managed by the host.',
   'settings.save': 'Save',
   'settings.saved': 'Settings saved.',
   'settings.default': 'Default: {value}',
@@ -34,6 +40,12 @@ export const settingsTr: Record<SettingsMessageId, string> = {
   'settings.subtitle': 'Kiracı ve host yapılandırmasını yönetin.',
   'settings.tabs.tenant': 'Kiracı',
   'settings.tabs.host': 'Host',
+  'settings.scope.tenant.title': 'Kiracı ayarları',
+  'settings.scope.tenant.description':
+    'Geçerli kiracıya uygulanan yapılandırma.',
+  'settings.scope.host.title': 'Host ayarları',
+  'settings.scope.host.description':
+    'Host tarafından yönetilen platform genelindeki yapılandırma.',
   'settings.save': 'Kaydet',
   'settings.saved': 'Ayarlar kaydedildi.',
   'settings.default': 'Varsayılan: {value}',

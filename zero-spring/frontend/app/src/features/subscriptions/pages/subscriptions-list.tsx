@@ -27,13 +27,13 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardHeading,
-  CardTitle,
-} from '@/components/ui/card';
+  DataEmpty,
+  DataError,
+  TableSkeleton,
+} from '@/components/common/data-state';
+import { PageHeader } from '@/components/common/page-header';
 import { DataGrid, DataGridContainer } from '@/components/ui/data-grid';
 import { DataGridColumnHeader } from '@/components/ui/data-grid-column-header';
 import { DataGridPagination } from '@/components/ui/data-grid-pagination';
@@ -199,7 +199,7 @@ function SubscriptionsListContent() {
     [pagination],
   );
 
-  const { data, isLoading, isError } = useSubscriptions(params);
+  const { data, isLoading, isError, refetch } = useSubscriptions(params);
   const activate = useActivateSubscription();
   const cancel = useCancelSubscription();
 
@@ -372,39 +372,38 @@ function SubscriptionsListContent() {
         <title>{intl.formatMessage({ id: 'subscriptions.list.title' })}</title>
       </Helmet>
 
-      <Card>
-        <CardHeader className="py-5">
-          <CardHeading>
-            <CardTitle>
-              <FormattedMessage id="subscriptions.list.title" />
-            </CardTitle>
-            <CardDescription>
-              <FormattedMessage id="subscriptions.list.description" />
-            </CardDescription>
-          </CardHeading>
-        </CardHeader>
+      <PageHeader
+        title={<FormattedMessage id="subscriptions.list.title" />}
+        description={<FormattedMessage id="subscriptions.list.description" />}
+      />
 
-        <div className="flex flex-col gap-4 p-5">
-          {isError ? (
-            <p role="alert" className="text-sm text-destructive">
-              <FormattedMessage id="subscriptions.list.error" />
-            </p>
-          ) : (
-            <DataGrid
-              table={table}
-              recordCount={recordCount}
-              isLoading={isLoading}
-              emptyMessage={intl.formatMessage({
-                id: 'subscriptions.list.empty',
-              })}
-            >
+      <Card>
+        {isError ? (
+          <div className="p-5">
+            <DataError
+              message={intl.formatMessage({ id: 'subscriptions.list.error' })}
+              onRetry={() => refetch()}
+            />
+          </div>
+        ) : isLoading ? (
+          <div className="p-5">
+            <TableSkeleton rows={pagination.pageSize} cols={columns.length} />
+          </div>
+        ) : recordCount === 0 ? (
+          <DataEmpty
+            icon={<CreditCard />}
+            title={intl.formatMessage({ id: 'subscriptions.list.empty' })}
+          />
+        ) : (
+          <div className="flex flex-col gap-4 p-5">
+            <DataGrid table={table} recordCount={recordCount}>
               <DataGridContainer>
                 <DataGridTable />
               </DataGridContainer>
               <DataGridPagination />
             </DataGrid>
-          )}
-        </div>
+          </div>
+        )}
       </Card>
 
       <AssignEditionDialog

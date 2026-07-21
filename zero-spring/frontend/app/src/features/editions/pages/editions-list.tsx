@@ -5,7 +5,7 @@ import {
   PaginationState,
   useReactTable,
 } from '@tanstack/react-table';
-import { EllipsisVertical, Pencil, Plus, Trash2 } from 'lucide-react';
+import { EllipsisVertical, Package, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Helmet } from 'react-helmet-async';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { useNavigate } from 'react-router-dom';
@@ -21,14 +21,13 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardHeading,
-  CardTitle,
-  CardToolbar,
-} from '@/components/ui/card';
+  DataEmpty,
+  DataError,
+  TableSkeleton,
+} from '@/components/common/data-state';
+import { PageHeader } from '@/components/common/page-header';
 import { DataGrid, DataGridContainer } from '@/components/ui/data-grid';
 import { DataGridColumnHeader } from '@/components/ui/data-grid-column-header';
 import { DataGridPagination } from '@/components/ui/data-grid-pagination';
@@ -151,7 +150,7 @@ function EditionsListContent() {
     [pagination],
   );
 
-  const { data, isLoading, isError } = useEditions(params);
+  const { data, isLoading, isError, refetch } = useEditions(params);
   const deleteEdition = useDeleteEdition();
 
   const [editionToDelete, setEditionToDelete] = useState<EditionDto | null>(
@@ -343,45 +342,54 @@ function EditionsListContent() {
         <title>{intl.formatMessage({ id: 'editions.list.title' })}</title>
       </Helmet>
 
-      <Card>
-        <CardHeader className="py-5">
-          <CardHeading>
-            <CardTitle>
-              <FormattedMessage id="editions.list.title" />
-            </CardTitle>
-            <CardDescription>
-              <FormattedMessage id="editions.list.description" />
-            </CardDescription>
-          </CardHeading>
-          <CardToolbar>
-            <Can permission="editions.manage">
-              <Button onClick={() => navigate('/editions/new')}>
-                <Plus />
-                <FormattedMessage id="editions.list.create" />
-              </Button>
-            </Can>
-          </CardToolbar>
-        </CardHeader>
+      <PageHeader
+        title={<FormattedMessage id="editions.list.title" />}
+        description={<FormattedMessage id="editions.list.description" />}
+        actions={
+          <Can permission="editions.manage">
+            <Button onClick={() => navigate('/editions/new')}>
+              <Plus />
+              <FormattedMessage id="editions.list.create" />
+            </Button>
+          </Can>
+        }
+      />
 
-        <div className="flex flex-col gap-4 p-5">
-          {isError ? (
-            <p role="alert" className="text-sm text-destructive">
-              <FormattedMessage id="editions.list.error" />
-            </p>
-          ) : (
-            <DataGrid
-              table={table}
-              recordCount={recordCount}
-              isLoading={isLoading}
-              emptyMessage={intl.formatMessage({ id: 'editions.list.empty' })}
-            >
+      <Card>
+        {isError ? (
+          <div className="p-5">
+            <DataError
+              message={intl.formatMessage({ id: 'editions.list.error' })}
+              onRetry={() => refetch()}
+            />
+          </div>
+        ) : isLoading ? (
+          <div className="p-5">
+            <TableSkeleton rows={pagination.pageSize} cols={columns.length} />
+          </div>
+        ) : recordCount === 0 ? (
+          <DataEmpty
+            icon={<Package />}
+            title={intl.formatMessage({ id: 'editions.list.empty' })}
+            action={
+              <Can permission="editions.manage">
+                <Button onClick={() => navigate('/editions/new')}>
+                  <Plus />
+                  <FormattedMessage id="editions.list.create" />
+                </Button>
+              </Can>
+            }
+          />
+        ) : (
+          <div className="flex flex-col gap-4 p-5">
+            <DataGrid table={table} recordCount={recordCount}>
               <DataGridContainer>
                 <DataGridTable />
               </DataGridContainer>
               <DataGridPagination />
             </DataGrid>
-          )}
-        </div>
+          </div>
+        )}
       </Card>
 
       <AlertDialog

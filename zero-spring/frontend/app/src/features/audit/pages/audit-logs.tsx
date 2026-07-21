@@ -13,15 +13,8 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardHeading,
-  CardTable,
-  CardTitle,
-  CardToolbar,
-} from '@/components/ui/card';
+import { Card, CardTable } from '@/components/ui/card';
+import { PageHeader } from '@/components/common/page-header';
 import { DataGrid, DataGridContainer } from '@/components/ui/data-grid';
 import { DataGridColumnHeader } from '@/components/ui/data-grid-column-header';
 import { DataGridPagination } from '@/components/ui/data-grid-pagination';
@@ -88,7 +81,7 @@ function statusVariant(
   return 'secondary';
 }
 
-const cellSkeleton = <Skeleton className="h-5 w-full max-w-[120px]" />;
+const cellSkeleton = <Skeleton className="h-5 w-full max-w-30" />;
 
 /**
  * Audit-log list — server-paged, server-sorted data-grid over
@@ -355,6 +348,27 @@ export function AuditLogsPage() {
         <title>{intl.formatMessage({ id: 'audit.logs.title' })}</title>
       </Helmet>
 
+      <PageHeader
+        title={<FormattedMessage id="audit.logs.title" />}
+        description={<FormattedMessage id="audit.logs.subtitle" />}
+        actions={
+          <Can permission="auditlogs.read">
+            <Button
+              variant="outline"
+              disabled={exportAudit.isPending}
+              onClick={() =>
+                exportAudit.mutate(exportParams, {
+                  onSuccess: (blob) => downloadBlob(blob, 'audit-logs.xlsx'),
+                })
+              }
+            >
+              <Download />
+              <FormattedMessage id="audit.action.export" />
+            </Button>
+          </Can>
+        }
+      />
+
       <DataGrid
         table={table}
         recordCount={recordCount}
@@ -362,34 +376,6 @@ export function AuditLogsPage() {
         emptyMessage={intl.formatMessage({ id: 'audit.empty' })}
       >
         <Card>
-          <CardHeader className="flex-wrap gap-2 py-4">
-            <CardHeading>
-              <CardTitle>
-                <FormattedMessage id="audit.logs.title" />
-              </CardTitle>
-              <CardDescription>
-                <FormattedMessage id="audit.logs.subtitle" />
-              </CardDescription>
-            </CardHeading>
-            <CardToolbar>
-              <Can permission="auditlogs.read">
-                <Button
-                  variant="outline"
-                  disabled={exportAudit.isPending}
-                  onClick={() =>
-                    exportAudit.mutate(exportParams, {
-                      onSuccess: (blob) =>
-                        downloadBlob(blob, 'audit-logs.xlsx'),
-                    })
-                  }
-                >
-                  <Download />
-                  <FormattedMessage id="audit.action.export" />
-                </Button>
-              </Can>
-            </CardToolbar>
-          </CardHeader>
-
           {/* Filter panel */}
           <div className="flex flex-wrap items-end gap-3 border-b border-border px-5 py-4">
             <h3 className="w-full text-sm font-medium text-foreground">

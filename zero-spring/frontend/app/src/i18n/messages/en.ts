@@ -85,9 +85,24 @@ const en: Record<string, string> = {
 
   // Dashboard
   'dashboard.welcome': 'Welcome, {name}',
+  'dashboard.subtitle': 'Here is a quick overview of what you can manage.',
   'dashboard.tenantLabel': 'Active tenant',
   'dashboard.comingSoonSlice':
     'Feature modules land in the next vertical slice.',
+  'dashboard.quickAccess': 'Quick access',
+  'dashboard.quickAccessEmpty':
+    'You do not have access to any modules yet. Contact your administrator.',
+  'dashboard.card.users': 'Invite people, manage accounts and reset access.',
+  'dashboard.card.roles': 'Define roles and the permissions they grant.',
+  'dashboard.card.organizationUnits':
+    'Organize your team into a unit hierarchy.',
+  'dashboard.card.tenants': 'Create and manage tenants on the platform.',
+  'dashboard.card.notifications': 'Review your latest notifications.',
+  'dashboard.card.audit': 'Trace every server-side action and change.',
+  'dashboard.card.editions': 'Define the packages tenants can subscribe to.',
+  'dashboard.card.subscriptions':
+    'Assign editions and manage billing per tenant.',
+  'dashboard.card.settings': 'Configure tenant and host preferences.',
 
   // Feature catalogues (slice B + C + F5-A) — namespaced, no key collisions
   ...usersMessagesEn,

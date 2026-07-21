@@ -1,9 +1,10 @@
 import { useMemo } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { LoaderCircle } from 'lucide-react';
+import { CheckCircle2, LoaderCircle } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { z } from 'zod';
+import { ApiError } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -183,6 +184,27 @@ export function ChangePasswordCard() {
                 </FormItem>
               )}
             />
+
+            {changePassword.isSuccess ? (
+              <p
+                role="status"
+                className="flex items-center gap-2 text-sm text-success"
+              >
+                <CheckCircle2 className="size-4" aria-hidden />
+                <FormattedMessage id="profile.password.success" />
+              </p>
+            ) : null}
+
+            {changePassword.isError ? (
+              <p role="alert" className="text-sm text-destructive">
+                {changePassword.error instanceof ApiError &&
+                changePassword.error.detail ? (
+                  changePassword.error.detail
+                ) : (
+                  <FormattedMessage id="profile.password.error" />
+                )}
+              </p>
+            ) : null}
 
             <div>
               <Button type="submit" disabled={isSubmitting}>

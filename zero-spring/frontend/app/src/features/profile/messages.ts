@@ -46,6 +46,8 @@ export const profileEn = {
     'The new password must differ from the current one.',
   'profile.password.submit': 'Change password',
   'profile.password.submitting': 'Saving…',
+  'profile.password.success': 'Your password has been changed.',
+  'profile.password.error': 'The password could not be changed.',
 
   // Toasts
   'profile.toast.updated': 'Profile updated.',
@@ -98,6 +100,8 @@ export const profileTr: Record<ProfileMessageId, string> = {
     'Yeni parola mevcut paroladan farklı olmalıdır.',
   'profile.password.submit': 'Parolayı değiştir',
   'profile.password.submitting': 'Kaydediliyor…',
+  'profile.password.success': 'Parolanız değiştirildi.',
+  'profile.password.error': 'Parola değiştirilemedi.',
 
   // Toasts
   'profile.toast.updated': 'Profil güncellendi.',

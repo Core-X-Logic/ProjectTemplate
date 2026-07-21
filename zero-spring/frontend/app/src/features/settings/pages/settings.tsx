@@ -5,15 +5,9 @@ import { Helmet } from 'react-helmet-async';
 import { useIntl } from 'react-intl';
 import { Can, usePermission } from '@/auth/rbac';
 import { RequireAuth } from '@/auth/require-auth';
+import { PageHeader } from '@/components/common/page-header';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardHeading,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Form,
   FormControl,
@@ -23,6 +17,7 @@ import {
   FormLabel,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   useHostSettings,
@@ -30,7 +25,10 @@ import {
   useUpdateHostSettings,
   useUpdateTenantSettings,
 } from '@/features/settings/hooks';
-import { useSettingsMessages } from '@/features/settings/messages';
+import {
+  useSettingsMessages,
+  type SettingsMessageId,
+} from '@/features/settings/messages';
 import type { SettingDto, SettingUpdate } from '@/features/settings/types';
 
 const TENANT_PERMISSION = 'settings.tenant.manage';
@@ -148,8 +146,24 @@ function SettingsForm({
   );
 }
 
+/** Skeleton echoing a short field list while a scope's settings load. */
+function SettingsFormSkeleton() {
+  return (
+    <div className="flex flex-col gap-4">
+      {Array.from({ length: 3 }).map((_, index) => (
+        <div key={index} className="flex flex-col gap-2">
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-9 w-full" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 interface SettingsPanelProps {
   managePermission: string;
+  scopeTitle: SettingsMessageId;
+  scopeDescription: SettingsMessageId;
   settings: SettingDto[] | undefined;
   isLoading: boolean;
   isError: boolean;
@@ -160,6 +174,8 @@ interface SettingsPanelProps {
 /** Loading / error / empty / form gate shared by both scope panels. */
 function SettingsPanel({
   managePermission,
+  scopeTitle,
+  scopeDescription,
   settings,
   isLoading,
   isError,
@@ -168,37 +184,34 @@ function SettingsPanel({
 }: SettingsPanelProps) {
   const t = useSettingsMessages();
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-14">
-        <LoaderCircle className="size-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <p role="alert" className="py-14 text-center text-sm text-destructive">
-        {t('settings.loadError')}
-      </p>
-    );
-  }
-
-  if (!settings || settings.length === 0) {
-    return (
-      <p className="py-14 text-center text-sm text-muted-foreground">
-        {t('settings.empty')}
-      </p>
-    );
-  }
-
   return (
-    <SettingsForm
-      settings={settings}
-      managePermission={managePermission}
-      isSaving={isSaving}
-      onSave={onSave}
-    />
+    <div className="flex flex-col gap-5 pt-2">
+      <div className="flex flex-col gap-1">
+        <h2 className="text-sm font-semibold tracking-tight text-foreground">
+          {t(scopeTitle)}
+        </h2>
+        <p className="text-sm text-muted-foreground">{t(scopeDescription)}</p>
+      </div>
+
+      {isLoading ? (
+        <SettingsFormSkeleton />
+      ) : isError ? (
+        <p role="alert" className="py-14 text-center text-sm text-destructive">
+          {t('settings.loadError')}
+        </p>
+      ) : !settings || settings.length === 0 ? (
+        <p className="py-14 text-center text-sm text-muted-foreground">
+          {t('settings.empty')}
+        </p>
+      ) : (
+        <SettingsForm
+          settings={settings}
+          managePermission={managePermission}
+          isSaving={isSaving}
+          onSave={onSave}
+        />
+      )}
+    </div>
   );
 }
 
@@ -210,6 +223,8 @@ function TenantSettingsPanel() {
   return (
     <SettingsPanel
       managePermission={TENANT_PERMISSION}
+      scopeTitle="settings.scope.tenant.title"
+      scopeDescription="settings.scope.tenant.description"
       settings={data}
       isLoading={isLoading}
       isError={isError}
@@ -227,6 +242,8 @@ function HostSettingsPanel() {
   return (
     <SettingsPanel
       managePermission={HOST_PERMISSION}
+      scopeTitle="settings.scope.host.title"
+      scopeDescription="settings.scope.host.description"
       settings={data}
       isLoading={isLoading}
       isError={isError}
@@ -251,14 +268,13 @@ function SettingsContent() {
         <title>{t('settings.title')}</title>
       </Helmet>
 
+      <PageHeader
+        title={t('settings.title')}
+        description={t('settings.subtitle')}
+      />
+
       <Card>
-        <CardHeader>
-          <CardHeading>
-            <CardTitle>{t('settings.title')}</CardTitle>
-            <CardDescription>{t('settings.subtitle')}</CardDescription>
-          </CardHeading>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="py-5">
           <Tabs defaultValue={defaultTab}>
             <TabsList variant="line">
               <Can permission={TENANT_PERMISSION}>

@@ -47,6 +47,9 @@ export const editionsEn = {
   // Form page
   'editions.form.createTitle': 'Create edition',
   'editions.form.editTitle': 'Edit edition',
+  'editions.form.sectionGeneral': 'General',
+  'editions.form.sectionPricing': 'Pricing',
+  'editions.form.sectionLifecycle': 'Trial & lifecycle',
   'editions.form.name': 'Name',
   'editions.form.namePlaceholder': 'e.g. standard',
   'editions.form.nameHint':
@@ -141,6 +144,9 @@ export const editionsTr: Record<EditionsMessageId, string> = {
   // Form page
   'editions.form.createTitle': 'Paket oluştur',
   'editions.form.editTitle': 'Paketi düzenle',
+  'editions.form.sectionGeneral': 'Genel',
+  'editions.form.sectionPricing': 'Fiyatlandırma',
+  'editions.form.sectionLifecycle': 'Deneme ve yaşam döngüsü',
   'editions.form.name': 'Ad',
   'editions.form.namePlaceholder': 'örn. standard',
   'editions.form.nameHint': 'Benzersiz teknik ad; sonradan değiştirilemez.',
