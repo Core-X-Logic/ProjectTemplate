@@ -30,12 +30,15 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.DelegatingPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.proc.SecurityContext;
+import com.nimbusds.jwt.proc.DefaultJWTProcessor;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
-import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtValidators;
+import org.springframework.security.oauth2.jwt.JwtIssuerValidator;
+import org.springframework.security.oauth2.jwt.JwtTimestampValidator;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
@@ -49,7 +52,8 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.CorsFilter;
 
-import javax.crypto.spec.SecretKeySpec;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -309,17 +313,57 @@ public class SecurityConfig {
         return registration;
     }
 
+    /**
+     * PROD-R16. The resource-server decoder, kid-aware and revocation-enforcing.
+     *
+     * <p><b>Key selection.</b> Rather than a single fixed key, the Nimbus processor selects the HMAC
+     * key by the token's {@code kid} through {@link JwtKeyRing}: a known kid verifies with its own key;
+     * a <em>missing</em> kid (an in-flight token from the pre-rotation code during a rolling deploy)
+     * falls back to the active key; an <em>unknown</em> kid (a retired or foreign key) resolves to no
+     * key and is rejected (fail-closed). The algorithm is pinned to HS512 to shut the door on
+     * algorithm-confusion.
+     *
+     * <p><b>Claim validation.</b> The Nimbus claims verifier is a no-op on purpose: claim checks run in
+     * the Spring {@code OAuth2TokenValidator} chain below — configurable-skew timestamps, the issuer,
+     * the audience (PROD-R16), and, when revocation is enabled, {@link RevokedTokenValidator}.
+     */
     @Bean
-    public JwtDecoder jwtDecoder(JwtProperties properties) {
-        SecretKeySpec secretKey = JwtService.buildSecretKey(properties.getSecret());
-        NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(secretKey)
-                .macAlgorithm(MacAlgorithm.HS512)
-                .build();
-        // default validators (timestamps) + mandatory issuer check + audience (PROD-R16)
-        OAuth2TokenValidator<Jwt> validator = new DelegatingOAuth2TokenValidator<>(
-                JwtValidators.createDefaultWithIssuer(properties.getIssuer()),
-                new JwtAudienceValidator(properties.getAudience()));
-        decoder.setJwtValidator(validator);
+    public JwtDecoder jwtDecoder(JwtProperties properties,
+                                 JwtKeyRing keyRing,
+                                 ObjectProvider<TokenRevocationService> revocationServices) {
+        DefaultJWTProcessor<SecurityContext> processor = new DefaultJWTProcessor<>();
+        processor.setJWSKeySelector((header, context) -> {
+            if (!JWSAlgorithm.HS512.equals(header.getAlgorithm())) {
+                return Collections.emptyList();
+            }
+            return keyRing.verificationKeys(header.getKeyID());
+        });
+        // Spring's validator chain owns claim validation; keep Nimbus from second-guessing it.
+        processor.setJWTClaimsSetVerifier((claims, context) -> { });
+        NimbusJwtDecoder decoder = new NimbusJwtDecoder(processor);
+
+        List<OAuth2TokenValidator<Jwt>> validators = new ArrayList<>();
+        validators.add(new JwtTimestampValidator(properties.getClockSkew()));
+        validators.add(new JwtIssuerValidator(properties.getIssuer()));
+        validators.add(new JwtAudienceValidator(properties.getAudience()));
+        TokenRevocationService revocation = revocationServices.getIfAvailable();
+        if (properties.getRevocation().isEnabled()) {
+            // F1 (PROD-R16): fail-fast on the "enabled ⟹ enforced" invariant. TokenRevocationService is
+            // @ConditionalOnProperty(revocation.enabled), so enabled normally implies present. If it is
+            // enabled yet ABSENT — a future auto-config change made it un-instantiable, or some condition
+            // silently dropped it — building the decoder without the validator would leave boot green and
+            // revocation silently gone. Refuse to start instead of enforcing nothing.
+            if (revocation == null) {
+                throw new IllegalStateException(
+                        "zero.jwt.revocation.enabled is true but no TokenRevocationService is available, so "
+                        + "revocation would be silently unenforced. Refusing to start (PROD-R16). Ensure Redis "
+                        + "auto-configuration and a StringRedisTemplate are present, or set "
+                        + "zero.jwt.revocation.enabled=false to disable revocation deliberately.");
+            }
+            validators.add(new RevokedTokenValidator(revocation));
+        }
+        // enabled=false: intentionally no revocation validator (even if a bean somehow exists).
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(validators));
         return decoder;
     }
 

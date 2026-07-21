@@ -104,6 +104,33 @@ zero:
     # PROD-R16: tokens are bound to this audience and the decoder rejects anything else, so a token
     # minted for another service that happens to share the secret cannot be replayed here.
     audience: ${JWT_AUDIENCE:zero-platform-api}
+    # PROD-R16 (key rotation): the signing key ring. Left unset here — the single zero.jwt.secret above
+    # is synthesised into a one-key ring under kid 'legacy', so existing deployments are unchanged. To
+    # rotate keys with zero downtime (JwtKeyRing / RELEASE-RUNBOOK §1.3-K): add the new key below, then
+    # flip active-kid to it, keep the old key for a grace window >= access-token-ttl, then remove it.
+    # active-kid: ${JWT_ACTIVE_KID:}
+    # keys:
+    #   - kid: ${JWT_KEY_1_KID}
+    #     secret: ${JWT_KEY_1_SECRET}
+    #   - kid: ${JWT_KEY_2_KID}
+    #     secret: ${JWT_KEY_2_SECRET}
+    # PROD-R16: explicit clock-skew tolerance for the exp/nbf/iat checks (Spring's implicit default is
+    # 60s). Kept small on purpose; env-overridable.
+    clock-skew: ${JWT_CLOCK_SKEW:30s}
+    revocation:
+      # PROD-R16 (access-token revocation). A short-lived HS512 access token cannot be un-issued, so a
+      # logout / password change / 2FA disable would otherwise leave it usable until it expires. When
+      # enabled, revoked jti's and per-user "not before" markers live in Redis (the same Lettuce client
+      # the cache and rate limiter share) and are enforced on every authenticated request by the
+      # decoder's validator chain.
+      #
+      # FAIL-CLOSED: if Redis is unreachable during the check the request is REJECTED, not honoured —
+      # the store is the only source of truth for what is revoked. The conscious trade (a Redis outage
+      # denies auth) is bounded by the short access-token TTL; operators run Redis HA. Deliberately NOT
+      # in the readiness group (PROD-R13 stance) — a revocation-store blip must not evict the instance.
+      # The automated test profile turns this OFF so the suite needs no Redis container.
+      enabled: ${JWT_REVOCATION_ENABLED:true}
+      key-prefix: ${JWT_REVOCATION_KEY_PREFIX:zero:jwt:revoked:}
   crypto:
     # At-rest field-encryption key (base64 of exactly 32 bytes = AES-256). No default, same rule as
     # zero.jwt.secret: a committed default is public in the repo history and a profile mishap would

@@ -4,6 +4,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 
+import java.time.Instant;
+
 public final class CurrentUser {
 
     private CurrentUser() {
@@ -15,6 +17,18 @@ public final class CurrentUser {
             return null;
         }
         return Long.valueOf(jwt.getSubject());
+    }
+
+    /** The current access token's {@code jti} (PROD-R16 revocation handle), or null if unauthenticated. */
+    public static String jti() {
+        Jwt jwt = jwt();
+        return jwt == null ? null : jwt.getId();
+    }
+
+    /** The current access token's {@code exp}, or null if unauthenticated. */
+    public static Instant expiresAt() {
+        Jwt jwt = jwt();
+        return jwt == null ? null : jwt.getExpiresAt();
     }
 
     public static Long tenantId() {

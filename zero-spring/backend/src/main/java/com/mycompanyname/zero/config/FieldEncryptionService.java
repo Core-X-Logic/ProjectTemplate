@@ -24,7 +24,7 @@ import java.util.Base64;
  * {@code [12-byte IV][ciphertext][16-byte GCM tag]}.
  *
  * <p>The key is resolved once at construction and its length checked there — the same fail-fast shape
- * as {@code JwtService.buildSecretKey} — so a mis-sized key breaks startup, not the first encryption.
+ * as {@code JwtKeyRing.buildKey} — so a mis-sized key breaks startup, not the first encryption.
  * {@link FieldEncryptionKeyValidator} has already vetted the same value against the active profiles by
  * the time this bean is built; the length check here is the second, context-free lock.
  */

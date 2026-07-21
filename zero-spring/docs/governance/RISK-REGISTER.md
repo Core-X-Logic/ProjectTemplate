@@ -15,7 +15,7 @@ Aşağıdaki kayıtların çoğu bu şablonun **kendi geçmişidir** ve sizi ba�
 | **PROD-R23** | Branch protection **ücretsiz planda kurulamıyor** (403) | CI zinciri raporlar ama **kırmızı check push'u engellemez**. Blokaj insan disiplininde. `SETUP-NEW-PROJECT.md` §2 |
 | ~~**PROD-R27**~~ | ~~Dockerfile'ı hiçbir gate build etmiyor~~ | ✅ **KAPANDI (2026-07-21, [run 29831107658](https://github.com/Core-X-Logic/ProjectTemplate/actions/runs/29831107658)).** Yeni `docker-build` gate'i backend imajını buildx ile build ediyor VE dört sertleştirmeyi assert ediyor (non-root `zero` · HEALTHCHECK · `SPRING_PROFILES_ACTIVE=prod` · heap tavanı) — log: *"Image hardening doğrulandı"*. `release` artık `[security-checks, docker-build]` bekliyor: bozuk/sertleşmemiş imaj release'i bloklar. Push YOK (registry hedefi klonlayanın) |
 | ~~**PROD-R6**~~ (scope) | ~~Rate limit bucket'ları **JVM-local** → N replika = N × limit~~ | ✅ **KAPANDI (dağıtık).** Bucket'lar artık Redis'te (bucket4j `LettuceBasedProxyManager`, Spring'in mevcut Lettuce istemcisi yeniden kullanılır): `capacity` tek küme-geneli limittir, N × limit değil. Redis erişilemezse **instance-local fallback**'e düşer (eski davranış) — asla açık (sınırsız brute force) ya da kapalı (503 kilitleme) değil; dedup'lı WARN. `zero.ratelimit.redis.enabled=false` saf-local. Kanıt: `DistributedRateLimitIT` (paylaşık 5 vs local 2×=10), `DistributedRateLimitWiringIT` (sayaç Redis'te, heap boş), `RateLimitDegradeTest` (429@cap+1, 503 yok). **Artık kalan:** aşağıdaki `X-Forwarded-For` operasyonel varsayımı |
-| **PROD-R16** | `kid` / anahtar rotasyonu / access-token iptali **yok** | Rotasyon tüm oturumları düşürür; access token 15 dk boyunca iptal edilemez |
+| ~~**PROD-R16**~~ | ~~`kid` / anahtar rotasyonu / access-token iptali **yok**~~ | ✅ **KAPANDI (rotasyon + revocation).** (a) **kid'li HS512 anahtar halkası** (`JwtKeyRing`): `active-kid` imzalar, halkadaki eski anahtarlar grace penceresinde yalnız doğrular; token'ın `kid` header'ı doğru anahtarı seçtirir; **kid yok** → aktif anahtara düş (rolling-deploy'daki in-flight token'lar), **bilinmeyen kid** → reddet (fail-closed), alg HS512'ye sabit (algorithm-confusion kapalı). Geriye uyum: yalnız `zero.jwt.secret` set'liyse tek anahtarlı halka `legacy` kid'iyle sentezlenir — mevcut kurulum değişmez. Rotasyon prosedürü RELEASE-RUNBOOK §1.3-K. (b) **Access-token revocation** (`TokenRevocationService`, Redis): her token'da `jti`; logout **sunulan access token'ı da** iptal eder, parola değişimi / 2FA disable **kullanıcının tüm** açık token'larını (`revokeAllForUser`). Enforcement decoder validator zincirinde (`RevokedTokenValidator`), her authenticated istekte. **Fail-CLOSED:** Redis erişilemezse istek REDDEDİLİR — store, neyin iptal edildiğinin tek doğruluk kaynağı; fail-open iptal edilmiş token'ı onurlandırırdı (rate limiter'ın degrade-to-local'inden **bilerek farklı**: onun güvenli lokal fallback'i var, revocation'ın yok). Redis bilerek readiness dışında (PROD-R13 duruşu). Kanıt (12 test, **575 yeşil**): `KeyRotationIT` (5: aktif/grace/bilinmeyen-kid/no-kid), `TokenRevocationIT` (6: jti/user-wide/logout/parola/2FA, Testcontainers Redis), `TokenRevocationDegradeIT` (1: fail-closed), `RevokedTokenValidatorTest` (4: fail-open kontrastı), `JwtKeyRingTest` (10). **Negatif kanıt:** `isRevoked`→false mutasyonuyla `TokenRevocationIT` 5/6 kırmızı (`expected 401 but was 200`). **Artık:** Redis-kesintisinde-auth-reddi (kısa TTL ile sınırlı; operatör Redis HA); HS512 simetrik kaldı (RS/ES asimetrik ayrı, breaking iş) |
 | ~~**Issue #1**~~ | ~~`POST /api/tenants` **admin kullanıcı oluşturmuyor**~~ | ✅ **KAPANDI (2026-07-20, `20247d5` + `7914373`).** Senkron listener (`Propagation.MANDATORY` — tenant + admin **tek transaction**, "tenant var admin yok" commit edilemez) `TenantAdminBootstrapper`'ı koşuyor: tenant-side Admin rolü (`tenantAdminPermissionNames()` = tümü − HOST-only; `DataSeeder` aynı kaynağa delege — drift edemez) + admin kullanıcı (`adminEmail` zorunlu; parola verilmezse SecureRandom üretilir, **yalnız bir kez** yanıtta döner, loglanmaz, düz metin saklanmaz). Idempotent + constraint-destekli (TOCTOU → 409). **Negatif kanıt düzeltme ÖNCESİ ölçüldü:** `TenantBootstrapIT.createdTenantAdminCanLoginAndCallAPermissionGatedTenantEndpoint` eski kodda `expected: 200 OK but was: 401 UNAUTHORIZED`. **Canlı smoke:** create 201(+parola) → tenant login 200 → `/api/users` 200 → yanlış tenant 403 → **re-boot** → aynı parola login 200 (seeder uzlaştırması bozmuyor). Frontend: dialog `adminEmail` + tek-seferlik parola gösterimi, düzeltilmemiş dialog'da 6/6 kırmızı ölçülmüş |
 | ~~**R-30**~~ | ~~31 ham `hasAuthority('...')` literali~~ | ✅ **KAPANDI (Q-02).** 7 dosyada 31 literal sabite taşındı, **hiçbir değer değişmedi** (üçlü kilit korundu). Modül döngüsü nedeniyle `audit`/`settings`/`tenancy` kendi sabit sınıflarını taşıyor (`SaasPermissions` deseni), `PermissionRegistryAlignmentTest` çoğaltmayı güvenli kılıyor. ArchUnit Rule 3: 31 → 0 |
 | ~~**R-31**~~ | ~~`ROLES_MANAGE` izin ağacında yok~~ | ✅ **KAPANDI (Q-02).** Gerçek bulgu: `roles.manage` seeder tarafından **her Admin rolüne veriliyordu** ama ağaçta, iki mesaj paketinde, hiçbir `@PreAuthorize`'da ve frontend'de yoktu — hiçbir şeyi korumayan, görünmez ve geri alınamayan bir grant. Ağaca eklemek yerine **kaldırıldı**. Veri tarafı `V7__drop_dead_roles_manage_permission.sql` ile temizlendi (aşağıya bakın) |
@@ -154,7 +154,7 @@ Her satırın kanıtı, o bulguyu *özellikle* hedefleyen bir testtir — mevcut
 | PROD-R13 | **Closed** | `CacheConfig implements CachingConfigurer` + `CacheErrorHandler`: Redis hatası 500 yerine cache bypass + WARN | — (hata yolu; enjeksiyon testi yok) |
 | PROD-R14 | **Closed** | V6: `ix_users_tenant_lower_username` fonksiyonel index | `SoftDeletedUsernameReuseIT.theHardeningIndexesExist` |
 | PROD-R15 | **Closed** | (a) `pg_advisory_xact_lock` — `DataSeeder` + `SaasSeeder`, ortak anahtar; (b) idempotency IT; (c) ShedLock `usingDbTime()` **+ V6'da `shedlock` kolon tipi düzeltmesi** (aşağıdaki nota bakın) | `SaasSeederIdempotencyIT` (2 test), `ShedLockIT` (3 test) |
-| PROD-R16 | **Mitigating** | `audience` claim üretiliyor **ve** doğrulanıyor (`JwtAudienceValidator`) | `JwtAudienceIT` (4 test) — `kid`/rotasyon ve access-token revocation **hâlâ açık**, bkz. not |
+| PROD-R16 | **Closed (rotasyon + revocation) / Mitigating (Redis-erişilebilirlik takası)** | `audience` (`JwtAudienceValidator`) + **kid'li anahtar halkası** (`JwtKeyRing`, rotasyon) + **access-token revocation** (`TokenRevocationService`, Redis, fail-closed). Detay yukarıdaki "devraldığınız açık kısıtlar" tablosunda | `JwtAudienceIT` (4) + `KeyRotationIT` (5) + `TokenRevocationIT` (6) + `TokenRevocationDegradeIT` (1) + `RevokedTokenValidatorTest` (4) + `JwtKeyRingTest` (10); `isRevoked`→false mutasyonu `TokenRevocationIT`'i 5/6 kırmızı yapar |
 | F5-R9 | **Closed** | İzin uzlaştırması `zero.seed.reconcile-permissions` bayrağına taşındı (default true, prod dahil); `seed.enabled=false` iken de çalışır | `SeedHardeningIT.reconciliationRunsWhenSeedingIsDisabled`, `...reconciliationCanBeTurnedOffOnItsOwnFlag` |
 
 #### Kapanış turunda ortaya çıkan yeni bulgu: ShedLock `usingDbTime()` + `timestamptz` uyumsuzluğu
@@ -196,12 +196,42 @@ belgelenmiş** istisnadır; gerekçe hem `V6__hardening.sql` hem `SchedulingConf
   `X-Forwarded-*` başlıklarını **ezen** (yalnız eklemeyen) bir proxy arkasında çalışmak zorunludur.
   Bu kodla garanti edilemez; dağıtık store bunu değiştirmez, `ClientAddressResolver` sağ-baştan-oku
   modeliyle olduğu gibi korunur (`RateLimitBypassIT` B3 + `RateLimitDegradeTest` spoof).
-- **PROD-R16 (`kid` / key rotation):** Yapılmadı. Gerekçe: `kid` tek başına rotasyonu çözmez —
-  anlamlı olması için decoder'ın **aynı anda birden çok anahtarı** kabul etmesi (eski + yeni),
-  yani çok anahtarlı bir `JWKSource` ve anahtarların konfigürasyondan bir set olarak okunması gerekir.
-  Bu, tek anahtarlı `zero.jwt.secret` sözleşmesini değiştiren bir tasarım işidir ve "faz dışı yeni
-  özellik ekleme" kısıtına girer. `audience` doğrulaması bu turda kapatıldı; `kid` + çok anahtarlı
-  decoder ve access-token revocation (15 dk pencere) **açık** kalır.
+- **PROD-R16 (`kid` / key rotation + access-token revocation): KAPANDI.** Bir önceki turda "faz dışı"
+  bırakılmıştı; bu turda kapatıldı. (a) Decoder artık çok anahtarlı: `JwtKeyRing` `kid`'e göre HMAC
+  anahtarı seçer (bilinen kid → kendi anahtarı; kid yok → aktif anahtar, rolling-deploy'daki in-flight
+  token'lar için; bilinmeyen kid → reddet, fail-closed), alg HS512'ye sabit. Anahtar halkası
+  konfigürasyondan bir set olarak okunur (`zero.jwt.keys` + `active-kid`); yalnız legacy `zero.jwt.secret`
+  set'liyse tek anahtarlı halka `legacy` kid'iyle sentezlenir, mevcut kurulum **değişmeden** çalışır.
+  Rotasyon prosedürü (ekle → active-kid çevir → grace ≥ access-TTL → sil) `JwtKeyRing` javadoc'unda ve
+  RELEASE-RUNBOOK §1.3-K'da. (b) Access-token revocation: her token'da `jti`; logout/parola/2FA disable
+  hook'ları Redis'e yazar, `RevokedTokenValidator` decoder zincirinde her authenticated istekte
+  doğrular. HS512 simetrik **bilerek korundu** — RS/ES asimetrik göçü ayrı, breaking bir iş; görevdeki
+  "kid/JWKS veya eşdeğer key-ring" kid-seçilen HMAC halkasıyla karşılanır.
+- **PROD-R16 — kabul edilen artık: Redis-kesintisinde-auth-reddi.** Revocation kontrolü **fail-closed'dır**:
+  Redis erişilemezse authenticated istek 401 döner (iptal edilmiş bir token'ı onurlandırmak yerine auth'u
+  reddeder). Store, neyin iptal edildiğinin tek doğruluk kaynağı olduğu için fail-open bir seçenek değil.
+  Bu, rate limiter'ın degrade-to-local'inden **bilerek farklıdır** (onun güvenli lokal fallback'i var,
+  revocation'ın yok). Takas kısa access-token TTL'iyle sınırlıdır; operatör Redis HA çalıştırır. Redis
+  bilerek readiness grubunda **değildir** — revocation-store blip'i instance'ı rotasyondan çıkarmamalı.
+  Kanıt: `TokenRevocationDegradeIT` (erişilemez Redis → 401) + `RevokedTokenValidatorTest`
+  (fail-open varyantı token'ı geçirir — kaçınılan hata — fail-closed reddeder, yan yana asserte edilir).
+- **PROD-R16 — kabul edilen artık: aynı-saniye granülaritesi (F3, stack-review).** `revokeAllForUser`
+  bir "not before" işaretini **saniye** çözünürlüğünde yazar (`iat` de saniye). Kimlik değişiminden
+  **hemen önce, aynı duvar-saati saniyesinde** basılmış bir token `iat_sec == notBefore_sec` olur;
+  karşılaştırma katı `<` olduğu için iptal edilmez ve kendi (kısa) TTL'i boyunca yaşar. `<=`
+  kullanmak **daha kötü** olurdu: aynı saniyedeki meşru bir yeniden-login'i iptal eder (kullanıcıyı
+  bir iptal döngüsüne sokar). Bu, JWT saniye-granülaritesinin **doğasında olan** bir sınırdır; güvenli
+  yön (aynı-saniye token'ı yaşasın, meşru re-login iptal edilmesin) **bilinçle** seçildi. Pencere access
+  token TTL'i (15 dk) değil, aynı-saniye çakışması kadar dardır. Testlerdeki ~1.1 sn uyku bu sınırın
+  kanıtıdır: `iat`'ı işaretin kesin altına almak için gerekli.
+- **PROD-R16 — kabul edilen artık: yazma fail-open / okuma fail-closed asimetrisi (F4, stack-review).**
+  Okuma yolu (`isRevoked`) **fail-closed'dır** (Redis erişilemezse istek reddedilir). Yazma yolu
+  (`revokeAccessToken` / `revokeAllForUser`) ise **best-effort'tur**: geçici bir Redis yazma blip'i
+  sırasında yapılan bir kimlik değişimi (parola/2FA) açık token'ları iptal **edemeyebilir** ve blip'ten
+  sonra iptal kaydı yoktur (yeniden denenmez). Yani yazma yarısı **fail-open**, okuma yarısı
+  fail-closed. Gerekçe: yazmayı fail-closed yapmak, birincil işlemi (parola değişimi DB'ye zaten
+  commit'lendi) bir cache yazması yüzünden bozardı; token yine kısa TTL'iyle doğal olarak ölür. Kalıcı
+  (durable) revocation bir outbox/retry gerektirir — **kapsam dışı**; bu asimetri bilinçli bir takastır.
 - **PROD-R9 / PROD-R13:** Kodda kapalı, ancak davranışsal testi yok (pool tükenmesi ve Redis kesintisi
   enjekte etmeyi gerektirir). Konfigürasyon ve hata yolu kod incelemesiyle doğrulandı.
 

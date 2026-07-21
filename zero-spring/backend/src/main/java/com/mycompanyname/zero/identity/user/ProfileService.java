@@ -1,6 +1,7 @@
 package com.mycompanyname.zero.identity.user;
 
 import com.mycompanyname.zero.identity.auth.CurrentUser;
+import com.mycompanyname.zero.identity.auth.TokenRevocationService;
 import com.mycompanyname.zero.identity.domain.Role;
 import com.mycompanyname.zero.identity.domain.User;
 import com.mycompanyname.zero.identity.password.PasswordHistoryService;
@@ -14,6 +15,7 @@ import com.mycompanyname.zero.notification.email.EmailTemplateService;
 import com.mycompanyname.zero.shared.domain.DomainException;
 import com.mycompanyname.zero.shared.domain.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -41,6 +43,8 @@ public class ProfileService {
     private final EmailSender emailSender;
     private final EmailTemplateService emailTemplateService;
     private final MessageSource messageSource;
+    /** Present only when zero.jwt.revocation.enabled is true; a no-op otherwise (PROD-R16). */
+    private final ObjectProvider<TokenRevocationService> revocationServices;
 
     @Transactional(readOnly = true)
     public ProfileDto getProfile() {
@@ -93,6 +97,10 @@ public class ProfileService {
         user.setShouldChangePassword(false);
         userRepository.save(user);
         passwordHistoryService.record(user.getId(), previousHash);
+        // PROD-R16: a credential change kills every outstanding access token for this user (including
+        // the one making this request), so a stolen-then-changed password cannot keep a live session.
+        // Best-effort; no-op when revocation is disabled.
+        revocationServices.ifAvailable(service -> service.revokeAllForUser(user.getId()));
     }
 
     private void sendEmailConfirmation(User user, String code) {

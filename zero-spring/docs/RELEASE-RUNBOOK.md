@@ -69,7 +69,7 @@ Bu bölüm iki farklı şeyi ayırır ve karıştırılmamalıdır:
 
 | Konu | Garanti | Nerede | Kanıt |
 |---|---|---|---|
-| **JWT secret** | Base config'te default **yok**; sızmış dev anahtarı her profilde reddedilir → profilsiz boot *sessizce güvensiz* değil, **hiç açılmaz** | `application.yml` `zero.jwt.secret: ${JWT_SECRET}` | `JwtService` doğrulaması (≥64 bayt, geçerli base64) |
+| **JWT secret** | Base config'te default **yok**; sızmış dev anahtarı her profilde reddedilir → profilsiz boot *sessizce güvensiz* değil, **hiç açılmaz**. Anahtar halkası ise her anahtarı ayrı doğrular (PROD-R16, §1.3-K) | `application.yml` `zero.jwt.secret: ${JWT_SECRET}` | `JwtKeyRing` (≥64 bayt, geçerli base64, tekil/dolu kid, tam bir aktif kid) + `JwtSecretValidator` (profil politikası) |
 | **CORS** | Allowlist `zero.cors.allowed-origins`; prod'da default yok (eksikse startup patlar), boş liste fail-closed, `*` reddedilir, `allowCredentials=false` | `application-prod.yml` | `CorsPolicyIT` (4 test), `CorsPropertiesValidationTest` |
 | **Seeding** | Base config'te `zero.seed.enabled=false`; boş/dev-default parolada **her profilde** fail-fast | `application.yml`, `DataSeeder` | `SeedHardeningIT` |
 | **İzin uzlaştırması** | `reconcile-permissions` seeding kapalıyken de **açık** — yeni sürümde eklenen izinler statik Admin rollerine ulaşır | `application.yml` / `-prod.yml` | `RolePermissionReconciliationIT` |
@@ -175,11 +175,58 @@ location ^~ /actuator/               { return 404; }
 | **1. Özel ağ** (önerilen) | Prometheus'u backend'e **proxy'yi atlayarak** ulaştır (aynı VPC/namespace, `backend:8080/actuator/prometheus`) ve host rolüne sahip bir servis hesabının token'ıyla scrape et | Kubernetes / özel ağ varsa |
 | **2. Host servis hesabı** | `settings.host.manage` içeren bir host kullanıcısı aç, sadece scrape için kullan; Prometheus `authorization: {type: Bearer, credentials: <token>}` | Tek makine / proxy dışında yol yoksa |
 
-*Bilinen kısıt (kabul edilmiş):* access token TTL'i 15 dakikadır ve iptal/rotasyon mekanizması yok,
-yani 2. yol scrape tarafında bir token tazeleyici gerektirir. Uzun vadeli
-doğru çözüm `management.server.port`'u ayrı bir porta almak ve o portu **hiç yayınlamamaktır**;
-o durumda ana security chain o porta uygulanmaz, koruma tamamen ağ katmanına geçer — bu yüzden
-port yayınlanırsa açık bir regresyondur.
+*Bilinen kısıt (kabul edilmiş):* access token TTL'i 15 dakikadır; access-token revocation artık var
+(PROD-R16, §1.3-K) ama access token yine kısa ömürlüdür, yani 2. yol scrape tarafında bir token
+tazeleyici gerektirir. Uzun vadeli doğru çözüm `management.server.port`'u ayrı bir porta almak ve o
+portu **hiç yayınlamamaktır**; o durumda ana security chain o porta uygulanmaz, koruma tamamen ağ
+katmanına geçer — bu yüzden port yayınlanırsa açık bir regresyondur.
+
+**K — JWT anahtar rotasyonu (PROD-R16) — sıfır kesinti prosedürü**
+
+HS512 imza anahtarı bir **anahtar halkasıdır** (`JwtKeyRing`): `zero.jwt.active-kid` imzalar, halkadaki
+diğer anahtarlar grace penceresinde yalnız doğrular. Token'ın `kid` header'ı doğru doğrulama anahtarını
+seçtirir. **Yalnız `zero.jwt.secret` set'liyse** tek anahtarlı halka `legacy` kid'iyle sentezlenir —
+mevcut kurulum hiçbir şey yapmadan çalışmaya devam eder; rotasyona ancak ihtiyaç olunca geçilir.
+
+Anahtarı sızmış/eskimişse ya da periyodik döndürüyorsan, **sırayla** (her adım bir deploy):
+
+1. **Yeni anahtarı ekle** (henüz imzalatma). Her iki anahtar da halkada:
+   ```yaml
+   zero.jwt:
+     active-kid: k-2025          # HÂLÂ eski
+     keys:
+       - { kid: k-2025, secret: ${JWT_KEY_2025} }
+       - { kid: k-2026, secret: ${JWT_KEY_2026} }   # yeni, sadece doğrular
+   ```
+   Deploy. Artık her instance yeni anahtarı **doğrulayabilir** (henüz kimse onunla imzalamıyor).
+2. **`active-kid`'i yeniye çevir.** Yeni token'lar `k-2026` ile imzalanır; hâlâ `k-2025` kid'i taşıyan
+   token'lar doğrulanmaya devam eder çünkü eski anahtar halkada.
+   ```yaml
+   zero.jwt: { active-kid: k-2026, keys: [ {kid: k-2025, ...}, {kid: k-2026, ...} ] }
+   ```
+   Deploy.
+3. **Grace penceresi bekle** (≥ `zero.jwt.access-token-ttl` = 15 dk). Bu süre sonunda eski anahtarla
+   imzalı her token süresi dolmuştur.
+4. **Eski anahtarı halkadan çıkar.** `k-2025` kid'i taşıyan bir token artık **fail-closed** reddedilir
+   (bilinmeyen kid).
+   ```yaml
+   zero.jwt: { active-kid: k-2026, keys: [ {kid: k-2026, secret: ${JWT_KEY_2026}} ] }
+   ```
+   Deploy.
+
+Her anahtar base64, çözümü ≥64 bayt; `JwtKeyRing` boot'ta doğrular (kid'ler tekil/boş değil, tam bir
+aktif kid halkada, çözülmemiş `${...}` placeholder reddi), `JwtSecretValidator` her anahtarı profil
+politikasına vurur (sızmış/dev anahtar `prod`'da reddedilir). **Rolling deploy güvenliği:** rotasyondan
+önceki kod `kid`'siz token üretiyordu; decoder `kid` yoksa aktif anahtara düşer, yani deploy sırasındaki
+in-flight token'lar doğrulanmaya devam eder.
+
+**Access-token revocation (aynı PROD-R16):** logout sunulan access token'ı da iptal eder; parola değişimi
+ve 2FA disable kullanıcının **tüm** açık access token'larını iptal eder. Enforcement Redis'te
+(`zero.jwt.revocation`, varsayılan açık). **FAIL-CLOSED:** Redis erişilemezse authenticated istekler 401
+döner (iptal edilmiş token'ı onurlandırmaktansa auth'u reddeder) — bu yüzden **Redis HA çalıştırın**. Redis
+bilerek readiness grubunda değildir (§3.1); revocation-store blip'i instance'ı rotasyondan çıkarmaz, ama o
+blip süresince authenticated trafik reddedilir. Doğrulama: §3.4 login smoke'tan sonra logout → aynı access
+token ile `/api/auth/me` **401** dönmeli.
 
 ---
 
@@ -743,6 +790,8 @@ Bu tablo §1.3'ün özetidir; ikisi çeliştiğinde **kod otoritedir** — doğr
 
 **Kalıcı, kapatılmamış kalemler (bilinçli tasarım tercihi — her sürümde geçerli):**
 - `MAIL_HOST` boşsa e-posta **sessizce** gönderilmez (fail-fast değil) → telafisi §3.6 smoke'udur.
-- Access token TTL'i (≤15 dk) boyunca iptal edilemez (jti denylist yok) → §1.3-J scrape kısıtı,
-  ADR-0004 "Sonuçlar".
+- Access-token revocation artık **var** (PROD-R16, §1.3-K): logout + parola/2FA-disable token'ları
+  iptal eder, `jti` denylist Redis'te. Kalıcı takas revocation'ın **fail-closed** olmasıdır — Redis
+  erişilemezse authenticated istekler reddedilir, o yüzden Redis HA gerekir (§1.3-K). HS512 simetrik
+  kaldı (RS/ES asimetrik göçü ayrı, breaking bir iş).
 - `docker-compose.yml` yalnız dev bağımlılıklarını ayağa kaldırır; prod compose'u ayrı tutulur.

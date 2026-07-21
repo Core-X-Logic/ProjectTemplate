@@ -5,7 +5,9 @@ import org.springframework.beans.factory.InitializingBean;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
@@ -64,7 +66,31 @@ public class JwtSecretValidator implements InitializingBean {
 
     @Override
     public void afterPropertiesSet() {
-        validate(properties.getSecret(), List.of(environment.getActiveProfiles()));
+        // PROD-R16: the profile policy applies to EVERY key in the ring, not just the legacy secret —
+        // a committed dev/leaked key must be refused under prod even if it is only a grace-window key.
+        List<String> profiles = List.of(environment.getActiveProfiles());
+        for (String secret : configuredSecrets(properties)) {
+            validate(secret, profiles);
+        }
+    }
+
+    /**
+     * The raw secret string(s) the deployment actually configured: every entry in {@code zero.jwt.keys}
+     * when a ring is set, otherwise the single legacy {@code zero.jwt.secret}. The profile policy in
+     * {@link #validate} is applied to each of these; the ring's structural and cryptographic validation
+     * (valid base64, ≥64 bytes, unique kids, exactly one active kid) is {@code JwtKeyRing}'s job. The
+     * two together are the full boot guard.
+     */
+    static List<String> configuredSecrets(JwtProperties properties) {
+        List<JwtProperties.Key> keys = properties.getKeys();
+        if (keys != null && !keys.isEmpty()) {
+            List<String> secrets = new ArrayList<>(keys.size());
+            for (JwtProperties.Key key : keys) {
+                secrets.add(key.getSecret());
+            }
+            return secrets;
+        }
+        return Collections.singletonList(properties.getSecret());
     }
 
     /**

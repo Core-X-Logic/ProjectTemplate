@@ -1,6 +1,17 @@
 spring:
   cache:
     type: simple
+  datasource:
+    hikari:
+      # The suite caches many distinct Spring contexts (every @SpringBootTest property permutation is
+      # its own), and each holds its OWN Hikari pool against the ONE shared Postgres container. The
+      # base min-idle of 5 makes every cached-but-idle context hoard 5 connections for the whole run,
+      # so once there are enough contexts Postgres runs out (max_connections=100): "FATAL: sorry, too
+      # many clients already", and a late-building context fails to start. Hold no idle connections and
+      # reap used ones quickly, so an inactive context frees its slots for the next; max-pool-size stays
+      # at the base 10 so the parallel-request ITs (TwoFactorConcurrencyIT et al.) keep their headroom.
+      minimum-idle: 0
+      idle-timeout: 10000
   jpa:
     properties:
       hibernate:
@@ -23,6 +34,12 @@ zero:
     # Test-only signing key (base64, 79 bytes). Distinct from the dev key and from the leaked
     # default that PROD-R1 flagged; all three are rejected under the 'prod' profile.
     secret: emVyby1wbGF0Zm9ybS1BVVRPTUFURUQtVEVTVC1PTkxZLXNpZ25pbmcta2V5LW5ldmVyLWRlcGxveWVkLTAxMjM0NTY3ODlhYmNkZWZnaA==
+    revocation:
+      # PROD-R16: OFF for the general suite so no IT needs a Redis container and no authenticated
+      # request fails closed against an absent Redis. TokenRevocationIT and TokenRevocationDegradeIT
+      # opt back in with enabled=true (a Redis Testcontainer / an unreachable Redis respectively), the
+      # same pattern zero.ratelimit.redis.enabled uses.
+      enabled: false
   crypto:
     # Test-only AES-256 field-encryption key (base64, 32 bytes). Distinct from the dev key; both are
     # in FieldEncryptionKeyValidator.NON_PRODUCTION_KEYS and rejected under the 'prod' profile.

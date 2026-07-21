@@ -31,7 +31,7 @@ import java.util.Set;
  * has one: this property never shipped with a default, so the compromise that produced that rule never
  * happened here. The wrong-length rule is the extra one — an AES-256-GCM key must decode to exactly 32
  * bytes, and a shorter value silently weakening the cipher is the field-encryption analogue of the
- * HS512 under-length key {@code JwtService.buildSecretKey} refuses.
+ * HS512 under-length key {@code JwtKeyRing.buildKey} refuses.
  *
  * <p>{@link #validate} is static and profile-explicit so it is unit-testable without a Spring context,
  * exactly like its JWT twin.

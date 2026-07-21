@@ -3,6 +3,7 @@ package com.mycompanyname.zero.identity.user;
 import com.mycompanyname.zero.config.FieldEncryptionService;
 import com.mycompanyname.zero.identity.auth.CurrentUser;
 import com.mycompanyname.zero.identity.auth.RecoveryCodeService;
+import com.mycompanyname.zero.identity.auth.TokenRevocationService;
 import com.mycompanyname.zero.identity.auth.TotpService;
 import com.mycompanyname.zero.identity.domain.User;
 import com.mycompanyname.zero.identity.repo.UserRepository;
@@ -12,6 +13,7 @@ import com.mycompanyname.zero.shared.domain.DomainException;
 import com.mycompanyname.zero.shared.domain.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -41,6 +43,8 @@ public class TwoFactorService {
     private final RecoveryCodeService recoveryCodeService;
     private final FieldEncryptionService fieldEncryptionService;
     private final PasswordEncoder passwordEncoder;
+    /** Present only when zero.jwt.revocation.enabled is true; a no-op otherwise (PROD-R16). */
+    private final ObjectProvider<TokenRevocationService> revocationServices;
 
     @Value("${zero.email.app-name:Zero Platform}")
     private String issuer;
@@ -101,6 +105,9 @@ public class TwoFactorService {
         user.setTwoFactorSecret(null);
         userRepository.save(user);
         recoveryCodeService.deleteForUser(user.getId());
+        // PROD-R16: dropping the second factor is a credential change, so kill every outstanding
+        // access token for this user. Best-effort; no-op when revocation is disabled.
+        revocationServices.ifAvailable(service -> service.revokeAllForUser(user.getId()));
         log.warn("2FA disabled for user {}", user.getId());
     }
 

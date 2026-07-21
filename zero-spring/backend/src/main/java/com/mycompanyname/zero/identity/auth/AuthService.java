@@ -23,6 +23,7 @@ import com.mycompanyname.zero.shared.domain.ErrorCode;
 import com.mycompanyname.zero.shared.tenant.TenantContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -68,6 +69,8 @@ public class AuthService {
     private final RecoveryCodeService recoveryCodeService;
     private final FieldEncryptionService fieldEncryptionService;
     private final Clock clock;
+    /** Present only when zero.jwt.revocation.enabled is true; a no-op otherwise (PROD-R16). */
+    private final ObjectProvider<TokenRevocationService> revocationServices;
 
     @Transactional(noRollbackFor = DomainException.class)
     public LoginResultDto login(LoginRequest request) {
@@ -225,6 +228,12 @@ public class AuthService {
         if (callerUserId == null) {
             throw new DomainException(ErrorCode.UNAUTHORIZED, "Authentication required");
         }
+        // PROD-R16: revoke the presented ACCESS token too, not only the refresh token. Without this,
+        // logout leaves the bearer token usable until its ~15-minute expiry — the exact window this
+        // closes. Self-only (the jti is the caller's own, taken from its authenticated context) and
+        // best-effort; no-op when revocation is disabled.
+        revocationServices.ifAvailable(service ->
+                service.revokeAccessToken(CurrentUser.jti(), CurrentUser.expiresAt()));
         refreshTokenRepository.findByTokenHash(sha256Hex(refreshToken))
                 .ifPresent(token -> {
                     if (!Objects.equals(token.getUserId(), callerUserId)) {
