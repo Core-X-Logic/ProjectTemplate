@@ -1242,6 +1242,7 @@ export interface components {
             shouldChangePassword?: boolean;
             /** Format: int64 */
             tenantId?: number;
+            twoFactorEnabled?: boolean;
             username?: string;
         };
         MoveOuRequest: {

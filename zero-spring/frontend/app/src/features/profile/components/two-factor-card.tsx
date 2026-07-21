@@ -9,6 +9,7 @@ import {
   AlertIcon,
   AlertTitle,
 } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -33,6 +34,7 @@ import {
   InputOTPSlot,
 } from '@/components/ui/input-otp';
 import { Label } from '@/components/ui/label';
+import { useAuth } from '@/providers/auth-provider';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import {
   useDisableTwoFactor,
@@ -45,22 +47,27 @@ import type { TwoFactorSetupDto } from '../types';
 /**
  * Self-service 2FA management card, mounted next to `<ChangePasswordCard/>`.
  *
- * IMPORTANT — no readable state: neither `/api/profile` (`ProfileDto`) nor
- * `/api/auth/me` (`MeDto`) exposes `twoFactorEnabled` (the backend keeps it only
- * on the `User` entity). The card therefore cannot know on load whether 2FA is
- * already on, and adding a backend field is out of scope. Instead it drives a
- * local flow: the default "idle" view offers BOTH "enable" and an explicit
- * "manage existing" bridge, and the authoritative backend rejects the wrong one
- * (setup fails if already on; disable/regenerate need the right password). This
- * limitation is called out in the UI copy.
+ * The on/off state is READ from the backend: `MeDto.twoFactorEnabled` (served by
+ * `/api/auth/me`, held on the auth-context `user`). The card shows ONLY the
+ * enable flow when it is off and ONLY the manage flow (disable / regenerate)
+ * when it is on — no guessing, no dual bridge. After an enable or disable
+ * succeeds it calls `refreshMe()` so the authoritative flag reloads and the card
+ * flips to the matching view.
+ *
+ * `view` is a transient overlay for the two multi-step flows only: `enrolling`
+ * (scan + confirm during enable) and `recovery` (show the one-time codes after
+ * enable or regenerate). When `view === 'idle'` the resting content is derived
+ * purely from `twoFactorEnabled`.
  *
  * The setup secret and the recovery codes are each shown ONCE and never
  * persisted — they live only in component state and are dropped on unmount.
  */
-type View = 'idle' | 'enrolling' | 'recovery' | 'manage';
+type View = 'idle' | 'enrolling' | 'recovery';
 
 export function TwoFactorCard() {
   const intl = useIntl();
+  const { user, refreshMe } = useAuth();
+  const enabled = user?.twoFactorEnabled ?? false;
 
   const setup = useSetupTwoFactor();
   const enable = useEnableTwoFactor();
@@ -93,6 +100,9 @@ export function TwoFactorCard() {
     }
     try {
       const result = await enable.mutateAsync(code);
+      // Reload the authoritative flag so the resting view under the recovery
+      // step is "enabled" (manage) once the codes are dismissed.
+      await refreshMe();
       setRecoveryCodes(result.recoveryCodes ?? []);
       setSetupData(null);
       setConfirmCode('');
@@ -105,6 +115,8 @@ export function TwoFactorCard() {
   const handleDisable = async (password: string) => {
     try {
       await disable.mutateAsync(password);
+      // Reload `twoFactorEnabled` so the card flips back to the enable flow.
+      await refreshMe();
       setDisableOpen(false);
       setView('idle');
     } catch {
@@ -139,29 +151,62 @@ export function TwoFactorCard() {
       <CardContent className="flex max-w-md flex-col gap-5 py-5">
         {view === 'idle' && (
           <>
-            <p className="text-sm text-muted-foreground">
-              <FormattedMessage id="profile.twoFactor.idleHint" />
-            </p>
-            <div className="flex flex-wrap gap-3">
-              <Button
-                type="button"
-                onClick={startEnroll}
-                disabled={setup.isPending}
-              >
-                {setup.isPending && (
-                  <LoaderCircle className="size-4 animate-spin" />
-                )}
-                <ShieldCheck className="size-4" aria-hidden />
-                <FormattedMessage id="profile.twoFactor.enableButton" />
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setView('manage')}
-              >
-                <FormattedMessage id="profile.twoFactor.manageExisting" />
-              </Button>
-            </div>
+            <Badge
+              variant={enabled ? 'success' : 'secondary'}
+              appearance="light"
+              className="w-fit"
+            >
+              <FormattedMessage
+                id={
+                  enabled
+                    ? 'profile.twoFactor.statusEnabled'
+                    : 'profile.twoFactor.statusDisabled'
+                }
+              />
+            </Badge>
+
+            {enabled ? (
+              <div className="flex flex-col gap-4">
+                <p className="text-sm text-muted-foreground">
+                  <FormattedMessage id="profile.twoFactor.manageDescription" />
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setDisableOpen(true)}
+                  >
+                    <FormattedMessage id="profile.twoFactor.disableButton" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setRegenerateOpen(true)}
+                  >
+                    <FormattedMessage id="profile.twoFactor.regenerateButton" />
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                <p className="text-sm text-muted-foreground">
+                  <FormattedMessage id="profile.twoFactor.disabledHint" />
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    type="button"
+                    onClick={startEnroll}
+                    disabled={setup.isPending}
+                  >
+                    {setup.isPending && (
+                      <LoaderCircle className="size-4 animate-spin" />
+                    )}
+                    <ShieldCheck className="size-4" aria-hidden />
+                    <FormattedMessage id="profile.twoFactor.enableButton" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </>
         )}
 
@@ -298,34 +343,10 @@ export function TwoFactorCard() {
                 type="button"
                 onClick={() => {
                   setRecoveryCodes(null);
-                  setView('manage');
+                  setView('idle');
                 }}
               >
                 <FormattedMessage id="profile.twoFactor.recoveryDone" />
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {view === 'manage' && (
-          <div className="flex flex-col gap-4">
-            <p className="text-sm text-muted-foreground">
-              <FormattedMessage id="profile.twoFactor.manageDescription" />
-            </p>
-            <div className="flex flex-wrap gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setDisableOpen(true)}
-              >
-                <FormattedMessage id="profile.twoFactor.disableButton" />
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setRegenerateOpen(true)}
-              >
-                <FormattedMessage id="profile.twoFactor.regenerateButton" />
               </Button>
             </div>
           </div>

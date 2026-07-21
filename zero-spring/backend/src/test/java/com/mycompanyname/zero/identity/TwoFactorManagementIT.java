@@ -165,6 +165,32 @@ class TwoFactorManagementIT extends AbstractTwoFactorIT {
         assertThat(other.getTwoFactorSecret()).isNull();
     }
 
+    // -------------------------------------------------------------------------------------
+    // /api/auth/me surfaces the enrolment state (twoFactorEnabled)
+    // -------------------------------------------------------------------------------------
+
+    @Test
+    void meReportsTwoFactorDisabledForANonEnrolledUser() {
+        TwoFactorUser user = createHostUserWithoutTwoFactor(PASSWORD);
+        String token = accessToken(null, user.username(), user.password());
+
+        assertThat(me(null, token).getBody().path("twoFactorEnabled").asBoolean())
+                .as("a normal, non-enrolled user must see twoFactorEnabled=false on /me")
+                .isFalse();
+    }
+
+    @Test
+    void meReportsTwoFactorEnabledOnceEnrolled() {
+        TwoFactorUser user = createHostUserWithoutTwoFactor(PASSWORD);
+        // The token minted BEFORE enabling stays valid; /me reflects live user state, not the token,
+        // so the same session flips to twoFactorEnabled=true the moment enrolment completes.
+        String token = enrollViaApi(user);
+
+        assertThat(me(null, token).getBody().path("twoFactorEnabled").asBoolean())
+                .as("once 2FA is enabled, /me must report twoFactorEnabled=true")
+                .isTrue();
+    }
+
     // --- helpers ---------------------------------------------------------------------------
 
     /** Runs setup + enable through the API for {@code user}, returning the still-valid access token. */

@@ -9,5 +9,6 @@ public record MeDto(
         Long tenantId,
         boolean shouldChangePassword,
         Set<String> roles,
-        Set<String> permissions) {
+        Set<String> permissions,
+        boolean twoFactorEnabled) {
 }

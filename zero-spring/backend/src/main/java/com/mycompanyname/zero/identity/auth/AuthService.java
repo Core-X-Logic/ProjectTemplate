@@ -252,7 +252,7 @@ public class AuthService {
             permissions.addAll(role.getPermissions());
         }
         return new MeDto(user.getId(), user.getUsername(), user.getEmail(), user.getTenantId(),
-                user.isShouldChangePassword(), roles, permissions);
+                user.isShouldChangePassword(), roles, permissions, user.isTwoFactorEnabled());
     }
 
     private int maxFailedAttempts(Long tenantId) {

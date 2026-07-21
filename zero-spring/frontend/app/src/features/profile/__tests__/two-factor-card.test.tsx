@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TwoFactorCard } from '@/features/profile/components/two-factor-card';
@@ -7,15 +8,18 @@ import { renderWithProviders, screen, waitFor, within } from '@/test/utils';
  * Behaviour tests for the self-service 2FA card.
  *
  * `apiFetch` is mocked at the client boundary so the real feature hooks and
- * react-query run end to end. The card owns no server-readable "enabled" state
- * (no DTO exposes `twoFactorEnabled`), so the tests drive the same local flow a
- * user would: enable → confirm → recovery codes, and manage → disable /
- * regenerate behind a password prompt.
+ * react-query run end to end. `useAuth` is mocked so each case feeds an explicit
+ * `twoFactorEnabled` — the authoritative backend flag (`MeDto`) the card reads to
+ * decide between the enable flow and the manage flow. The state-driven tests
+ * assert that ONLY the matching view renders; the flow tests exercise
+ * enable → confirm → recovery codes, and disable / regenerate behind a password
+ * prompt. `refreshMe` flips the mocked flag to model the post-change reload.
  */
 
-const { apiFetchMock, toastSuccessMock, toastErrorMock, writeTextMock } =
+const { apiFetchMock, useAuthMock, toastSuccessMock, toastErrorMock, writeTextMock } =
   vi.hoisted(() => ({
     apiFetchMock: vi.fn(),
+    useAuthMock: vi.fn(),
     toastSuccessMock: vi.fn(),
     toastErrorMock: vi.fn(),
     writeTextMock: vi.fn(),
@@ -34,6 +38,44 @@ vi.mock('@/api/client', async (importOriginal) => {
   return { ...actual, apiFetch: apiFetchMock };
 });
 
+vi.mock('@/providers/auth-provider', () => ({
+  AuthProvider: ({ children }: { children: ReactNode }) => children,
+  useAuth: useAuthMock,
+}));
+
+/**
+ * Seed the mocked auth context with a user carrying `twoFactorEnabled`. Returns
+ * the mutable `user` and the `refreshMe` spy so a test can flip the flag (as the
+ * real `/api/auth/me` reload would after an enable/disable) and assert the card
+ * follows.
+ */
+function mockAuth(twoFactorEnabled: boolean) {
+  const user = {
+    id: '1',
+    username: 'jane',
+    email: 'jane@acme.io',
+    tenantId: '1',
+    roles: [] as string[],
+    permissions: [] as string[],
+    twoFactorEnabled,
+  };
+  const refreshMe = vi.fn(async () => {});
+  useAuthMock.mockReturnValue({
+    user,
+    permissions: [],
+    roles: [],
+    loading: false,
+    isImpersonating: false,
+    login: vi.fn(),
+    verifyTwoFactor: vi.fn(),
+    logout: vi.fn(),
+    refreshMe,
+    impersonate: vi.fn(),
+    backToImpersonator: vi.fn(),
+  });
+  return { user, refreshMe };
+}
+
 const SETUP = {
   secret: 'JBSWY3DPEHPK3PXP',
   otpauthUri: 'otpauth://totp/Zero:jane?secret=JBSWY3DPEHPK3PXP&issuer=Zero',
@@ -44,6 +86,7 @@ const RECOVERY = {
 
 beforeEach(() => {
   apiFetchMock.mockReset();
+  useAuthMock.mockReset();
   toastSuccessMock.mockReset();
   toastErrorMock.mockReset();
   writeTextMock.mockReset();
@@ -58,9 +101,60 @@ afterEach(async () => {
   await new Promise((resolve) => setTimeout(resolve, 60));
 });
 
+describe('TwoFactorCard state', () => {
+  it('shows only the enable flow when two-factor is off', () => {
+    mockAuth(false);
+
+    renderWithProviders(<TwoFactorCard />);
+
+    expect(
+      screen.getByText('Two-factor authentication is off.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {
+        name: 'Enable two-factor authentication',
+      }),
+    ).toBeInTheDocument();
+    // The manage actions are NOT reachable when it is off.
+    expect(
+      screen.queryByRole('button', { name: 'Disable two-factor' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Regenerate recovery codes' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows only the manage flow when two-factor is on', () => {
+    mockAuth(true);
+
+    renderWithProviders(<TwoFactorCard />);
+
+    expect(
+      screen.getByText('Two-factor authentication is on.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Disable two-factor' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Regenerate recovery codes' }),
+    ).toBeInTheDocument();
+    // The enable button is NOT shown when it is already on.
+    expect(
+      screen.queryByRole('button', {
+        name: 'Enable two-factor authentication',
+      }),
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe('TwoFactorCard enrollment', () => {
   it('runs setup → confirm → enable and shows the secret, QR and recovery codes once', async () => {
     const user = userEvent.setup();
+    const { user: me, refreshMe } = mockAuth(false);
+    // The post-enable `/api/auth/me` reload reports 2FA is now on.
+    refreshMe.mockImplementation(async () => {
+      me.twoFactorEnabled = true;
+    });
     apiFetchMock.mockImplementation((path: string) => {
       if (path === '/api/profile/two-factor/setup') {
         return Promise.resolve(SETUP);
@@ -117,6 +211,8 @@ describe('TwoFactorCard enrollment', () => {
     expect(
       screen.getByText('Save your recovery codes'),
     ).toBeInTheDocument();
+    // The authoritative flag was reloaded so the card can flip to "on".
+    expect(refreshMe).toHaveBeenCalled();
 
     // Copy-all pushes every code to the clipboard. `userEvent.setup()` installs
     // its own clipboard stub, so override it here (after setup) to capture the
@@ -129,20 +225,30 @@ describe('TwoFactorCard enrollment', () => {
     expect(writeTextMock).toHaveBeenCalledWith(
       'AAAA-1111\nBBBB-2222\nCCCC-3333\nDDDD-4444',
     );
+
+    // Dismissing the codes lands on the manage view (2FA is now on).
+    await user.click(
+      screen.getByRole('button', { name: 'I have saved my codes' }),
+    );
+    expect(
+      await screen.findByRole('button', { name: 'Disable two-factor' }),
+    ).toBeInTheDocument();
   });
 });
 
 describe('TwoFactorCard management', () => {
   it('requires the current password before disabling', async () => {
     const user = userEvent.setup();
+    const { user: me, refreshMe } = mockAuth(true);
+    // The post-disable `/api/auth/me` reload reports 2FA is now off.
+    refreshMe.mockImplementation(async () => {
+      me.twoFactorEnabled = false;
+    });
     apiFetchMock.mockResolvedValue(undefined);
 
     renderWithProviders(<TwoFactorCard />);
 
-    // Bridge into the manage view (no readable enabled-state on load).
-    await user.click(
-      screen.getByRole('button', { name: 'Already set up? Manage it' }),
-    );
+    // 2FA is on, so the manage actions are shown directly (no bridge).
     await user.click(
       screen.getByRole('button', { name: 'Disable two-factor' }),
     );
@@ -170,7 +276,8 @@ describe('TwoFactorCard management', () => {
       ),
     );
 
-    // Back to the idle view after a successful disable.
+    // The reloaded flag flips the card back to the enable flow.
+    expect(refreshMe).toHaveBeenCalled();
     expect(
       await screen.findByRole('button', {
         name: 'Enable two-factor authentication',
@@ -180,6 +287,7 @@ describe('TwoFactorCard management', () => {
 
   it('regenerates recovery codes behind a password prompt and shows them once', async () => {
     const user = userEvent.setup();
+    mockAuth(true);
     apiFetchMock.mockImplementation((path: string) => {
       if (path === '/api/profile/two-factor/recovery-codes/regenerate') {
         return Promise.resolve(RECOVERY);
@@ -189,9 +297,6 @@ describe('TwoFactorCard management', () => {
 
     renderWithProviders(<TwoFactorCard />);
 
-    await user.click(
-      screen.getByRole('button', { name: 'Already set up? Manage it' }),
-    );
     await user.click(
       screen.getByRole('button', { name: 'Regenerate recovery codes' }),
     );

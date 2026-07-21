@@ -53,10 +53,11 @@ export const profileEn = {
   'profile.twoFactor.title': 'Two-factor authentication',
   'profile.twoFactor.description':
     'Add a second step to sign-in using an authenticator app.',
-  'profile.twoFactor.idleHint':
-    'This device cannot tell whether two-factor is already on for your account. Enable it below, or manage an existing setup.',
+  'profile.twoFactor.statusEnabled': 'Two-factor authentication is on.',
+  'profile.twoFactor.statusDisabled': 'Two-factor authentication is off.',
+  'profile.twoFactor.disabledHint':
+    'Protect your account with a one-time code from an authenticator app each time you sign in.',
   'profile.twoFactor.enableButton': 'Enable two-factor authentication',
-  'profile.twoFactor.manageExisting': 'Already set up? Manage it',
   'profile.twoFactor.scanInstruction':
     'Scan this QR code with your authenticator app (Google Authenticator, 1Password, and similar).',
   'profile.twoFactor.qrAlt': 'Two-factor setup QR code',
@@ -153,10 +154,11 @@ export const profileTr: Record<ProfileMessageId, string> = {
   'profile.twoFactor.title': 'İki adımlı doğrulama',
   'profile.twoFactor.description':
     'Kimlik doğrulayıcı uygulamayla girişe ikinci bir adım ekleyin.',
-  'profile.twoFactor.idleHint':
-    'Bu cihaz, hesabınızda iki adımlı doğrulamanın açık olup olmadığını bilemez. Aşağıdan etkinleştirin veya mevcut kurulumu yönetin.',
+  'profile.twoFactor.statusEnabled': 'İki adımlı doğrulama açık.',
+  'profile.twoFactor.statusDisabled': 'İki adımlı doğrulama kapalı.',
+  'profile.twoFactor.disabledHint':
+    'Her girişte kimlik doğrulayıcı uygulamadan gelen tek kullanımlık bir kodla hesabınızı koruyun.',
   'profile.twoFactor.enableButton': 'İki adımlı doğrulamayı etkinleştir',
-  'profile.twoFactor.manageExisting': 'Zaten kurdunuz mu? Yönetin',
   'profile.twoFactor.scanInstruction':
     'Bu QR kodunu kimlik doğrulayıcı uygulamanızla (Google Authenticator, 1Password ve benzeri) tarayın.',
   'profile.twoFactor.qrAlt': 'İki adımlı doğrulama kurulum QR kodu',

@@ -33,6 +33,12 @@ export interface MeResponse {
   tenantId: string;
   roles: string[];
   permissions: string[];
+  /**
+   * Whether the account has two-factor authentication switched on. Authoritative
+   * backend state (`MeDto.twoFactorEnabled`, verified against the regenerated
+   * schema); the self-service 2FA card reads this instead of guessing.
+   */
+  twoFactorEnabled: boolean;
 }
 
 /** `POST /api/auth/login` — the selected tenant travels in the `X-Tenant` header. */
