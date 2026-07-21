@@ -577,6 +577,20 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
+      # PROD-R16: access-token revocation is FAIL-CLOSED — if Redis is unreachable the resource
+      # server rejects every authenticated request (a revoked token must never be honoured). So the
+      # booted jar now REQUIRES Redis to serve the authenticated smoke calls below; without it the
+      # login smoke would pass but every /me / negative-tenant assertion would 401. dev profile
+      # defaults Redis to localhost:6380, so the service is mapped there.
+      redis:
+        image: redis:7
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -609,8 +623,9 @@ jobs:
           nohup java -jar "${JAR}" > backend.log 2>&1 &
           echo $! > backend.pid
 
-      # PROD-R29: aggregate `/actuator/health` DEĞİL — bu job'da da redis servisi yok ve
-      # aggregate onu aktif olarak yokladığı için 503 döner. `readiness` = readinessState + db.
+      # PROD-R29: aggregate `/actuator/health` DEĞİL. Bu job artık redis servisi taşıyor (PROD-R16
+      # revocation için), yani aggregate bugün UP dönerdi — ama trafik/hazır-olma kapısı bilinçle
+      # yine `readiness` (= readinessState + db); redis/mail readiness'e dâhil değil.
       - name: Wait for readiness
         run: |
           set -euo pipefail
