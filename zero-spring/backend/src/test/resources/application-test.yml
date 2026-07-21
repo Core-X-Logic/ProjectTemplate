@@ -36,6 +36,14 @@ zero:
     # raised far above what the suite generates. RateLimitIT lowers it in its own context.
     enabled: true
     capacity: 10000
+    redis:
+      # PROD-R6 (distributed): OFF for the general suite so no IT needs a Redis container — the
+      # throttle runs purely per-instance here, which is the pre-PROD-R6 behaviour and exactly what
+      # the existing filter tests assert. The distributed store and its degrade path get their own
+      # container-backed coverage (DistributedRateLimitIT) and a unit-level degrade test
+      # (RateLimitDegradeTest); DistributedRateLimitWiringIT opts back in with `enabled=true` and a
+      # Redis Testcontainer to prove the Spring wiring end to end.
+      enabled: false
   billing:
     iyzico:
       # P2'-B: never the production host in a test JVM, even though the provider ITs fake both

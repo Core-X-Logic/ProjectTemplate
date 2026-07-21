@@ -14,7 +14,7 @@ Aşağıdaki kayıtların çoğu bu şablonun **kendi geçmişidir** ve sizi ba�
 | ~~**PROD-R21**~~ | ~~`/api/users` bellekte sayfalıyor~~ | ✅ **KAPANDI (Q-03).** İki aşamalı sorguya geçildi (id sayfası → fetch join), sıra geri yükleniyor. `PagedListingIsNotSlicedInMemoryIT` (7) + `UserServiceOrderRestorationTest` (5). ArchUnit Rule 1 donmuş sayısı 6 → 0; ayrıca test profilinde `hibernate.query.fail_on_pagination_over_collection_fetch=true` ile `join fetch` şekli de kapatıldı |
 | **PROD-R23** | Branch protection **ücretsiz planda kurulamıyor** (403) | CI zinciri raporlar ama **kırmızı check push'u engellemez**. Blokaj insan disiplininde. `SETUP-NEW-PROJECT.md` §2 |
 | ~~**PROD-R27**~~ | ~~Dockerfile'ı hiçbir gate build etmiyor~~ | ✅ **KAPANDI (2026-07-21, [run 29831107658](https://github.com/Core-X-Logic/ProjectTemplate/actions/runs/29831107658)).** Yeni `docker-build` gate'i backend imajını buildx ile build ediyor VE dört sertleştirmeyi assert ediyor (non-root `zero` · HEALTHCHECK · `SPRING_PROFILES_ACTIVE=prod` · heap tavanı) — log: *"Image hardening doğrulandı"*. `release` artık `[security-checks, docker-build]` bekliyor: bozuk/sertleşmemiş imaj release'i bloklar. Push YOK (registry hedefi klonlayanın) |
-| **PROD-R6** | Rate limit bucket'ları **JVM-local** | N replika = N × limit. Ayrıca istemci kimliği `X-Forwarded-For`'a dayanır: **proxy'nin bu başlığı ezmesi zorunludur**, kodla garanti edilemez |
+| ~~**PROD-R6**~~ (scope) | ~~Rate limit bucket'ları **JVM-local** → N replika = N × limit~~ | ✅ **KAPANDI (dağıtık).** Bucket'lar artık Redis'te (bucket4j `LettuceBasedProxyManager`, Spring'in mevcut Lettuce istemcisi yeniden kullanılır): `capacity` tek küme-geneli limittir, N × limit değil. Redis erişilemezse **instance-local fallback**'e düşer (eski davranış) — asla açık (sınırsız brute force) ya da kapalı (503 kilitleme) değil; dedup'lı WARN. `zero.ratelimit.redis.enabled=false` saf-local. Kanıt: `DistributedRateLimitIT` (paylaşık 5 vs local 2×=10), `DistributedRateLimitWiringIT` (sayaç Redis'te, heap boş), `RateLimitDegradeTest` (429@cap+1, 503 yok). **Artık kalan:** aşağıdaki `X-Forwarded-For` operasyonel varsayımı |
 | **PROD-R16** | `kid` / anahtar rotasyonu / access-token iptali **yok** | Rotasyon tüm oturumları düşürür; access token 15 dk boyunca iptal edilemez |
 | ~~**Issue #1**~~ | ~~`POST /api/tenants` **admin kullanıcı oluşturmuyor**~~ | ✅ **KAPANDI (2026-07-20, `20247d5` + `7914373`).** Senkron listener (`Propagation.MANDATORY` — tenant + admin **tek transaction**, "tenant var admin yok" commit edilemez) `TenantAdminBootstrapper`'ı koşuyor: tenant-side Admin rolü (`tenantAdminPermissionNames()` = tümü − HOST-only; `DataSeeder` aynı kaynağa delege — drift edemez) + admin kullanıcı (`adminEmail` zorunlu; parola verilmezse SecureRandom üretilir, **yalnız bir kez** yanıtta döner, loglanmaz, düz metin saklanmaz). Idempotent + constraint-destekli (TOCTOU → 409). **Negatif kanıt düzeltme ÖNCESİ ölçüldü:** `TenantBootstrapIT.createdTenantAdminCanLoginAndCallAPermissionGatedTenantEndpoint` eski kodda `expected: 200 OK but was: 401 UNAUTHORIZED`. **Canlı smoke:** create 201(+parola) → tenant login 200 → `/api/users` 200 → yanlış tenant 403 → **re-boot** → aynı parola login 200 (seeder uzlaştırması bozmuyor). Frontend: dialog `adminEmail` + tek-seferlik parola gösterimi, düzeltilmemiş dialog'da 6/6 kırmızı ölçülmüş |
 | ~~**R-30**~~ | ~~31 ham `hasAuthority('...')` literali~~ | ✅ **KAPANDI (Q-02).** 7 dosyada 31 literal sabite taşındı, **hiçbir değer değişmedi** (üçlü kilit korundu). Modül döngüsü nedeniyle `audit`/`settings`/`tenancy` kendi sabit sınıflarını taşıyor (`SaasPermissions` deseni), `PermissionRegistryAlignmentTest` çoğaltmayı güvenli kılıyor. ArchUnit Rule 3: 31 → 0 |
@@ -144,7 +144,7 @@ Her satırın kanıtı, o bulguyu *özellikle* hedefleyen bir testtir — mevcut
 | PROD-R3 | **Closed** | `CorsConfigurationSource` + `.cors(...)`; origin listesi config'ten, base'de **boş** (fail-closed), prod'da default'suz `${CORS_ALLOWED_ORIGINS}`; `allowCredentials=false` | `CorsPolicyIT` (4 test) |
 | PROD-R4 | **Closed** | `server.forward-headers-strategy: framework` + HSTS (1 yıl, includeSubDomains, preload) | `SecurityHeadersIT.hstsIsWrittenWhenTheProxyReportsATlsRequest` (X-Forwarded-Proto ile proxy taklidi) |
 | PROD-R5 | **Closed** | CSP (`default-src 'none'`, prod), Referrer-Policy, Permissions-Policy, frameOptions deny | `SecurityHeadersIT.everyResponseCarriesTheHardeningHeaders` |
-| PROD-R6 | **Mitigating** | Bucket4j token bucket: IP **ve** kullanıcı adı boyutunda, 4 kimliksiz uçta, 429 + ProblemDetail + Retry-After | `RateLimitIT` (6 test) — **artık risk:** bucket'lar instance-local, N replika = N x limit; bkz. aşağıdaki not |
+| PROD-R6 | **Closed (dağıtık) / Mitigating (proxy varsayımı)** | Bucket4j token bucket: IP **ve** kullanıcı adı boyutunda, 9 kimliksiz uçta, 429 + ProblemDetail + Retry-After. Bucket store **Redis'e taşındı** (`DistributedRateLimitStore` + `RateLimitRedisConfig`): tek küme-geneli limit; Redis kesintisinde instance-local fallback (açık/kapalı değil, dedup WARN). Anahtar türetimi değişmedi (`"ip\|…"` / `"user\|…"` string'leri Redis anahtarı). Kalan artık: `X-Forwarded-For` proxy varsayımı | `RateLimitIT` (6) + `RateLimitBypassIT` (B3 spoof) + `DistributedRateLimitIT` (3: paylaşık limit vs local 2×) + `DistributedRateLimitWiringIT` (3: Spring bağlanması, sayaç Redis'te) + `RateLimitDegradeTest` (4: degrade/dedup/spoof) |
 | PROD-R7 | **Closed** | Zaten kapalıydı (`application-prod.yml` `cache.type=redis`) | — |
 | PROD-R8 | **Closed** | `cache-names` gerçek kullanımla hizalandı; kullanılmayan `permission-tree` **silindi** (izin ağacı cache'e hiç uğramıyor) | `PermissionTreeIT`, `SettingsIT`, `FeatureResolutionIT` (mevcut) |
 | PROD-R9 | **Closed** | Hikari pool ayarları (max/min-idle/connection-timeout/max-lifetime/leak-detection) base + prod | — (konfigürasyon; davranış testi yok) |
@@ -176,13 +176,26 @@ belgelenmiş** istisnadır; gerekçe hem `V6__hardening.sql` hem `SchedulingConf
 
 #### Kapanmayan / kabul edilen artık riskler
 
-- **PROD-R6 (rate limit) — çok-instance:** Bucket'lar `ConcurrentHashMap`'te, JVM-local. N replika
-  toplamda N x limit'e izin verir. Sınırsız bir sel yerine limitin küçük bir katına indiği için
-  koruma anlamlıdır ve yeni altyapı gerektirmez. Paylaşımlı sayaç = Bucket4j Redis/Hazelcast
-  backend'i; anahtar türetimi (`RateLimitFilter.bucketFor`) bunu tek noktada değiştirilebilir
-  bırakacak şekilde yazıldı. Ayrıca istemci kimliği `X-Forwarded-For`'a dayanır — bu, HSTS ile
-  **aynı** güven sınırıdır: istemcinin gönderdiği `X-Forwarded-*` başlıklarını ezen bir proxy arkasında
-  çalışmak zorunludur.
+- **PROD-R6 (rate limit) — çok-instance: KAPANDI.** Bucket'lar artık Redis'te paylaşılıyor
+  (`DistributedRateLimitStore`, bucket4j `LettuceBasedProxyManager` — Spring'in `spring.data.redis.*`
+  için kurduğu Lettuce istemcisi yeniden kullanılır, ikinci havuz açılmaz). `capacity` tek küme-geneli
+  limittir; N replika artık N x limit vermez. Anahtar türetimi bilerek backend-agnostik bırakılmıştı,
+  o yüzden bu yalnız **store**'un takasıydı — `"ip\|…"` / `"user\|…"` string'leri değişmeden Redis
+  anahtarı oldu (`RateLimitFilter.tryConsume`). **Degrade, bağımlılık değil:** Redis erişilemezse o
+  istek için instance-local in-heap bucket'a düşer (eski davranış) ve dedup'lı WARN yazar — asla açık
+  (bir blip login'i sınırsız brute force'a açmamalı) ya da kapalı (bir blip herkesi login'den
+  kilitlememeli) değil. Store lazy kurulur, böylece boot anında erişilemez Redis uygulamayı
+  başlatmaktan alıkoymaz. `zero.ratelimit.redis.enabled=false` saf-local moddur (test profili bunu
+  kullanır). Bu, cache'in PROD-R13'teki duruşuyla aynıdır ve **bilerek readiness grubu dışındadır**
+  (Redis kesintisi trafiği kesmez). Kanıt: `DistributedRateLimitIT` (paylaşık 5 vs iki in-heap bucket
+  2×=10 — kapanan sızıntının sayıları), `DistributedRateLimitWiringIT` (Spring bağlanması + sayaç
+  Redis'te, heap fallback boş), `RateLimitDegradeTest` (fail-open mutasyonuyla 429→200 kırmızıya
+  düştü, sonra düzeltildi).
+- **PROD-R6 — kalan operasyonel varsayım (`X-Forwarded-For`):** İstemci kimliği hâlâ
+  `X-Forwarded-For`'a dayanır — bu, HSTS ile **aynı** güven sınırıdır: istemcinin gönderdiği
+  `X-Forwarded-*` başlıklarını **ezen** (yalnız eklemeyen) bir proxy arkasında çalışmak zorunludur.
+  Bu kodla garanti edilemez; dağıtık store bunu değiştirmez, `ClientAddressResolver` sağ-baştan-oku
+  modeliyle olduğu gibi korunur (`RateLimitBypassIT` B3 + `RateLimitDegradeTest` spoof).
 - **PROD-R16 (`kid` / key rotation):** Yapılmadı. Gerekçe: `kid` tek başına rotasyonu çözmez —
   anlamlı olması için decoder'ın **aynı anda birden çok anahtarı** kabul etmesi (eski + yeni),
   yani çok anahtarlı bir `JWKSource` ve anahtarların konfigürasyondan bir set olarak okunması gerekir.

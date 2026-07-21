@@ -162,6 +162,26 @@ zero:
     # charge (B2). These endpoints take a handful of short strings; 16 KB is already far above any
     # legitimate request, and raising it widens the window the limiter has to buffer per request.
     max-body-bytes: ${RATE_LIMIT_MAX_BODY_BYTES:16384}
+    redis:
+      # PROD-R6 (distributed). The token buckets are shared through Redis so N replicas behind a load
+      # balancer enforce ONE cluster-wide `capacity`, not N x capacity. Reuses the Lettuce client
+      # Spring already builds from spring.data.redis.* — no second connection pool.
+      #
+      # Degrade, do not depend: Redis is the PRIMARY store, never a hard dependency of the login path.
+      # When it is unreachable the limiter falls back to the per-instance in-heap bucket (the old
+      # behaviour) and logs a deduplicated WARN — it never fails open to unlimited (a blip must not
+      # open login to brute force) and never fails closed to 503 (a blip must not lock everyone out).
+      # The store is built lazily, so an unreachable Redis at boot cannot stop the app starting. This
+      # is deliberately NOT in the readiness group for the same reason the cache is not (PROD-R13).
+      enabled: ${RATE_LIMIT_REDIS_ENABLED:true}
+      # Namespaces the limiter's keys so two apps (or two clones of this template — container_name is
+      # intentionally absent, R-01b) can share one Redis without colliding.
+      key-prefix: ${RATE_LIMIT_REDIS_KEY_PREFIX:zero:rl:}
+      # Idle-key TTL. Empty (the default) derives it from refill-period so a key lives exactly as long
+      # as its bucket needs to refill to full, then expires — never mid-window, which would reset a
+      # count and weaken the limit. Set a fixed Duration only with reason, and keep it above
+      # refill-period.
+      key-ttl: ${RATE_LIMIT_REDIS_KEY_TTL:}
   request:
     # F1: the application-wide body bound, and the reason it is a separate block from the one above.
     # zero.ratelimit.max-body-bytes (16 KB) is enforced by RateLimitFilter, and that filter runs on

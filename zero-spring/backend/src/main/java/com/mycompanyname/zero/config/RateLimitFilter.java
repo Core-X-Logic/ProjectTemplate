@@ -90,12 +90,17 @@ import java.util.concurrent.atomic.AtomicLong;
  * asked of the application ({@link RequestBodyFormats}), so a format arriving on the classpath
  * tomorrow lands in the refused set by default rather than in an unguarded one.
  *
- * <p><b>Scope limit — single instance.</b> The buckets live in this JVM's heap, so N application
- * instances behind a load balancer permit N x capacity in aggregate. That is a real weakening but
- * still a hard bound (it turns an unlimited flood into a small multiple of the limit), and it costs
- * no new infrastructure. Moving to a shared counter means a Bucket4j Redis/Hazelcast backend keyed
- * the same way; the key derivation below is deliberately backend-agnostic to make that a swap of
- * {@link #bucketFor} alone. Tracked in the risk register as the residual for PROD-R6.
+ * <p><b>Scope — shared across instances, degrading to per-instance.</b> The buckets are backed by
+ * Redis ({@link DistributedRateLimitStore}), so {@code capacity} is one cluster-wide limit rather
+ * than one-per-JVM: N instances behind a load balancer no longer permit N x capacity (PROD-R6). The
+ * key derivation stayed deliberately backend-agnostic so this was a swap of the store alone — the
+ * {@code "ip|"}/{@code "user|"} strings are the Redis keys unchanged. When Redis is unreachable the
+ * store throws and {@link #tryConsume} falls back to the in-heap {@link #buckets} map for that
+ * request — never failing open to unlimited, never failing closed to 503, just back to the old
+ * per-instance bound until Redis returns. When {@code zero.ratelimit.redis.enabled=false} there is no
+ * distributed store and the limiter is purely per-instance. The residual for PROD-R6 is now the
+ * operational assumption that the proxy overwrites
+ * client-supplied {@code X-Forwarded-*} (see {@link ClientAddressResolver}), not the store's scope.
  */
 @Slf4j
 public class RateLimitFilter extends OncePerRequestFilter {
@@ -106,28 +111,55 @@ public class RateLimitFilter extends OncePerRequestFilter {
     /** Where {@link #doFilterInternal} finds the path {@link #shouldNotFilter} already resolved. */
     private static final String LOOKUP_PATH_ATTRIBUTE = RateLimitFilter.class.getName() + ".lookupPath";
 
+    /** WARN at most this often while Redis is unreachable, so an outage cannot flood the log. */
+    private static final long DEGRADE_WARN_INTERVAL_NANOS = Duration.ofSeconds(30).toNanos();
+
     private final RateLimitProperties properties;
     private final ObjectMapper objectMapper;
     private final ThrottledPathMatcher pathMatcher;
     private final ClientAddressResolver clientAddressResolver;
     private final RequestBodyFormats bodyFormats;
 
+    /**
+     * The shared Redis-backed store, or {@code null} when Redis is switched off
+     * ({@code zero.ratelimit.redis.enabled=false}). Null means "per-instance only", the pre-PROD-R6
+     * behaviour; non-null means "distributed, degrading to the local map below on a Redis failure".
+     * Either way the local map is the fallback store.
+     */
+    private final DistributedRateLimitStore distributedStore;
+
     private final ConcurrentHashMap<String, TrackedBucket> buckets = new ConcurrentHashMap<>();
     private final AtomicLong lastSweepNanos = new AtomicLong(System.nanoTime());
+    /** Deadline gate for the degrade WARN; see {@link #warnDegrade}. Starts elapsed so the first fires. */
+    private final AtomicLong degradeWarnDeadlineNanos = new AtomicLong(System.nanoTime());
 
     public RateLimitFilter(RateLimitProperties properties,
                            ObjectMapper objectMapper,
-                           ObjectProvider<RequestMappingHandlerAdapter> handlerAdapters) {
-        this(properties, objectMapper, new RequestBodyFormats(handlerAdapters));
+                           ObjectProvider<RequestMappingHandlerAdapter> handlerAdapters,
+                           ObjectProvider<DistributedRateLimitStore> distributedStores) {
+        this(properties, objectMapper, new RequestBodyFormats(handlerAdapters),
+                distributedStores.getIfAvailable());
     }
 
     /** Seam for tests that supply the format inventory directly instead of a Spring context. */
     RateLimitFilter(RateLimitProperties properties,
                     ObjectMapper objectMapper,
                     RequestBodyFormats bodyFormats) {
+        this(properties, objectMapper, bodyFormats, null);
+    }
+
+    /**
+     * Seam for tests that also supply a distributed store — a real Redis-backed one, or a stand-in
+     * that throws to drive the degrade path.
+     */
+    RateLimitFilter(RateLimitProperties properties,
+                    ObjectMapper objectMapper,
+                    RequestBodyFormats bodyFormats,
+                    DistributedRateLimitStore distributedStore) {
         this.properties = properties;
         this.objectMapper = objectMapper;
         this.bodyFormats = bodyFormats;
+        this.distributedStore = distributedStore;
         this.pathMatcher = new ThrottledPathMatcher(properties.getPaths());
         this.clientAddressResolver = new ClientAddressResolver(properties.getTrustedProxyCount());
     }
@@ -164,8 +196,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         // eight 413s and left the allowance completely unspent, ready for an ordinary login. Refusing
         // a request and charging for it are separate decisions, and skipping the second one turns
         // "rejected" into nothing more than a different response to an unlimited request rate.
-        ConsumptionProbe ipProbe = bucketFor("ip|" + path + "|" + client)
-                .tryConsumeAndReturnRemaining(1);
+        ConsumptionProbe ipProbe = tryConsume("ip|" + path + "|" + client);
         if (!ipProbe.isConsumed()) {
             reject(response, path, client, "ip", ipProbe);
             return;
@@ -232,8 +263,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
         String username = extractUsername(body, mediaType);
         if (username != null) {
-            ConsumptionProbe userProbe = bucketFor("user|" + path + "|" + username)
-                    .tryConsumeAndReturnRemaining(1);
+            ConsumptionProbe userProbe = tryConsume("user|" + path + "|" + username);
             if (!userProbe.isConsumed()) {
                 reject(response, path, client, "username", userProbe);
                 return;
@@ -273,7 +303,53 @@ public class RateLimitFilter extends OncePerRequestFilter {
         buckets.clear();
     }
 
-    private Bucket bucketFor(String key) {
+    /**
+     * One token for {@code key}, from the shared Redis bucket when it is reachable and from the
+     * per-instance bucket when it is not.
+     *
+     * <p>This is the whole degrade policy, and the two ways it must NOT behave are the point of it.
+     * Redis reachable &rarr; the distributed bucket, so the limit is one cluster-wide {@code capacity}
+     * (PROD-R6). Redis throwing or timing out &rarr; the in-heap bucket that predates this backend,
+     * for this request only. It never returns a consumed probe without charging some bucket — that
+     * would fail open, and a Redis blip would hand an attacker unlimited login attempts — and it never
+     * turns the failure into a rejection — that would fail closed, and a Redis blip would lock every
+     * real user out of login. Degrade to the per-instance limit: never worse than before this backend
+     * existed, better whenever Redis is up.
+     */
+    private ConsumptionProbe tryConsume(String key) {
+        if (distributedStore != null) {
+            try {
+                return distributedStore.tryConsume(key);
+            } catch (RuntimeException ex) {
+                // Any failure reaching Redis (connection refused, timeout, a Lettuce RedisException):
+                // degrade, never propagate. Catching broadly is deliberate — the invariant is "a Redis
+                // problem must never decide the request", and a narrower catch that let one class of
+                // failure through would break exactly that.
+                warnDegrade(ex);
+            }
+        }
+        return localBucketFor(key).tryConsumeAndReturnRemaining(1);
+    }
+
+    /**
+     * Logs the degrade at WARN at most once per {@link #DEGRADE_WARN_INTERVAL_NANOS}, and at DEBUG the
+     * rest of the time. A Redis outage would otherwise emit one WARN per throttled request — the very
+     * log-flood the limiter exists to prevent, turned on the operator. The deadline starts already
+     * elapsed, so the first degrade always warns.
+     */
+    private void warnDegrade(RuntimeException ex) {
+        long now = System.nanoTime();
+        long deadline = degradeWarnDeadlineNanos.get();
+        if (now - deadline >= 0
+                && degradeWarnDeadlineNanos.compareAndSet(deadline, now + DEGRADE_WARN_INTERVAL_NANOS)) {
+            log.warn("Rate limiter could not reach Redis; degrading to per-instance buckets for now "
+                    + "(the limit still applies, just not cluster-wide). Cause: {}", ex.toString());
+        } else {
+            log.debug("Rate limiter Redis degrade (deduplicated WARN): {}", ex.toString());
+        }
+    }
+
+    private Bucket localBucketFor(String key) {
         sweepIfDue();
         TrackedBucket tracked = buckets.computeIfAbsent(key, ignored -> new TrackedBucket(newBucket()));
         tracked.lastUsedNanos = System.nanoTime();
@@ -281,13 +357,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
     private Bucket newBucket() {
-        Bandwidth limit = Bandwidth.builder()
-                .capacity(properties.getCapacity())
-                // Intervally, not greedy: the full allowance returns at the end of the window instead
-                // of trickling back, which is what "10 per minute" is normally taken to mean.
-                .refillIntervally(properties.getCapacity(), properties.getRefillPeriod())
+        // The SAME Bandwidth definition the Redis-backed store uses, not a second copy of it. This is
+        // what makes DistributedRateLimitStore's "both stores are built from this so they cannot
+        // diverge" claim actually true: if the shape ever changes (a burst, refillGreedy, ...), the
+        // primary Redis path and this local fallback change together, so a Redis blip can never
+        // silently swap one limit for a different one.
+        return Bucket.builder()
+                .addLimit(DistributedRateLimitStore.bandwidth(properties))
                 .build();
-        return Bucket.builder().addLimit(limit).build();
     }
 
     /**

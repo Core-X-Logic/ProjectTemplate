@@ -2,6 +2,7 @@ package com.mycompanyname.zero.identity.auth;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mycompanyname.zero.config.CorsProperties;
+import com.mycompanyname.zero.config.DistributedRateLimitStore;
 import com.mycompanyname.zero.config.JwtProperties;
 import com.mycompanyname.zero.config.RateLimitFilter;
 import com.mycompanyname.zero.config.RateLimitProperties;
@@ -231,8 +232,9 @@ public class SecurityConfig {
     @Bean
     public RateLimitFilter rateLimitFilter(RateLimitProperties properties,
                                            ObjectMapper objectMapper,
-                                           ObjectProvider<RequestMappingHandlerAdapter> handlerAdapters) {
-        return new RateLimitFilter(properties, objectMapper, handlerAdapters);
+                                           ObjectProvider<RequestMappingHandlerAdapter> handlerAdapters,
+                                           ObjectProvider<DistributedRateLimitStore> distributedStores) {
+        return new RateLimitFilter(properties, objectMapper, handlerAdapters, distributedStores);
     }
 
     /**

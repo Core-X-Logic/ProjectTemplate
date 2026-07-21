@@ -100,11 +100,24 @@
             <version>${shedlock.version}</version>
         </dependency>
 
-        <!-- F5-B PROD-R6: token-bucket rate limiting for the unauthenticated endpoints.
-             Core only — no Redis/Hazelcast backend, the buckets are per-instance (see RateLimitFilter). -->
+        <!-- F5-B PROD-R6: token-bucket rate limiting for the unauthenticated endpoints. -->
         <dependency>
             <groupId>com.bucket4j</groupId>
             <artifactId>bucket4j-core</artifactId>
+            <version>${bucket4j.version}</version>
+        </dependency>
+        <!-- PROD-R6 (distributed): shared token buckets in Redis so N replicas behind a load
+             balancer enforce ONE cluster-wide limit instead of N x capacity. This module carries
+             LettuceBasedProxyManager (io.github.bucket4j.redis.lettuce.cas). Its lettuce/jedis/redisson
+             dependencies are all declared `provided` in the bucket4j-redis POM, so none is transitive:
+             the Lettuce client already on the classpath via spring-boot-starter-data-redis (managed
+             version) is reused, no second Redis client stack is pulled in. bucket4j-core (compile) is
+             the only transitive edge, and it matches the version above. See RateLimitRedisConfig /
+             DistributedRateLimitStore; the store is a lazy, degrade-to-local swap of RateLimitFilter's
+             bucket store, not a new request-path dependency (Redis down -> per-instance fallback). -->
+        <dependency>
+            <groupId>com.bucket4j</groupId>
+            <artifactId>bucket4j-redis</artifactId>
             <version>${bucket4j.version}</version>
         </dependency>
 
