@@ -76,6 +76,20 @@
 
 ### Güvenlik
 
+- **İki-faktörlü kimlik doğrulama (TOTP + kurtarma kodları).** 2FA açık kullanıcı, şifresi doğru
+  olsa bile ikinci adım olmadan **token alamaz**: `login` kısa-ömürlü, tek-kullanımlık, deneme-limitli
+  bir challenge döner; `POST /api/auth/two-factor/verify` bir TOTP kodu veya kurtarma kodu kabul
+  edince gerçek token'lar basılır. **Fail-closed + oracle yok** (her hata jenerik 401). TOTP secret
+  AES-256-GCM ile şifreli saklanır (yeni `FieldEncryptionService`; anahtar `zero.crypto.field-key`,
+  JWT secret gibi boot'ta doğrulanır, prod'da commit'li dev anahtarı reddedilir); kurtarma kodları
+  BCrypt hashli, tek-kullanımlık, bir kez gösterilir. Self-service yönetim `/api/profile/two-factor/
+  {setup,enable,disable,recovery-codes/regenerate}` (disable/regenerate şifre re-verify). Frontend:
+  login ikinci-adım ekranı + profil 2FA kartı (QR + kurtarma kodları bir kez). Non-2FA login birebir
+  değişmedi. Güvenlik review'i iki gerçek açığı commit öncesi kapattı (birinci-faktör başarısının
+  lockout sayacını sıfırlaması → sınırsız brute-force; challenge/kurtarma consume TOCTOU → double-spend),
+  ikisi de mutasyon-kanıtlı. `V10__two_factor.sql`. Kalan: PROD-R49..R52 (anahtar rotasyonu, kurtarma
+  UX, admin 2FA-reset, SMS/WebAuthn/QR — sonraki faz). Kanıt: 547 backend + 147 frontend test, CI 9/9.
+
 - **Rate limit artık dağıtık (Redis-backed) — çok-replikada tutarlı (PROD-R6 kapandı).** Bucket
   store'u JVM-local'den Redis'e taşındı (bucket4j-redis 8.10.1, Spring'in Lettuce'u yeniden
   kullanılır): `capacity` tek küme-geneli limit, N replika = N×limit değil. Redis kesintisinde

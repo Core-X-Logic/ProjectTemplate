@@ -438,3 +438,44 @@ feature'ı kırdığı görülüp doc düzeltmesine dönüldü).
 
 **Kalan:** `X-Forwarded-For` proxy varsayımı — proxy başlığı **ezmeli**, kodla garanti edilemez
 (operasyonel, RISK-REGISTER PROD-R6 + runbook).
+
+---
+
+## 2FA (TOTP + kurtarma kodları) — foundation identity hardening — 2026-07-21, **9/9**
+
+Backend `91ed0a1` + frontend `4d48d36` + gitleaks allowlist `94645bc`. Son yeşil koşu:
+[run 29853078314](https://github.com/Core-X-Logic/ProjectTemplate/actions/runs/29853078314) — **9/9 success**.
+
+| Kapı | Kanıt |
+|---|---|
+| `backend` | **202 unit + 345 IT = 547** (512→547, +35 2FA); V10 uygulandı (`migration-drift` yeşil) |
+| `frontend` | **147 test** (135→147, +12); login second-step + profil 2FA kartı; `qrcode.react` QR |
+| `typed-client-drift` | yeşil — `schema.d.ts` yeniden üretildi, API yüzeyiyle senkron |
+| `security-checks` | yeşil — gitleaks **no leaks** (field-key allowlist), `npm audit` 0 |
+| `docker-build`/`live-smoke`/`release` | success |
+
+**Akış (fail-closed):** `login` şifre-OK + 2FA-açık → **token BASILMAZ**, kısa-ömürlü tek-kullanımlık
+attempt-limitli challenge → `/api/auth/two-factor/verify` (TOTP veya kurtarma kodu) geçince
+`issueTokenPair`. Her hata = jenerik 401 (oracle yok). Non-2FA login birebir aynı; `refresh` re-gate
+edilmedi. TOTP secret AES-256-GCM şifreli (per-encryption rastgele IV); kurtarma kodları BCrypt(12)
+hashli, tek-kullanım.
+
+**Negatif kanıtlar (mutasyon):** (1) `login`'deki 2FA kapısı kaldırıldı → 2FA kullanıcısı token
+alıyor: `Expecting true but was false`. (2) HIGH review: birinci-faktör başarısı lockout sayacını
+sıfırlıyordu → sınırsız TOTP brute-force; sayaç sıfırlaması yalnız tam-kimlik başarısına taşındı,
+interleaved-relogin testi eski kodda kilitlenmiyor. (3) MEDIUM review: challenge/kurtarma consume
++ attempts decrement TOCTOU → `PESSIMISTIC_WRITE` lookup + guarded UPDATE; concurrency IT double-spend
+(`1 beklenirken 2`) ve lost-update (`4 beklenirken 1`) eski kodda kırmızı.
+
+**Stack-review (güvenlik):** fail-closed gate, AES-GCM (nonce reuse yok), tenant_id sapması (SOUND —
+challenge user_id/256-bit hash ile çözülür, token tenant User'dan otoriter), migration, secret handling
+6 alan temiz; 2 gerçek bulgu (HIGH+MEDIUM) commit öncesi kapatıldı.
+
+**gitleaks dersi (CLAUDE.md):** 2FA'nın dev/test field-key'leri (self-documenting `not-in-prod`/
+`never-deploy`, `FieldEncryptionKeyValidator` prod'da reddediyor) allowlist'e eklendi. Etki **bulgu
+sayısıyla ölçüldü**: allowlist'i yazarken bir base64 typo'su mevcut bir JWT girdisini sessizce bozdu,
+4→0 yerine 4→1 ölçümü yakaladı; düzeltildi → 0.
+
+**Kalan:** PROD-R49 (field-key rotasyon/re-encrypt + KMS), R51 (kurtarma UX + SMS/WebAuthn/QR — sonraki
+faz), R52 (admin 2FA-reset ucu yok — self-lock), ve `/me`'nin `twoFactorEnabled` yansıtmaması (küçük
+takip — kart mevcut durumu okuyamıyor, backend otoriter reddediyor).
