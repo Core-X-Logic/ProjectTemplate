@@ -76,6 +76,17 @@
 
 ### Güvenlik
 
+- **Rate limit artık dağıtık (Redis-backed) — çok-replikada tutarlı (PROD-R6 kapandı).** Bucket
+  store'u JVM-local'den Redis'e taşındı (bucket4j-redis 8.10.1, Spring'in Lettuce'u yeniden
+  kullanılır): `capacity` tek küme-geneli limit, N replika = N×limit değil. Redis kesintisinde
+  **per-instance local fallback** (eski davranış) — asla fail-open (sınırsız brute force) ya da
+  fail-closed (503 kilitleme) değil; dedup'lı WARN. `X-Forwarded-For` güven modeli (trusted-proxy
+  sağdan, anti-spoof) **değişmedi**; Redis anahtarı çözülen gerçek istemciden kurulur, forged
+  başlık taze bucket üretemez. Kimliksiz uçlar dışında davranış değişmedi (429 + ProblemDetail +
+  Retry-After aynı); authenticated-endpoint throttle'ı bilinçle kapsam dışı (R-42). Kanıt:
+  `DistributedRateLimitIT`/`WiringIT` (Testcontainers Redis) + `RateLimitDegradeTest`, 512 test,
+  CI 9/9 (run 29841476694). `zero.ratelimit.redis.*` env-override'lı, güvenli varsayılan.
+
 ---
 
 ## Şablon temeli — 2026-07-19

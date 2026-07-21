@@ -404,3 +404,37 @@ imaj release'i bloklar** (kabul kriteri 2, needs grafiğiyle garantili).
 **Negatif taraf (tasarımla):** `docker-build` başarısız olursa release job'ı hiç tetiklenmez (`needs`).
 **Lokal ön-doğrulama:** imaj lokalde de build edildi ve dört assert (User=zero, Healthcheck=yes,
 prod-profile=OK, heap=OK) **PASS** — CI'dan önce ölçüldü.
+
+---
+
+## PROD-R6 — dağıtık (Redis-backed) rate limit — 2026-07-21, `da1c207`, gerçek `push`, **9/9** (run 29841476694)
+
+Foundation hardening; API/auth/tenant/permission değişikliği yok. Rate-limit bucket store'u
+JVM-local ConcurrentHashMap'ten Redis'e taşındı (bucket4j-redis 8.10.1, Spring'in Lettuce'u
+yeniden kullanılır) → N replikada N×limit sapması kapandı. Kanıt:
+[run 29841476694](https://github.com/Core-X-Logic/ProjectTemplate/actions/runs/29841476694).
+
+| Kapı | Bu koşudaki kanıt |
+|---|---|
+| `backend` | **190 unit + 322 IT = 512**, 0 fail/error/skip |
+| `DistributedRateLimitIT` (Testcontainers Redis) | 3/3 — iki "replika" tek Redis'i paylaşınca **paylaşık limit 5**; eski iki-heap-bucket store **2×=10** sızdırıyor (PROD-R6 negatif kanıtı, in-test asserted) |
+| `DistributedRateLimitWiringIT` (SpringBootTest + Redis, 6.2s = gerçek konteyner) | 3/3 — sayaç `zero:rl:` anahtarlarında Redis'te **ve** heap map boş (dağıtık, vakum-local değil); forged leading `X-Forwarded-For` gerçek istemciye yazılıyor |
+| `RateLimitDegradeTest` | 4/4 — Redis kesintisi → **429@capacity+1 (fail-open değil), 503 yok (fail-closed değil)**, dedup WARN |
+| Diğer 8 job (build · frontend · docker-build · typed-client-drift · migration-drift · live-smoke · security-checks · release) | success |
+
+**Negatif kanıt (mutasyon):** `tryConsume` catch'i fail-open yapıldı → `RateLimitDegradeTest`
+kırmızı: `expected: 429 but was: 200`; geri alındı, yeşil. Dağıtık sızıntı karşıtlığı (5 vs 10)
+`DistributedRateLimitIT`'te in-test.
+
+**Degrade policy (bilinçli, testli):** Redis-primary; herhangi bir Redis hatası → per-instance
+local bucket (eski davranış). Asla fail-open-sınırsız, asla fail-closed-503. Tek `Bandwidth`
+tanımı iki yolu da besler (divergence yok). Redis readiness grubunda değil (PROD-R13 gerekçesi);
+lazy proxy manager → Redis kapalıyken boot ayakta. dependency:tree: yalnız Spring'in Lettuce'u
+(jedis/redisson sızmıyor).
+
+**Stack-review:** güvenlik-odaklı; degrade tasarımı sağlam, iki arıza modu da önlenmiş, 6 alan
+temiz; 2 LOW commit öncesi kapatıldı (tek-kaynak Bandwidth; `@ConditionalOnBean` ölçülerek
+feature'ı kırdığı görülüp doc düzeltmesine dönüldü).
+
+**Kalan:** `X-Forwarded-For` proxy varsayımı — proxy başlığı **ezmeli**, kodla garanti edilemez
+(operasyonel, RISK-REGISTER PROD-R6 + runbook).
