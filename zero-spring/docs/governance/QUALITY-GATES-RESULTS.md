@@ -355,3 +355,29 @@ filtre olsun olmasın geçerdi — eklenen korumayı hiç ölçmeden.
 testler "mevcut kurulum" hatalarını göremez. Bu turda iki örnek çıktı: kaldırılan `roles.manage`
 izninin bayat satırları (V7 ile temizlendi) ve `UserNotification` üzerindeki yeni kiracı
 filtresinin, sahibinin kiracısıyla uyuşmayan satırları gizleyebilmesi.
+
+---
+
+## Release hardening — 2026-07-21, `03d3315`, gerçek `push`, **8/8** (run 29822177991)
+
+Kod/işlev değişikliği yok; yalnız CI/config uyarı temizliği. Kanıt:
+[run 29822177991](https://github.com/Core-X-Logic/ProjectTemplate/actions/runs/29822177991).
+
+| Metrik | Hedef | Ölçülen | Kanıt |
+|---|---|---|---|
+| Node 20 deprecation satırı (tam log) | 0 | **0** | `grep -ci "Node 20 is being deprecated\|Node.js 20 is deprecated"` → 0 (önceki run 29820420095'te her job'da vardı) |
+| Frontend build warning | 0 | **0** | `tsc -b && vite build` exit 0, `grep -c warn` 0; eski `@media var()` uyarısı kalktı |
+| Frontend test | pass | **140/140** (28 dosya) | `frontend` job: `Tests 140 passed (140)` |
+| Backend test | pass | **502** (186 unit + 316 IT), 0 fail/error/skip | `backend` job: `Tests run: 186…` + `316…` |
+| CI zinciri | 8/8 | **8/8** | build · backend · frontend · typed-client-drift · migration-drift · live-smoke · security-checks · release |
+
+**Artifact handoff (upload-artifact@v7 → download-artifact@v8) — digest eşleşmeli:**
+`build` job `backend-jar` (ID **8491827278**, 109 247 020 bytes) yükledi; `typed-client-drift`,
+`migration-drift`, `live-smoke`, `release` job'ları aynı ID'yi indirdi ve **dördünde de
+`sha256:f429bcb70a0a…955992f` birebir eşleşti** → aynı jar, v7→v8 major sınırından bozulmadan
+geçti; sequential gate mantığı korundu.
+
+**Değişen:** ci.yml action'ları (checkout v4→v7, setup-node v4→v7, setup-java v4→v5,
+upload-artifact v4→v7, download-artifact v4→v8; yalnız version tag'i) · `tsconfig.app.json`
+(baseUrl kaldırıldı, paths TS5+'ta göreli çözülür) · `scrollable.css` (`var(--breakpoint-lg)` →
+`64rem`, media-feature'da CSS var geçersizdi). **Davranış değişmedi** (build 0 warning, 502+140 test yeşil).

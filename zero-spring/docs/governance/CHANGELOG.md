@@ -48,6 +48,17 @@
   kapatılmadı, kod tarafı offline kanıtlı.
 
 ### Değişti
+
+- **Release-hardening: CI/config uyarı temizliği (davranış değişikliği YOK).** (a) GitHub Actions
+  major uplift — `checkout` v4→v7, `setup-node` v4→v7, `setup-java` v4→v5, `upload-artifact` v4→v7,
+  `download-artifact` v4→v8; hepsi Node 24 runtime, "Node 20 deprecated" uyarısı kalktı (koşuda
+  0 satır). Yalnız version tag'i değişti; `with:` girdileri, cache, working-directory, artifact
+  adları ve `needs:` gate sırası aynı — upload@v7/download@v8 handoff digest-eşleşmeli kanıtlandı.
+  (b) `tsconfig.app.json` — `baseUrl` kaldırıldı (TS 5.x'te `paths` göreli çözülür; susturma değil,
+  kökten). (c) `scrollable.css` — `@media (max-width: var(--breakpoint-lg))` → `64rem` (CSS custom
+  property media-feature değerinde geçersizdi; kural ölüydü, build uyarı basıyordu). Frontend build
+  0 warning, 140 test + backend 502 test yeşil, CI 8/8 (run 29822177991).
+
 ### Kaldırıldı
 ### Düzeltildi
 ### Güvenlik
