@@ -1,7 +1,8 @@
 name: CI
 
-# Actions dakikası bu planda sınırlı bir kaynak (private repo). Bu zincir 8 job açıyor ve
-# üçü Postgres ayağa kaldırıp jar boot ediyor, yani tam bir koşu ucuz değil. `paths-ignore`
+# Actions dakikası bu planda sınırlı bir kaynak (private repo). Bu zincir 9 job açıyor ve
+# üçü Postgres ayağa kaldırıp jar boot ediyor, biri de container imajını build ediyor — yani
+# tam bir koşu ucuz değil. `paths-ignore`
 # bu yüzden var: bu depoda dokümantasyon commit'leri kod commit'lerinden daha sık ve bir
 # markdown değişikliğinin Testcontainers suite'ini çalıştırması saf israf.
 #
@@ -28,7 +29,8 @@ on:
 # düşerse zincirin geri kalanı hiç çalışmaz ve `release` job'ı asla tetiklenmez.
 #
 #   build → backend / frontend (test) → typed-client-drift → migration-drift → live-smoke
-#         → security-checks → release
+#         → security-checks ─┐
+#   build → docker-build ────┴→ release   (release, security-checks VE docker-build'i bekler)
 #
 # ⚠️ BU DOSYANIN NEYİ GARANTİ ETMEDİĞİ — okumadan "gate" demeyin.
 #
@@ -50,7 +52,7 @@ on:
 #
 # `defaults.run.working-directory: zero-spring` gizli bir sözleşme kurar: **`Checkout`'tan
 # önce hiçbir `run:` adımı eklenemez**, çünkü o noktada `zero-spring` dizini henüz yoktur ve
-# adım anında ölür. Şu an sekiz job'ın sekizi de `Checkout` ile başlıyor.
+# adım anında ölür. Şu an dokuz job'ın dokuzu da `Checkout` ile başlıyor.
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -882,11 +884,67 @@ jobs:
   # `needs: security-checks` zincirin son halkası olduğu için tüm önceki
   # gate'ler transitif olarak zorunludur (biri düşerse buraya hiç gelinmez).
   # ŞU AN GERÇEK DEPLOY YOK — sadece artifact'i toplayıp hazır olduğunu raporlar.
+  # PROD-R27 gate: the container image was never built or inspected by any check, so its
+  # hardening (non-root user, prod profile, heap ceiling, healthcheck) was unverified and could
+  # rot silently. This job BUILDS the backend image and ASSERTS those four properties. It does
+  # NOT push — a registry/deploy target belongs to the cloner (see the release job's scaffold).
+  # `needs: build` so it runs in parallel with the test chain; `release` waits on it.
+  docker-build:
+    name: docker-build
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # NOTE (CLAUDE.md trap): action `with:` inputs resolve to the WORKSPACE ROOT, so context/file
+      # are repo-root-relative here — NOT under defaults.run.working-directory (zero-spring).
+      - name: Build backend image
+        uses: docker/build-push-action@v7
+        with:
+          context: zero-spring/backend
+          file: zero-spring/backend/Dockerfile
+          push: false
+          load: true
+          tags: zero-backend:ci-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Assert image hardening (PROD-R27)
+        run: |
+          set -euo pipefail
+          IMG=zero-backend:ci-${{ github.sha }}
+          fail=0
+          user=$(docker image inspect -f '{{.Config.User}}' "$IMG")
+          [ "$user" = "zero" ] || { echo "::error::image runs as '$user', beklenen non-root 'zero'"; fail=1; }
+          docker image inspect -f '{{if .Config.Healthcheck}}yes{{else}}no{{end}}' "$IMG" | grep -qx yes \
+            || { echo "::error::image HEALTHCHECK taşımıyor"; fail=1; }
+          env_lines=$(docker image inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$IMG")
+          echo "$env_lines" | grep -qx 'SPRING_PROFILES_ACTIVE=prod' \
+            || { echo "::error::image SPRING_PROFILES_ACTIVE=prod pinlemiyor"; fail=1; }
+          echo "$env_lines" | grep -q 'MaxRAMPercentage' \
+            || { echo "::error::image container-farkındalı heap tavanı (MaxRAMPercentage) set etmiyor"; fail=1; }
+          [ "$fail" = 0 ] && echo "Image hardening doğrulandı: non-root · healthcheck · prod profil · heap tavanı."
+          exit "$fail"
+
+  # ŞU AN gerçek deploy KOŞMAZ (DEPLOY_ENABLED varsayılan false). Parametrik, cloud-agnostic
+  # scaffold: klonlayan repo Settings'ten Variables/Secrets doldurup DEPLOY_ENABLED=true yapar.
   release:
     name: release
     runs-on: ubuntu-latest
-    needs: security-checks
+    needs: [security-checks, docker-build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Deploy scaffold parametreleri — klonlayan repo Settings'te set eder. Varsayılan boş/false,
+    # yani scaffold güvenli bir no-op: plan yazar, durur. Hiçbir cloud CLI hardcode DEĞİL (vendor
+    # lock-in yok) — gerçek komut DEPLOY_COMMAND secret'i ile enjekte edilir.
+    env:
+      DEPLOY_ENVIRONMENT: ${{ vars.DEPLOY_ENVIRONMENT || 'prod' }}
+      IMAGE_REGISTRY: ${{ vars.IMAGE_REGISTRY }}
+      IMAGE_NAME: ${{ vars.IMAGE_NAME || 'zero-backend' }}
+      DEPLOY_ENABLED: ${{ vars.DEPLOY_ENABLED || 'false' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -913,8 +971,50 @@ jobs:
             echo "| Artifact | \`$(basename "${JAR}")\` |"
             echo "| Boyut | $(du -h "${JAR}" | cut -f1) |"
             echo
-            echo "Geçilen gate'ler: build → backend/frontend test → typed-client-drift → migration-drift → live-smoke → security-checks"
+            echo "Geçilen gate'ler: build → backend/frontend test → typed-client-drift → migration-drift → live-smoke → security-checks → docker-build"
             echo
-            echo "> Gerçek deploy adımı henüz bağlı değil (placeholder)."
+            echo "> Deploy: parametrik scaffold bağlı (aşağıdaki plan adımına bakın). DEPLOY_ENABLED=false iken yalnız plan yazılır, gerçek deploy KOŞMAZ."
           } >> "${GITHUB_STEP_SUMMARY}"
           echo "Release artifact hazır: ${JAR}"
+
+      - name: Deploy plan (dry-run)
+        run: |
+          set -euo pipefail
+          SHORT_SHA="${GITHUB_SHA::12}"
+          IMAGE_REF="${IMAGE_REGISTRY:+${IMAGE_REGISTRY}/}${IMAGE_NAME}:sha-${SHORT_SHA}"
+          {
+            echo "## Deploy plan (dry-run) — ${DEPLOY_ENVIRONMENT}"
+            echo
+            echo "| Alan | Değer |"
+            echo "| --- | --- |"
+            echo "| Environment | \`${DEPLOY_ENVIRONMENT}\` |"
+            echo "| Image ref | \`${IMAGE_REF}\` |"
+            echo "| Enabled | \`${DEPLOY_ENABLED}\` |"
+            echo
+            echo "**Klonlayan için doldurulacak noktalar** (repo Settings → Variables / Secrets):"
+            echo "- \`IMAGE_REGISTRY\` (var) — ör. \`ghcr.io/acme\`; boşsa imaj push edilmez"
+            echo "- \`IMAGE_NAME\` (var) — varsayılan \`zero-backend\`"
+            echo "- \`DEPLOY_ENVIRONMENT\` (var) — \`dev\` / \`stage\` / \`prod\`"
+            echo "- \`DEPLOY_COMMAND\` (secret) — cloud-agnostic deploy komutu, ör. \`kubectl apply -f k8s/\`, \`flyctl deploy\`, \`aws ecs update-service …\`"
+            echo "- Uygulama sırları: prod profili \${VAR} bekler (DB_URL, JWT secret, …) — orchestrator/secret store'dan gelir, repoya YAZILMAZ"
+            echo "- \`DEPLOY_ENABLED\` (var) — \`true\` yapılana dek bu job yalnız plan yazar, deploy ETMEZ"
+            echo
+            echo "> docker-build gate imajı üretti ve sertleştirmesini doğruladı ama **push ETMEDİ**."
+            echo "> Deploy için: registry login + push adımı ekle (veya IMAGE_REGISTRY set edip docker-build'e push adımı) ve DEPLOY_COMMAND'i bağla."
+          } >> "${GITHUB_STEP_SUMMARY}"
+          echo "Deploy plan yazıldı (dry-run). DEPLOY_ENABLED=${DEPLOY_ENABLED}"
+
+      - name: Deploy (guarded — no-op until wired)
+        env:
+          DEPLOY_COMMAND: ${{ secrets.DEPLOY_COMMAND }}
+        run: |
+          set -euo pipefail
+          if [ "${DEPLOY_ENABLED}" != "true" ]; then
+            echo "DEPLOY_ENABLED != true → scaffold no-op. Klonlayan Settings'ten açar. Deploy KOŞMADI."
+            exit 0
+          fi
+          : "${DEPLOY_COMMAND:?DEPLOY_ENABLED=true ama DEPLOY_COMMAND secret'i tanımlı değil — deploy komutu yok}"
+          SHORT_SHA="${GITHUB_SHA::12}"
+          export IMAGE_REF="${IMAGE_REGISTRY:+${IMAGE_REGISTRY}/}${IMAGE_NAME}:sha-${SHORT_SHA}"
+          echo "Deploying ${IMAGE_REF} → ${DEPLOY_ENVIRONMENT}…"
+          bash -c "${DEPLOY_COMMAND}"
