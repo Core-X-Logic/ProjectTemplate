@@ -81,6 +81,22 @@
 
 ### Güvenlik
 
+- **JWT anahtar rotasyonu (kid key-ring) + access-token revocation (PROD-R16 kapandı).** Access
+  token'lar artık `kid` başlığı taşıyor ve doğrulama, anahtar halkasından (active imzalar,
+  previous'lar grace penceresinde doğrular) kid ile seçilen HS512 anahtarıyla yapılıyor — böylece
+  imzalama anahtarı **kesintisiz rotate edilebiliyor** (ekle → active'i çevir → grace ≥ TTL →
+  emekliye ayır; RELEASE-RUNBOOK §1.3-K). Bilinmeyen/emekli kid ve `none`/`HS256`-downgrade/`RS256`
+  gibi alg-confusion denemeleri **reddediliyor**; kid'siz token (rolling-deploy'daki eski token)
+  active anahtarla doğrulanıyor (imza yine zorlanıyor). **Access-token erken iptali:** Redis
+  tabanlı revocation — jti bazlı (logout sunulan token'ı) ve kullanıcı bazlı `notBefore` (şifre
+  değişimi + 2FA disable outstanding oturumları düşürür), doğrulama zincirinde her authenticated
+  istekte enforce ediliyor. **Fail-closed:** Redis erişilemezse token reddedilir (fail-open yasak;
+  rate-limit'in aksine güvenli local fallback yok). `enabled=true` ama servis yoksa decoder boot'u
+  reddeder (enabled⟹enforced). API non-breaking (kid = header, jti = additive). Redis artık auth
+  için **sert bağımlılık** (live-smoke'a Redis servisi eklendi). Güvenlik review'i 2 bulguyu commit
+  öncesi kapattı, mutasyon-kanıtlı. Kanıt: 581 backend test, CI 9/9. Residual: Redis kesintisi
+  auth'u reddeder (kısa TTL + Redis HA), asimetrik JWKS + granülarite limitleri kayıtlı.
+
 - **İki-faktörlü kimlik doğrulama (TOTP + kurtarma kodları).** 2FA açık kullanıcı, şifresi doğru
   olsa bile ikinci adım olmadan **token alamaz**: `login` kısa-ömürlü, tek-kullanımlık, deneme-limitli
   bir challenge döner; `POST /api/auth/two-factor/verify` bir TOTP kodu veya kurtarma kodu kabul

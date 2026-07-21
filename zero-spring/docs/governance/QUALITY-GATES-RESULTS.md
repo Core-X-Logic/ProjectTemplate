@@ -497,3 +497,31 @@ typed client yeniden üretildi, kart artık **yalnız** `user.twoFactorEnabled`'
 | Diğer 6 job | success |
 
 **Negatif kanıt:** true-case IT eski (alan-yok) kodda kırmızı — `Expecting true but was false` (Jackson eksik alanı `false`'a düşürüyor). Frontend "açıkken yalnız manage" testi eski kartta kırmızı (Disable butonu yok).
+
+---
+
+## PROD-R16 — JWT key rotation (kid key-ring) + token revocation — 2026-07-21/22, **9/9**
+
+Backend `42ef088` + live-smoke Redis servisi `00a52ad`. Son yeşil koşu:
+[run 29867700291](https://github.com/Core-X-Logic/ProjectTemplate/actions/runs/29867700291) — **9/9 success**.
+Security-critical; API non-breaking (kid = JWT header, jti = additive claim; HS512 korundu).
+
+| Kapı | Kanıt |
+|---|---|
+| `backend` | **219 unit + 362 IT = 581** (549→581, +32) |
+| `KeyRotationIT` | active-key geçer · previous(grace)-key geçer · unknown/retired kid **red** · no-kid → legacy fallback (rolling-deploy) · **alg-confusion**: `none`/`HS256`-downgrade/`RS256` hepsi red |
+| `TokenRevocationIT` (Testcontainers Redis) | jti revoke → aynı token 401 · `revokeAllForUser`(notBefore) → eski token 401, yeni token geçer · logout access jti'yi revoke eder · şifre değişimi + 2FA disable outstanding token'ları revoke eder |
+| `TokenRevocationDegradeIT` | Redis erişilemez → authenticated istek **401 (fail-closed)**, allow DEĞİL |
+| `RevocationWiringTest` | `enabled=true` + servis yok → decoder **boot'u reddeder** (enabled⟹enforced fail-fast) |
+| `live-smoke` | Redis servisi eklendi (aşağı bak) → authenticated smoke geçer (`/me` 401 negatif dâhil) |
+| Diğer 5 job | success |
+
+**Negatif kanıtlar (mutasyon):** (1) `isRevoked→false` → `TokenRevocationIT` **5/6 kırmızı** (`401 beklenirken 200`). (2) enabled-but-unenforced → `RevocationWiringTest` kırmızı (`Expecting code to raise a throwable`). (3) HS512 pin silindi → `KeyRotationIT` HS256-downgrade kırmızı (`Tests run: 8, Failures: 1`; `none`/`RS256` bağımsız reddediliyor — pin **downgrade sınıfı** için tekil taşıyıcı, dürüst not).
+
+**Fail-closed (bilinçli, testli):** Redis revocation'a ulaşılamazsa token **reddedilir** — fail-open YASAK; rate-limit'in aksine local fallback yok (neyin revoke olduğunu store'suz bilemezsin). Redis readiness grubunda değil.
+
+**live-smoke öğrenmesi:** revocation fail-closed olunca Redis **auth için sert bağımlılık** oldu — Redis'siz jar authenticated her isteği 401'ler. live-smoke yalnız Postgres taşıyordu → authenticated assertion'lar düştü. Doğru fix: smoke ortamına Redis eklendi (güvenlik kontrolünü zayıflatmak değil, ortamı gerçek deploy'a uydurmak; deploy zaten Redis şart). Trafik kapısı bilinçle hâlâ `/readiness`.
+
+**Stack-review (güvenlik):** fail-closed / alg-pinning / TTL matematiği rijitçe temiz doğrulandı; 2 bulgu (F1 enabled⟹enforced fail-fast, F2 alg-confusion testi) commit öncesi kapatıldı; F3 (aynı-saniye iat granülaritesi) + F4 (write best-effort vs read fail-closed asimetrisi) RISK-REGISTER'a dokümante.
+
+**Kalan (RISK-REGISTER PROD-R16 residual):** Redis kesintisi auth'u reddeder (fail-closed trade; access token kısa, operatör Redis HA); asimetrik JWKS + iki granülarite limiti kayıtlı, blocker değil. Rotasyon prosedürü: RELEASE-RUNBOOK §1.3-K.
