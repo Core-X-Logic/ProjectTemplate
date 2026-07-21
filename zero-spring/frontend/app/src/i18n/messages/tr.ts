@@ -37,6 +37,23 @@ const tr: Record<string, string> = {
   'auth.login.forgotPassword': 'Parolanızı mı unuttunuz?',
   'auth.logout': 'Çıkış yap',
 
+  // Auth / two-factor (login second step)
+  'auth.twoFactor.title': 'İki adımlı doğrulama',
+  'auth.twoFactor.subtitle':
+    'Kimlik doğrulayıcı uygulamanızdaki 6 haneli kodu girin.',
+  'auth.twoFactor.recoverySubtitle':
+    'İki adımlı doğrulamayı kurarken kaydettiğiniz kurtarma kodlarından birini girin.',
+  'auth.twoFactor.codeLabel': 'Doğrulama kodu',
+  'auth.twoFactor.recoveryLabel': 'Kurtarma kodu',
+  'auth.twoFactor.useRecovery': 'Bunun yerine kurtarma kodu kullanın',
+  'auth.twoFactor.useAuthenticator':
+    'Bunun yerine kimlik doğrulayıcı uygulamanızı kullanın',
+  'auth.twoFactor.submit': 'Doğrula',
+  'auth.twoFactor.submitting': 'Doğrulanıyor…',
+  'auth.twoFactor.error':
+    'Kod geçersiz veya süresi dolmuş. Lütfen tekrar deneyin.',
+  'auth.twoFactor.backToLogin': 'Girişe dön',
+
   // Navigation
   'nav.dashboard': 'Panel',
   'nav.users': 'Kullanıcılar',

@@ -12,6 +12,7 @@ import {
   getMe,
   login as loginRequest,
   logout as logoutRequest,
+  verifyTwoFactor as verifyTwoFactorRequest,
   type MeResponse,
 } from '@/api/endpoints/auth';
 import {
@@ -35,11 +36,22 @@ interface AuthContextValue {
    * impersonation banner and the cascade block on the row action.
    */
   isImpersonating: boolean;
+  /**
+   * Authenticate. On a non-2FA account this stores the token pair and loads the
+   * identity (unchanged). On a 2FA account it stores NOTHING and returns the
+   * challenge so the caller can route to the second step.
+   */
   login: (
     usernameOrEmail: string,
     password: string,
     tenant?: string,
-  ) => Promise<void>;
+  ) => Promise<LoginOutcome>;
+  /**
+   * Redeem a login challenge with a TOTP or recovery code. On success stores the
+   * token pair and loads the identity — the same success path as a non-2FA
+   * `login`. Any failure throws (generic 401 from the backend, no oracle).
+   */
+  verifyTwoFactor: (challengeToken: string, code: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshMe: () => Promise<void>;
   /**
@@ -51,6 +63,16 @@ interface AuthContextValue {
   /** Return to the original (impersonator) session and reload the identity. */
   backToImpersonator: () => Promise<void>;
 }
+
+/**
+ * Outcome of a `login()` call. The non-2FA path resolves to `authenticated`
+ * (session is live, identical to the pre-2FA flow); a 2FA account resolves to
+ * `twoFactorRequired` carrying the short-lived challenge the caller must redeem
+ * on the second-step screen. No tokens are stored in the latter case.
+ */
+export type LoginOutcome =
+  | { status: 'authenticated' }
+  | { status: 'twoFactorRequired'; challengeToken: string };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
@@ -119,18 +141,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [refreshMe]);
 
-  const login = useCallback(
-    async (usernameOrEmail: string, password: string, tenant?: string) => {
-      if (tenant) {
-        tenantStore.set(tenant);
-      }
-      const tokens = await loginRequest({ usernameOrEmail, password });
-      tokenStore.setTokens(tokens.accessToken, tokens.refreshToken);
-      setAccessToken(tokens.accessToken);
+  // Shared success path: persist the pair, mirror the access token into state so
+  // `isImpersonating` re-evaluates, then load the identity. Used by both the
+  // non-2FA login and the 2FA verify step so they converge on one code path.
+  const establishSession = useCallback(
+    async (accessToken: string, refreshToken: string) => {
+      tokenStore.setTokens(accessToken, refreshToken);
+      setAccessToken(accessToken);
       const me = await getMe();
       setUser(me);
     },
     [],
+  );
+
+  const login = useCallback(
+    async (
+      usernameOrEmail: string,
+      password: string,
+      tenant?: string,
+    ): Promise<LoginOutcome> => {
+      if (tenant) {
+        tenantStore.set(tenant);
+      }
+      const result = await loginRequest({ usernameOrEmail, password });
+      // 2FA on: the backend minted NO tokens, only a challenge. Do not touch the
+      // token store — hand the challenge back for the second-step screen.
+      if (result.twoFactorRequired) {
+        const challengeToken = result.twoFactor?.challengeToken;
+        if (!challengeToken) {
+          throw new Error('Login challenge missing from the 2FA response.');
+        }
+        return { status: 'twoFactorRequired', challengeToken };
+      }
+      if (!result.accessToken || !result.refreshToken) {
+        throw new Error('Login returned no token pair.');
+      }
+      await establishSession(result.accessToken, result.refreshToken);
+      return { status: 'authenticated' };
+    },
+    [establishSession],
+  );
+
+  const verifyTwoFactor = useCallback(
+    async (challengeToken: string, code: string) => {
+      const tokens = await verifyTwoFactorRequest(challengeToken, code);
+      if (!tokens.accessToken || !tokens.refreshToken) {
+        throw new Error('Two-factor verification returned no token pair.');
+      }
+      await establishSession(tokens.accessToken, tokens.refreshToken);
+    },
+    [establishSession],
   );
 
   const logout = useCallback(async () => {
@@ -185,6 +245,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       isImpersonating,
       login,
+      verifyTwoFactor,
       logout,
       refreshMe,
       impersonate,
@@ -195,6 +256,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       isImpersonating,
       login,
+      verifyTwoFactor,
       logout,
       refreshMe,
       impersonate,

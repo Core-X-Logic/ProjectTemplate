@@ -39,6 +39,22 @@ const en: Record<string, string> = {
   'auth.login.forgotPassword': 'Forgot your password?',
   'auth.logout': 'Sign out',
 
+  // Auth / two-factor (login second step)
+  'auth.twoFactor.title': 'Two-step verification',
+  'auth.twoFactor.subtitle':
+    'Enter the 6-digit code from your authenticator app.',
+  'auth.twoFactor.recoverySubtitle':
+    'Enter one of the recovery codes you saved when you set up two-step verification.',
+  'auth.twoFactor.codeLabel': 'Authentication code',
+  'auth.twoFactor.recoveryLabel': 'Recovery code',
+  'auth.twoFactor.useRecovery': 'Use a recovery code instead',
+  'auth.twoFactor.useAuthenticator': 'Use your authenticator app instead',
+  'auth.twoFactor.submit': 'Verify',
+  'auth.twoFactor.submitting': 'Verifying…',
+  'auth.twoFactor.error':
+    'That code is invalid or has expired. Please try again.',
+  'auth.twoFactor.backToLogin': 'Back to sign in',
+
   // Navigation
   'nav.dashboard': 'Dashboard',
   'nav.users': 'Users',

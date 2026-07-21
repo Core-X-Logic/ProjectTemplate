@@ -68,7 +68,17 @@ export function LoginPage() {
       if (tenant) {
         setTenant(tenant);
       }
-      await login(values.usernameOrEmail, values.password, tenant);
+      const outcome = await login(values.usernameOrEmail, values.password, tenant);
+      // 2FA account: no session yet. Carry the short-lived challenge to the
+      // second step in router state (never localStorage) — a refresh drops it
+      // and the second-step page sends the user back to /login.
+      if (outcome?.status === 'twoFactorRequired') {
+        navigate('/login/two-factor', {
+          replace: true,
+          state: { challengeToken: outcome.challengeToken },
+        });
+        return;
+      }
       navigate('/', { replace: true });
     } catch (error) {
       const fallback = intl.formatMessage({ id: 'auth.login.error' });

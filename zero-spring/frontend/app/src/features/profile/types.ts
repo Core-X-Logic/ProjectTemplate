@@ -13,6 +13,23 @@ export type ChangePasswordRequest =
   components['schemas']['ChangePasswordRequest'];
 
 /**
+ * Two-factor DTOs (self-service enrollment/management under
+ * `/api/profile/two-factor`). `TwoFactorSetupDto` and `RecoveryCodesDto` are
+ * each shown to the user exactly ONCE and are never persisted by the client.
+ *
+ * NOTE: neither `ProfileDto` nor `MeDto` carries a `twoFactorEnabled` flag — the
+ * backend keeps that only on the `User` entity (verified against the regenerated
+ * schema). The card therefore cannot read the current on/off state on load and
+ * drives it from local session flow instead; see `TwoFactorCard`.
+ */
+export type TwoFactorSetupDto = components['schemas']['TwoFactorSetupDto'];
+export type RecoveryCodesDto = components['schemas']['RecoveryCodesDto'];
+export type TwoFactorEnableRequest =
+  components['schemas']['TwoFactorEnableRequest'];
+export type TwoFactorPasswordRequest =
+  components['schemas']['TwoFactorPasswordRequest'];
+
+/**
  * Field bounds mirrored from `UpdateProfileRequest`'s bean-validation
  * annotations so the form can reject over-long input before the round trip.
  */

@@ -49,6 +49,52 @@ export const profileEn = {
   'profile.password.success': 'Your password has been changed.',
   'profile.password.error': 'The password could not be changed.',
 
+  // Two-factor card
+  'profile.twoFactor.title': 'Two-factor authentication',
+  'profile.twoFactor.description':
+    'Add a second step to sign-in using an authenticator app.',
+  'profile.twoFactor.idleHint':
+    'This device cannot tell whether two-factor is already on for your account. Enable it below, or manage an existing setup.',
+  'profile.twoFactor.enableButton': 'Enable two-factor authentication',
+  'profile.twoFactor.manageExisting': 'Already set up? Manage it',
+  'profile.twoFactor.scanInstruction':
+    'Scan this QR code with your authenticator app (Google Authenticator, 1Password, and similar).',
+  'profile.twoFactor.qrAlt': 'Two-factor setup QR code',
+  'profile.twoFactor.manualInstruction':
+    'Cannot scan? Enter this setup key manually instead:',
+  'profile.twoFactor.copySecret': 'Copy key',
+  'profile.twoFactor.confirmLabel': 'Enter the 6-digit code to confirm',
+  'profile.twoFactor.confirmButton': 'Confirm and enable',
+  'profile.twoFactor.confirming': 'Enabling…',
+  'profile.twoFactor.cancel': 'Cancel',
+  'profile.twoFactor.recoveryTitle': 'Save your recovery codes',
+  'profile.twoFactor.recoveryWarning':
+    'Store these somewhere safe. Each code can be used once, and they will not be shown again.',
+  'profile.twoFactor.copyAll': 'Copy all',
+  'profile.twoFactor.copied': 'Copied',
+  'profile.twoFactor.recoveryDone': 'I have saved my codes',
+  'profile.twoFactor.manageDescription':
+    'You can turn two-factor off or replace your recovery codes.',
+  'profile.twoFactor.disableButton': 'Disable two-factor',
+  'profile.twoFactor.regenerateButton': 'Regenerate recovery codes',
+  'profile.twoFactor.passwordLabel': 'Current password',
+  'profile.twoFactor.disableDialogTitle': 'Disable two-factor authentication',
+  'profile.twoFactor.disableDialogDescription':
+    'Enter your current password to turn two-factor off. Your recovery codes will be discarded.',
+  'profile.twoFactor.disableConfirm': 'Disable',
+  'profile.twoFactor.regenerateDialogTitle': 'Regenerate recovery codes',
+  'profile.twoFactor.regenerateDialogDescription':
+    'Enter your current password. Your existing recovery codes will stop working immediately.',
+  'profile.twoFactor.regenerateConfirm': 'Regenerate',
+  'profile.twoFactor.setupError': 'Two-factor setup could not be started.',
+  'profile.twoFactor.enabledToast': 'Two-factor authentication is on.',
+  'profile.twoFactor.enableError': 'That code did not match. Please try again.',
+  'profile.twoFactor.disabledToast': 'Two-factor authentication is off.',
+  'profile.twoFactor.disableError': 'Two-factor could not be disabled.',
+  'profile.twoFactor.regeneratedToast': 'New recovery codes generated.',
+  'profile.twoFactor.regenerateError':
+    'Recovery codes could not be regenerated.',
+
   // Toasts
   'profile.toast.updated': 'Profile updated.',
   'profile.toast.error': 'Your profile could not be saved.',
@@ -102,6 +148,51 @@ export const profileTr: Record<ProfileMessageId, string> = {
   'profile.password.submitting': 'Kaydediliyor…',
   'profile.password.success': 'Parolanız değiştirildi.',
   'profile.password.error': 'Parola değiştirilemedi.',
+
+  // Two-factor card
+  'profile.twoFactor.title': 'İki adımlı doğrulama',
+  'profile.twoFactor.description':
+    'Kimlik doğrulayıcı uygulamayla girişe ikinci bir adım ekleyin.',
+  'profile.twoFactor.idleHint':
+    'Bu cihaz, hesabınızda iki adımlı doğrulamanın açık olup olmadığını bilemez. Aşağıdan etkinleştirin veya mevcut kurulumu yönetin.',
+  'profile.twoFactor.enableButton': 'İki adımlı doğrulamayı etkinleştir',
+  'profile.twoFactor.manageExisting': 'Zaten kurdunuz mu? Yönetin',
+  'profile.twoFactor.scanInstruction':
+    'Bu QR kodunu kimlik doğrulayıcı uygulamanızla (Google Authenticator, 1Password ve benzeri) tarayın.',
+  'profile.twoFactor.qrAlt': 'İki adımlı doğrulama kurulum QR kodu',
+  'profile.twoFactor.manualInstruction':
+    'Tarayamıyor musunuz? Bunun yerine bu kurulum anahtarını elle girin:',
+  'profile.twoFactor.copySecret': 'Anahtarı kopyala',
+  'profile.twoFactor.confirmLabel': 'Onaylamak için 6 haneli kodu girin',
+  'profile.twoFactor.confirmButton': 'Onayla ve etkinleştir',
+  'profile.twoFactor.confirming': 'Etkinleştiriliyor…',
+  'profile.twoFactor.cancel': 'İptal',
+  'profile.twoFactor.recoveryTitle': 'Kurtarma kodlarınızı kaydedin',
+  'profile.twoFactor.recoveryWarning':
+    'Bunları güvenli bir yerde saklayın. Her kod yalnızca bir kez kullanılabilir ve tekrar gösterilmeyecektir.',
+  'profile.twoFactor.copyAll': 'Tümünü kopyala',
+  'profile.twoFactor.copied': 'Kopyalandı',
+  'profile.twoFactor.recoveryDone': 'Kodlarımı kaydettim',
+  'profile.twoFactor.manageDescription':
+    'İki adımlı doğrulamayı kapatabilir veya kurtarma kodlarınızı yenileyebilirsiniz.',
+  'profile.twoFactor.disableButton': 'İki adımlı doğrulamayı kapat',
+  'profile.twoFactor.regenerateButton': 'Kurtarma kodlarını yenile',
+  'profile.twoFactor.passwordLabel': 'Mevcut parola',
+  'profile.twoFactor.disableDialogTitle': 'İki adımlı doğrulamayı kapat',
+  'profile.twoFactor.disableDialogDescription':
+    'İki adımlı doğrulamayı kapatmak için mevcut parolanızı girin. Kurtarma kodlarınız silinecektir.',
+  'profile.twoFactor.disableConfirm': 'Kapat',
+  'profile.twoFactor.regenerateDialogTitle': 'Kurtarma kodlarını yenile',
+  'profile.twoFactor.regenerateDialogDescription':
+    'Mevcut parolanızı girin. Var olan kurtarma kodlarınız anında geçersiz olacaktır.',
+  'profile.twoFactor.regenerateConfirm': 'Yenile',
+  'profile.twoFactor.setupError': 'İki adımlı doğrulama kurulumu başlatılamadı.',
+  'profile.twoFactor.enabledToast': 'İki adımlı doğrulama açık.',
+  'profile.twoFactor.enableError': 'Kod eşleşmedi. Lütfen tekrar deneyin.',
+  'profile.twoFactor.disabledToast': 'İki adımlı doğrulama kapalı.',
+  'profile.twoFactor.disableError': 'İki adımlı doğrulama kapatılamadı.',
+  'profile.twoFactor.regeneratedToast': 'Yeni kurtarma kodları oluşturuldu.',
+  'profile.twoFactor.regenerateError': 'Kurtarma kodları yenilenemedi.',
 
   // Toasts
   'profile.toast.updated': 'Profil güncellendi.',

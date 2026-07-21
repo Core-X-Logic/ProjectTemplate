@@ -1,5 +1,6 @@
 import { Route, Routes } from 'react-router-dom';
 import { LoginPage } from '@/auth/pages/login';
+import { TwoFactorPage } from '@/auth/pages/two-factor';
 import { ForbiddenPage } from '@/auth/pages/forbidden';
 import { RequireAuth } from '@/auth/require-auth';
 import { AdminLayout } from '@/layouts/admin';
@@ -37,6 +38,12 @@ export function AppRoutes() {
     <Routes>
       {/* Public */}
       <Route path="/login" element={<LoginPage />} />
+      {/* Second step of login for 2FA accounts. PUBLIC by design: the caller has
+          no session yet — it holds only the short-lived challenge minted by
+          `POST /api/auth/login`, redeemed for tokens at
+          `POST /api/auth/two-factor/verify`. The real gate is the backend, which
+          issues no session until the challenge is verified. */}
+      <Route path="/login/two-factor" element={<TwoFactorPage />} />
 
       {/* Public account self-service (U-01). These paths are NOT free choices:
           `EmailTemplateService` mails links to `{baseUrl}/account/reset-password

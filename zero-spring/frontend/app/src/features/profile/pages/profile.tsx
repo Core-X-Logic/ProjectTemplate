@@ -29,6 +29,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ChangePasswordCard } from '../components/change-password-card';
+import { TwoFactorCard } from '../components/two-factor-card';
 import { useProfile, useUpdateProfile } from '../hooks';
 import { PROFILE_LIMITS } from '../types';
 
@@ -323,6 +324,8 @@ export function ProfilePage() {
           </Card>
 
           <ChangePasswordCard />
+
+          <TwoFactorCard />
         </div>
       )}
     </div>

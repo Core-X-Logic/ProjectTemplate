@@ -1,25 +1,30 @@
 import { apiFetch } from '@/api/client';
+import type { components } from '@/api/schema';
 
 /**
  * Auth endpoint wrappers (FRONTEND-ARCHITECTURE.md §4).
  *
- * NOTE: The typed OpenAPI client (`src/api/schema.d.ts`) is generated after the
- * backend is available (`npm run gen:api`). Until then these request/response
- * shapes are declared by hand as minimal interfaces. In slice B they will be
- * replaced by `components['schemas'][...]` from the generated schema — keep the
- * exported names stable so call sites do not change.
+ * Request/response shapes are aliased from the generated OpenAPI schema
+ * (`npm run gen:api`) so the client stays in lock-step with the backend
+ * contract. Exported names are kept stable so call sites do not churn.
  */
 
-export interface LoginRequest {
-  usernameOrEmail: string;
-  password: string;
-}
+export type LoginRequest = components['schemas']['LoginRequest'];
 
-export interface LoginResponse {
-  accessToken: string;
-  refreshToken: string;
-  expiresInSeconds: number;
-}
+/**
+ * Discriminated result of `POST /api/auth/login` (2FA slice).
+ *
+ * `twoFactorRequired` is the discriminator:
+ *  - `false`/absent — the token fields (`accessToken`, `refreshToken`,
+ *    `expiresInSeconds`) are populated. This is BYTE-FOR-BYTE the pre-2FA
+ *    shape, so the non-2FA path behaves exactly as before.
+ *  - `true` — no tokens; `twoFactor.challengeToken` must be redeemed at
+ *    `POST /api/auth/two-factor/verify`.
+ */
+export type LoginResultDto = components['schemas']['LoginResultDto'];
+export type TokenPairDto = components['schemas']['TokenPairDto'];
+export type TwoFactorChallengeDto =
+  components['schemas']['TwoFactorChallengeDto'];
 
 export interface MeResponse {
   id: string;
@@ -31,8 +36,28 @@ export interface MeResponse {
 }
 
 /** `POST /api/auth/login` — the selected tenant travels in the `X-Tenant` header. */
-export function login(body: LoginRequest): Promise<LoginResponse> {
-  return apiFetch<LoginResponse>('/api/auth/login', {
+export function login(body: LoginRequest): Promise<LoginResultDto> {
+  return apiFetch<LoginResultDto>('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * `POST /api/auth/two-factor/verify` — redeems the login challenge with a TOTP
+ * or recovery code. Returns a `TokenPairDto` on success; ANY failure (wrong
+ * code, expired/consumed challenge) is a generic 401 with no oracle, so the
+ * caller must surface a single neutral message. Anonymous, like `/login`.
+ */
+export function verifyTwoFactor(
+  challengeToken: string,
+  code: string,
+): Promise<TokenPairDto> {
+  const body: components['schemas']['TwoFactorVerifyRequest'] = {
+    challengeToken,
+    code,
+  };
+  return apiFetch<TokenPairDto>('/api/auth/two-factor/verify', {
     method: 'POST',
     body: JSON.stringify(body),
   });
