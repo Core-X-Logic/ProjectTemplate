@@ -19,6 +19,11 @@ zero:
     # JwtSecretValidator.NON_PRODUCTION_SECRETS — booting with the 'prod' profile on this value
     # fails fast instead of signing production tokens with a key anyone can read.
     secret: ${JWT_SECRET:emVyby1wbGF0Zm9ybS1MT0NBTC1ERVYtT05MWS1zaWduaW5nLWtleS1ub3QtdmFsaWQtaW4tcHJvZHVjdGlvbi0wMTIzNDU2Nzg5YWJjZGVm}
+  crypto:
+    # PROD: local-only AES-256 field-encryption key (base64, 32 bytes). Committed, therefore public,
+    # therefore listed in FieldEncryptionKeyValidator.NON_PRODUCTION_KEYS — booting 'prod' on this
+    # value fails fast instead of encrypting real TOTP secrets with a key anyone can read.
+    field-key: ${FIELD_ENCRYPTION_KEY:emVyby1GSUVMRC1FTkMtREVWLS1ub3QtaW4tcHJvZCE=}
   seed:
     # B4: the base configuration seeds nothing, so a profile mishap cannot provision anything.
     # A laptop wants the opposite, and says so explicitly.

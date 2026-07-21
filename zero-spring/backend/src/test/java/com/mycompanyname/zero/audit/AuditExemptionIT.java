@@ -95,7 +95,7 @@ class AuditExemptionIT extends AbstractIntegrationIT {
      * without the cross-module string.
      */
     @Test
-    @DisplayName("the audit-exempt set is exactly login and refresh")
+    @DisplayName("the audit-exempt set is exactly login, refresh and the 2FA verify")
     void theAuditExemptSetIsExactly() {
         Set<String> exempt = new EndpointInventory(handlerMapping)
                 .handlerKeysClaiming(EndpointPolicy.Exposure.AUDIT_EXEMPT);
@@ -104,7 +104,11 @@ class AuditExemptionIT extends AbstractIntegrationIT {
                 .describedAs("audit exemptions are decentralised onto the handlers, so this list is "
                         + "the review point. An endpoint added here escapes the audit trail: that is "
                         + "a deliberate decision and must be made in a diff someone reads")
-                .containsExactlyInAnyOrder("AuthController#login", "AuthController#refresh");
+                // AuthController#verifyTwoFactor is exempt for the same reason as login: its body
+                // carries a live second-factor code (TOTP or recovery code), which must never be
+                // persisted in audit_logs. Reviewed and intended.
+                .containsExactlyInAnyOrder("AuthController#login", "AuthController#refresh",
+                        "AuthController#verifyTwoFactor");
     }
 
     /** size<=max-page-size(100); the service sorts execution_time DESC, so recent calls are page 0. */

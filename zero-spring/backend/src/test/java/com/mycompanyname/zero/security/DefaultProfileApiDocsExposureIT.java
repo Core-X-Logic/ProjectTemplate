@@ -41,6 +41,10 @@ import static org.assertj.core.api.Assertions.assertThat;
                 // 64 random bytes, base64. Test scaffolding only; this context mints no usable token.
                 "zero.jwt.secret=ZGVmYXVsdC1wcm9maWxlLWFzc2VydGlvbi1rZXktbm90LXVzZWQtYnktYW55LWRlcGxve"
                         + "W1lbnQtMDEyMzQ1Njc4OWFiY2RlZmc=",
+                // application-test.yml is not loaded here (no profile), so the base config's
+                // ${FIELD_ENCRYPTION_KEY} would bind unresolved and fail the boot validator. 32-byte
+                // AES key, test scaffolding only.
+                "zero.crypto.field-key=kKIiINsOB+SaWYwlspTpyMkEQZax/miIeLbJGj4QxTw=",
                 "spring.cache.type=simple",
                 "management.health.redis.enabled=false",
                 "zero.saas.lifecycle.initial-delay=PT24H",

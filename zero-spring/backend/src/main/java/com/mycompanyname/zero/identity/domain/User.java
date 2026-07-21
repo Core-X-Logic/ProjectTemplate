@@ -86,6 +86,19 @@ public class User extends AbstractAuditedEntity {
     @Column(name = "profile_picture_id")
     private Long profilePictureId;
 
+    // --- two-factor authentication (TOTP) ---
+
+    @Column(name = "two_factor_enabled", nullable = false)
+    private boolean twoFactorEnabled = false;
+
+    /**
+     * AES-256-GCM ciphertext of the TOTP secret (base64), never the raw secret. Null until setup().
+     * Named to contain "secret" so {@code AuditSupport.isSensitive} masks it to {@code ***} in the
+     * {@code @TrackChanges} history of this entity.
+     */
+    @Column(name = "two_factor_secret")
+    private String twoFactorSecret;
+
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
             name = "user_roles",

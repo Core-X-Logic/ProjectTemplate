@@ -2,9 +2,11 @@ package com.mycompanyname.zero.identity.web;
 
 import com.mycompanyname.zero.identity.auth.AuthService;
 import com.mycompanyname.zero.identity.web.dto.LoginRequest;
+import com.mycompanyname.zero.identity.web.dto.LoginResultDto;
 import com.mycompanyname.zero.identity.web.dto.MeDto;
 import com.mycompanyname.zero.identity.web.dto.RefreshRequest;
 import com.mycompanyname.zero.identity.web.dto.TokenPairDto;
+import com.mycompanyname.zero.identity.web.dto.TwoFactorVerifyRequest;
 import com.mycompanyname.zero.shared.web.EndpointPolicy;
 import com.mycompanyname.zero.shared.web.EndpointPolicy.Exposure;
 import jakarta.validation.Valid;
@@ -31,8 +33,21 @@ public class AuthController {
      */
     @PostMapping("/login")
     @EndpointPolicy({Exposure.ANONYMOUS, Exposure.AUDIT_EXEMPT, Exposure.SUBSCRIPTION_EXEMPT})
-    public TokenPairDto login(@Valid @RequestBody LoginRequest request) {
+    public LoginResultDto login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
+    }
+
+    /**
+     * Second factor of login. Takes the challenge minted by {@link #login} plus a TOTP or recovery
+     * code and returns real session tokens only on success. Same policy as {@code /login}: anonymous
+     * (the caller has no session yet), audit-exempt (the body carries a credential), and
+     * subscription-exempt. Throttled via {@code zero.ratelimit.paths} and backed by a {@code permitAll}
+     * matcher in {@code SecurityConfig}. Every failure is a generic 401 with no oracle.
+     */
+    @PostMapping("/two-factor/verify")
+    @EndpointPolicy({Exposure.ANONYMOUS, Exposure.AUDIT_EXEMPT, Exposure.SUBSCRIPTION_EXEMPT})
+    public TokenPairDto verifyTwoFactor(@Valid @RequestBody TwoFactorVerifyRequest request) {
+        return authService.verifyTwoFactor(request);
     }
 
     @PostMapping("/refresh")

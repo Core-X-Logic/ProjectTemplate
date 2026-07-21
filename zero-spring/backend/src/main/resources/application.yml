@@ -104,6 +104,27 @@ zero:
     # PROD-R16: tokens are bound to this audience and the decoder rejects anything else, so a token
     # minted for another service that happens to share the secret cannot be replayed here.
     audience: ${JWT_AUDIENCE:zero-platform-api}
+  crypto:
+    # At-rest field-encryption key (base64 of exactly 32 bytes = AES-256). No default, same rule as
+    # zero.jwt.secret: a committed default is public in the repo history and a profile mishap would
+    # silently encrypt every TOTP secret with it. Dev/test keys live in application-dev.yml /
+    # application-test.yml; every other environment must supply FIELD_ENCRYPTION_KEY. An unset value
+    # binds the literal ${FIELD_ENCRYPTION_KEY}, which FieldEncryptionKeyValidator rejects at boot
+    # (not valid base64) — fail-fast, never at first use.
+    field-key: ${FIELD_ENCRYPTION_KEY}
+  auth:
+    two-factor:
+      # The pre-login challenge lives this long after a correct password before the caller must
+      # present a TOTP or recovery code. Short: it is a bearer token that mints a session.
+      challenge-ttl: ${TWO_FACTOR_CHALLENGE_TTL:PT5M}
+      # Wrong codes a single challenge tolerates before it is invalidated. Failures also count toward
+      # the existing per-account lockout, so this is the per-challenge cap, not the per-account one.
+      max-attempts: ${TWO_FACTOR_MAX_ATTEMPTS:5}
+      # Single-use recovery codes minted on enable() and on regeneration.
+      recovery-code-count: ${TWO_FACTOR_RECOVERY_CODE_COUNT:10}
+      # RFC 6238 time step and the ± tolerance (in whole steps) applied at verification.
+      totp-time-step-seconds: ${TWO_FACTOR_TOTP_TIME_STEP_SECONDS:30}
+      totp-window: ${TWO_FACTOR_TOTP_WINDOW:1}
   cors:
     # PROD-R3: empty by default — a deployment must name its SPA origins explicitly. An empty list
     # means every cross-origin request is rejected, which is the safe failure mode.
@@ -154,7 +175,11 @@ zero:
     # token triggers an outbound provider query — unmetered, that is a lever. GET arrives with no
     # body and no Content-Type, which the limiter forwards by design (the C3/405 rule); the POST
     # form shape is accountable since P2'-A.
-    paths: /api/auth/login,/api/auth/refresh,/api/account/forgot-password,/api/account/reset-password,/api/account/confirm-email,/api/billing/webhook/stripe,/api/billing/webhook/paytr,/api/billing/webhook/iyzico,/api/billing/callback/iyzico
+    # 2FA: /api/auth/two-factor/verify is anonymous and takes a @RequestBody, so it belongs here like
+    # the login endpoints — an unmetered verify is a channel for brute-forcing a 6-digit TOTP against a
+    # live challenge. SecurityPathBindingIT.everyAnonymousBodyHandlerIsThrottled DERIVES this
+    # obligation from the ANONYMOUS @RequestBody handlers, so omitting it fails the build.
+    paths: /api/auth/login,/api/auth/refresh,/api/auth/two-factor/verify,/api/account/forgot-password,/api/account/reset-password,/api/account/confirm-email,/api/billing/webhook/stripe,/api/billing/webhook/paytr,/api/billing/webhook/iyzico,/api/billing/callback/iyzico
     # D4: the largest request body accepted on any path above, in bytes. Previously this existed only
     # as a default inside RateLimitProperties, which made a load-bearing security parameter invisible
     # to whoever operates the deployment. A body over this is refused with 413 rather than forwarded

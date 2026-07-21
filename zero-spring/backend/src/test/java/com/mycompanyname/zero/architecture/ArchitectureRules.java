@@ -86,6 +86,10 @@ final class ArchitectureRules {
             // SecurityConfig: "/api/auth/login", "/api/auth/refresh"
             "AuthController#login",
             "AuthController#refresh",
+            // SecurityConfig: "/api/auth/two-factor/verify" — the pre-login second-factor step. The
+            // caller holds only an opaque challenge (no session), so it is anonymous like login; the
+            // handler claims @EndpointPolicy(ANONYMOUS) and is throttled via zero.ratelimit.paths.
+            "AuthController#verifyTwoFactor",
             // SecurityConfig: "/api/account/forgot-password", "/reset-password", "/confirm-email"
             "AccountController#forgotPassword",
             "AccountController#resetPassword",

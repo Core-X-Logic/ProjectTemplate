@@ -99,7 +99,14 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> {
                     auth
-                            .requestMatchers("/api/auth/login", "/api/auth/refresh").permitAll()
+                            // 2FA: /api/auth/two-factor/verify is the pre-login second-factor step;
+                            // the caller holds no session yet (only an opaque challenge), so it is
+                            // anonymous like login/refresh. Exact path, no /api/auth/** wildcard — a
+                            // new AuthController method must be granted here deliberately. Claimed by
+                            // @EndpointPolicy(ANONYMOUS) on AuthController#verifyTwoFactor and throttled
+                            // via zero.ratelimit.paths (SecurityPathBindingIT derives both obligations).
+                            .requestMatchers("/api/auth/login", "/api/auth/refresh",
+                                    "/api/auth/two-factor/verify").permitAll()
                             .requestMatchers("/api/account/forgot-password", "/api/account/reset-password",
                                     "/api/account/confirm-email").permitAll()
                             .requestMatchers("/api/localization/**").permitAll()

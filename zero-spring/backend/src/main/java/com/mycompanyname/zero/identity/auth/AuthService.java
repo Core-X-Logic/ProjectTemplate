@@ -1,15 +1,22 @@
 package com.mycompanyname.zero.identity.auth;
 
+import com.mycompanyname.zero.config.FieldEncryptionService;
 import com.mycompanyname.zero.config.JwtProperties;
+import com.mycompanyname.zero.config.TwoFactorProperties;
 import com.mycompanyname.zero.identity.domain.RefreshToken;
 import com.mycompanyname.zero.identity.domain.Role;
+import com.mycompanyname.zero.identity.domain.TwoFactorChallenge;
 import com.mycompanyname.zero.identity.domain.User;
 import com.mycompanyname.zero.identity.repo.RefreshTokenRepository;
+import com.mycompanyname.zero.identity.repo.TwoFactorChallengeRepository;
 import com.mycompanyname.zero.identity.repo.UserRepository;
 import com.mycompanyname.zero.identity.web.dto.LoginRequest;
+import com.mycompanyname.zero.identity.web.dto.LoginResultDto;
 import com.mycompanyname.zero.identity.web.dto.MeDto;
 import com.mycompanyname.zero.identity.web.dto.RefreshRequest;
 import com.mycompanyname.zero.identity.web.dto.TokenPairDto;
+import com.mycompanyname.zero.identity.web.dto.TwoFactorChallengeDto;
+import com.mycompanyname.zero.identity.web.dto.TwoFactorVerifyRequest;
 import com.mycompanyname.zero.settings.SettingManager;
 import com.mycompanyname.zero.shared.domain.DomainException;
 import com.mycompanyname.zero.shared.domain.ErrorCode;
@@ -24,6 +31,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
@@ -46,6 +54,7 @@ public class AuthService {
     private static final String SETTING_LOCKOUT_DURATION_SECONDS = "App.Auth.LockoutDurationSeconds";
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static final int REFRESH_TOKEN_BYTES = 32;
+    private static final int CHALLENGE_TOKEN_BYTES = 32;
 
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
@@ -53,9 +62,15 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtProperties jwtProperties;
     private final SettingManager settingManager;
+    private final TwoFactorChallengeRepository twoFactorChallengeRepository;
+    private final TwoFactorProperties twoFactorProperties;
+    private final TotpService totpService;
+    private final RecoveryCodeService recoveryCodeService;
+    private final FieldEncryptionService fieldEncryptionService;
+    private final Clock clock;
 
     @Transactional(noRollbackFor = DomainException.class)
-    public TokenPairDto login(LoginRequest request) {
+    public LoginResultDto login(LoginRequest request) {
         Long tenantId = TenantContext.getTenantId();
         String usernameOrEmail = request.usernameOrEmail().trim();
         User user = findUser(tenantId, usernameOrEmail)
@@ -83,9 +98,79 @@ public class AuthService {
             userRepository.save(user);
             throw new DomainException(ErrorCode.LOGIN_FAILED, "Invalid credentials");
         }
-        user.setFailedLoginAttempts(0);
-        user.setLockoutEndAt(null);
-        return issueTokenPair(user);
+        // THE 2FA GATE. The password is correct, but when 2FA is enabled NO session token is minted
+        // here under any circumstance: the caller gets an opaque challenge instead and must redeem it
+        // at /api/auth/two-factor/verify with a TOTP or recovery code. Non-2FA users take the
+        // unchanged path and get exactly the token pair they got before 2FA existed.
+        if (!user.isTwoFactorEnabled()) {
+            // A correct password IS the full authentication for a non-2FA user, so the failed-attempt
+            // counter and any residual lockout clear here.
+            user.setFailedLoginAttempts(0);
+            user.setLockoutEndAt(null);
+            return LoginResultDto.authenticated(issueTokenPair(user));
+        }
+        // 2FA is enabled: the SECOND FACTOR IS STILL UNPROVEN, so the counter must NOT be reset here.
+        // Resetting at first-factor success would let an attacker holding a leaked password but no
+        // authenticator zero the lockout counter on every re-login and brute-force the 6-digit code
+        // without bound (stack-review Finding 1). Only verifyTwoFactor success — the real full
+        // authentication — clears it. The lockout CHECK above still runs, so a locked account cannot
+        // even begin the first factor.
+        return LoginResultDto.challenge(createTwoFactorChallenge(user));
+    }
+
+    /**
+     * Second factor of login. Redeems a challenge minted by {@link #login} against a TOTP or recovery
+     * code and, only on success, mints the session at the SAME {@link #issueTokenPair} site login uses.
+     *
+     * <p>Fail-closed and oracle-free: an unknown, expired, consumed or exhausted challenge, an inactive
+     * or no-longer-enrolled user, a wrong code, and any internal error on the verify path (a decrypt
+     * failure on a corrupted secret) all produce the identical generic {@code 401} with no hint as to
+     * which of them it was. A wrong code decrements the challenge — invalidating it at zero — and counts
+     * toward the same per-account lockout the password step uses; {@code noRollbackFor} commits those
+     * mutations despite the 401.
+     */
+    @Transactional(noRollbackFor = DomainException.class)
+    public TokenPairDto verifyTwoFactor(TwoFactorVerifyRequest request) {
+        // FOR UPDATE: serialises the whole verify per challenge so concurrent redemptions cannot race
+        // the attempts decrement or double-spend the challenge (stack-review Finding 2).
+        TwoFactorChallenge challenge = twoFactorChallengeRepository
+                .findByTokenHashForUpdate(sha256Hex(request.challengeToken()))
+                .orElseThrow(AuthService::twoFactorFailed);
+        Instant now = clock.instant();
+        if (challenge.getConsumedAt() != null
+                || challenge.getExpiresAt().isBefore(now)
+                || challenge.getAttemptsRemaining() <= 0) {
+            throw twoFactorFailed();
+        }
+        User user = userRepository.findById(challenge.getUserId())
+                .filter(User::isActive)
+                .filter(User::isTwoFactorEnabled)
+                .orElse(null);
+        if (user == null) {
+            // The challenge points at a user who can no longer complete 2FA. Burn it, fail closed.
+            challenge.setConsumedAt(now);
+            twoFactorChallengeRepository.save(challenge);
+            throw twoFactorFailed();
+        }
+        if (user.getLockoutEndAt() != null && user.getLockoutEndAt().isAfter(now)) {
+            throw twoFactorFailed();
+        }
+        if (verifyTwoFactorCode(user, request.code())) {
+            challenge.setConsumedAt(now);
+            twoFactorChallengeRepository.save(challenge);
+            user.setFailedLoginAttempts(0);
+            user.setLockoutEndAt(null);
+            userRepository.save(user);
+            return issueTokenPair(user);
+        }
+        int remaining = challenge.getAttemptsRemaining() - 1;
+        challenge.setAttemptsRemaining(remaining);
+        if (remaining <= 0) {
+            challenge.setConsumedAt(now);
+        }
+        twoFactorChallengeRepository.save(challenge);
+        registerFailedTwoFactorAttempt(user, now);
+        throw twoFactorFailed();
     }
 
     @Transactional(noRollbackFor = DomainException.class)
@@ -207,6 +292,60 @@ public class AuthService {
         String accessToken = jwtService.issueAccessToken(user, authorities);
         String rawRefreshToken = createRefreshToken(user.getId());
         return new TokenPairDto(accessToken, rawRefreshToken, jwtProperties.getAccessTokenTtl().toSeconds());
+    }
+
+    /**
+     * Mints a pre-login challenge: a random opaque token handed back once, stored only as its SHA-256
+     * hash (the refresh-token pattern), bounded by {@code challenge-ttl} and {@code max-attempts}.
+     */
+    private TwoFactorChallengeDto createTwoFactorChallenge(User user) {
+        byte[] randomBytes = new byte[CHALLENGE_TOKEN_BYTES];
+        SECURE_RANDOM.nextBytes(randomBytes);
+        String raw = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+        TwoFactorChallenge challenge = new TwoFactorChallenge();
+        challenge.setUserId(user.getId());
+        challenge.setTokenHash(sha256Hex(raw));
+        challenge.setExpiresAt(clock.instant().plus(twoFactorProperties.getChallengeTtl()));
+        challenge.setAttemptsRemaining(twoFactorProperties.getMaxAttempts());
+        twoFactorChallengeRepository.save(challenge);
+        return new TwoFactorChallengeDto(raw, twoFactorProperties.getChallengeTtl().toSeconds());
+    }
+
+    /**
+     * Tries {@code code} as a TOTP first, then as a recovery code. Fail-closed throughout: a decrypt
+     * failure on a corrupted secret fails the TOTP path silently (never a 500, never an oracle) and the
+     * recovery-code path is still attempted; any unexpected error there is a false, not a leak.
+     */
+    private boolean verifyTwoFactorCode(User user, String code) {
+        try {
+            String secret = fieldEncryptionService.decrypt(user.getTwoFactorSecret());
+            if (secret != null && totpService.verify(secret, code)) {
+                return true;
+            }
+        } catch (RuntimeException ex) {
+            log.warn("2FA TOTP path errored for userId={}; failing that path closed", user.getId());
+        }
+        try {
+            return recoveryCodeService.consumeIfValid(user.getId(), code);
+        } catch (RuntimeException ex) {
+            log.warn("2FA recovery-code path errored for userId={}; failing closed", user.getId());
+            return false;
+        }
+    }
+
+    /** Counts a wrong second factor toward the same per-account lockout the password step uses. */
+    private void registerFailedTwoFactorAttempt(User user, Instant now) {
+        int failed = user.getFailedLoginAttempts() + 1;
+        user.setFailedLoginAttempts(failed);
+        if (failed >= maxFailedAttempts(user.getTenantId())) {
+            user.setLockoutEndAt(now.plus(lockoutDuration(user.getTenantId())));
+        }
+        userRepository.save(user);
+    }
+
+    /** The one generic 2FA rejection: every failure mode returns this identical 401, no oracle. */
+    private static DomainException twoFactorFailed() {
+        return new DomainException(ErrorCode.LOGIN_FAILED, "Two-factor authentication failed");
     }
 
     private String createRefreshToken(Long userId) {

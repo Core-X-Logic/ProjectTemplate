@@ -35,6 +35,9 @@ import static org.assertj.core.api.Assertions.assertThat;
                 // this context never mints a token anyone can use.
                 "zero.jwt.secret=cHJvZC1wcm9maWxlLWFzc2VydGlvbi1rZXktbm90LXVzZWQtYnktYW55LWRlcGxveW1lbnQtMDE"
                         + "yMzQ1Njc4OWFiY2RlZmdoaWprbG1ub3A=",
+                // A non-committed 32-byte AES key: FieldEncryptionKeyValidator rejects the committed
+                // dev/test keys under the prod profile, exactly as JwtSecretValidator rejects theirs.
+                "zero.crypto.field-key=fWKX4GJZ2DR+YBl4sMrvUlrYVdnNCrRfTJl4yGGqs4E=",
                 "zero.cors.allowed-origins=https://app.prod.example.test",
                 "spring.cache.type=simple",
                 "management.health.redis.enabled=false",

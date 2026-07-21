@@ -27,6 +27,7 @@
         <archunit.version>1.4.1</archunit.version>
         <stripe-java.version>33.1.1</stripe-java.version>
         <iyzipay-java.version>2.0.142</iyzipay-java.version>
+        <totp.version>1.7.1</totp.version>
     </properties>
 
     <dependencyManagement>
@@ -162,6 +163,31 @@
             <groupId>org.passay</groupId>
             <artifactId>passay</artifactId>
             <version>1.6.4</version>
+        </dependency>
+
+        <!-- 2FA: RFC 6238 TOTP. Used for THREE things only, none of which touches ZXing:
+             DefaultSecretGenerator (base32 secret, via commons-codec), QrData#getUri (the
+             otpauth:// provisioning URI string, no image), and DefaultCodeVerifier (constant-time
+             code comparison with an explicit time-step tolerance). The library's optional QR *image*
+             writer (ZxingPngQrGenerator) is the ONLY class that needs com.google.zxing, and we never
+             instantiate it — the frontend renders the QR from the otpauth URI. So the ZXing edges are
+             excluded rather than pulled in dead, matching the dependency discipline the bucket4j-redis
+             block documents. commons-codec stays (compile-scope, transitive) — SecretGenerator and the
+             verifier both need its Base32. -->
+        <dependency>
+            <groupId>dev.samstevens.totp</groupId>
+            <artifactId>totp</artifactId>
+            <version>${totp.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.google.zxing</groupId>
+                    <artifactId>core</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.zxing</groupId>
+                    <artifactId>javase</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- Database -->
