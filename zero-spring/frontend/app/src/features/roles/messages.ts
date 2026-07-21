@@ -14,6 +14,8 @@ const en: Record<string, string> = {
   'roles.list.description': 'Manage roles and their permissions.',
   'roles.list.create': 'New role',
   'roles.list.empty': 'No roles found.',
+  'roles.list.emptyDescription':
+    'Create a role to group permissions and assign them to users.',
   'roles.list.error': 'Roles could not be loaded.',
 
   // Data-grid columns
@@ -44,6 +46,8 @@ const en: Record<string, string> = {
   // Form page
   'roles.form.createTitle': 'Create role',
   'roles.form.editTitle': 'Edit role',
+  'roles.form.sectionDetails': 'Role details',
+  'roles.form.sectionPermissions': 'Permissions',
   'roles.form.name': 'Name',
   'roles.form.namePlaceholder': 'e.g. content-editor',
   'roles.form.nameHint': 'Unique technical name; it cannot be changed later.',
@@ -81,6 +85,8 @@ const tr: Record<string, string> = {
   'roles.list.description': 'Rolleri ve izinlerini yönetin.',
   'roles.list.create': 'Yeni rol',
   'roles.list.empty': 'Rol bulunamadı.',
+  'roles.list.emptyDescription':
+    'İzinleri gruplamak ve kullanıcılara atamak için bir rol oluşturun.',
   'roles.list.error': 'Roller yüklenemedi.',
 
   // Data-grid columns
@@ -111,6 +117,8 @@ const tr: Record<string, string> = {
   // Form page
   'roles.form.createTitle': 'Rol oluştur',
   'roles.form.editTitle': 'Rolü düzenle',
+  'roles.form.sectionDetails': 'Rol bilgileri',
+  'roles.form.sectionPermissions': 'İzinler',
   'roles.form.name': 'Ad',
   'roles.form.namePlaceholder': 'örn. icerik-editoru',
   'roles.form.nameHint': 'Benzersiz teknik ad; sonradan değiştirilemez.',

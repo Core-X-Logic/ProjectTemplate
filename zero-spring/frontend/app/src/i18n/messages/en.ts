@@ -61,6 +61,7 @@ const en: Record<string, string> = {
   'common.edit': 'Edit',
   'common.search': 'Search',
   'common.loading': 'Loading…',
+  'common.retry': 'Retry',
   'common.comingSoon': 'Coming soon',
 
   // Errors

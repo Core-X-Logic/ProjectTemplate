@@ -7,16 +7,9 @@ import { useForm } from 'react-hook-form';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
+import { PageHeader } from '@/components/common/page-header';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardHeading,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Form,
@@ -30,7 +23,10 @@ import {
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Can } from '@/auth/rbac';
-import { PermissionTree } from '../components/permission-tree';
+import {
+  PermissionTree,
+  PermissionTreeSkeleton,
+} from '../components/permission-tree';
 import {
   useCreateRole,
   usePermissionTree,
@@ -158,6 +154,7 @@ function RoleFormContent() {
   if (isEdit && roleLoading) {
     return (
       <div className="container-fluid">
+        <PageHeader title={title} />
         <Card>
           <CardContent className="flex flex-col gap-4 py-8">
             <Skeleton className="h-8 w-56" />
@@ -172,6 +169,7 @@ function RoleFormContent() {
   if (isEdit && roleError) {
     return (
       <div className="container-fluid">
+        <PageHeader title={title} />
         <Card>
           <CardContent className="flex flex-col items-start gap-4 py-8">
             <p role="alert" className="text-sm text-destructive">
@@ -192,22 +190,22 @@ function RoleFormContent() {
         <title>{title}</title>
       </Helmet>
 
-      <Card>
-        <CardHeader className="py-5">
-          <CardHeading>
-            <CardTitle>{title}</CardTitle>
-            {isEdit && role?.name && (
-              <CardDescription>{role.name}</CardDescription>
-            )}
-          </CardHeading>
-        </CardHeader>
+      <PageHeader
+        title={title}
+        description={isEdit && role?.name ? role.name : undefined}
+      />
 
+      <Card>
         <Form {...form}>
           <form onSubmit={submit} noValidate>
-            <CardContent className="flex flex-col gap-5 py-5">
-              <FormField
-                control={form.control}
-                name="name"
+            <CardContent className="flex flex-col gap-6 py-5">
+              <section className="flex flex-col gap-5">
+                <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                  <FormattedMessage id="roles.form.sectionDetails" />
+                </h2>
+                <FormField
+                  control={form.control}
+                  name="name"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
@@ -278,51 +276,54 @@ function RoleFormContent() {
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="permissions"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>
-                      <FormattedMessage id="roles.form.permissions" />
-                    </FormLabel>
-                    <FormDescription>
-                      <FormattedMessage id="roles.form.permissionsHint" />
-                    </FormDescription>
-                    <FormControl>
-                      <div className="max-h-96 overflow-y-auto rounded-lg border border-border p-3.5">
-                        {treeLoading ? (
-                          <div className="flex flex-col gap-2">
-                            <Skeleton className="h-5 w-48" />
-                            <Skeleton className="h-5 w-64" />
-                            <Skeleton className="h-5 w-56" />
-                          </div>
-                        ) : treeError ? (
-                          <p role="alert" className="text-sm text-destructive">
-                            <FormattedMessage id="permission.tree.error" />
-                          </p>
-                        ) : (
-                          <PermissionTree
-                            nodes={tree ?? []}
-                            value={field.value}
-                            onChange={field.onChange}
-                          />
-                        )}
-                      </div>
-                    </FormControl>
-                    <FormDescription>
-                      <FormattedMessage
-                        id="permission.tree.selectedCount"
-                        values={{ count: field.value.length }}
-                      />
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              </section>
+
+              <section className="flex flex-col gap-4">
+                <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                  <FormattedMessage id="roles.form.sectionPermissions" />
+                </h2>
+                <FormField
+                  control={form.control}
+                  name="permissions"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormDescription>
+                        <FormattedMessage id="roles.form.permissionsHint" />
+                      </FormDescription>
+                      <FormControl>
+                        <div className="max-h-96 overflow-y-auto rounded-lg border border-border p-3.5">
+                          {treeLoading ? (
+                            <PermissionTreeSkeleton />
+                          ) : treeError ? (
+                            <p
+                              role="alert"
+                              className="text-sm text-destructive"
+                            >
+                              <FormattedMessage id="permission.tree.error" />
+                            </p>
+                          ) : (
+                            <PermissionTree
+                              nodes={tree ?? []}
+                              value={field.value}
+                              onChange={field.onChange}
+                            />
+                          )}
+                        </div>
+                      </FormControl>
+                      <FormDescription>
+                        <FormattedMessage
+                          id="permission.tree.selectedCount"
+                          values={{ count: field.value.length }}
+                        />
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </section>
             </CardContent>
 
-            <CardFooter className="justify-end gap-2.5 py-5">
+            <CardFooter className="sticky bottom-0 z-10 justify-end gap-2.5 bg-card py-5">
               <Button
                 type="button"
                 variant="outline"

@@ -6,20 +6,19 @@ import {
   PaginationState,
   useReactTable,
 } from '@tanstack/react-table';
-import { EllipsisVertical, Plus, Power, PowerOff } from 'lucide-react';
+import { Building2, EllipsisVertical, Plus, Power, PowerOff } from 'lucide-react';
 import { Helmet } from 'react-helmet-async';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { Can } from '@/auth/rbac';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardHeading,
-  CardTitle,
-  CardToolbar,
-} from '@/components/ui/card';
+  DataEmpty,
+  DataError,
+  TableSkeleton,
+} from '@/components/common/data-state';
+import { PageHeader } from '@/components/common/page-header';
 import { DataGrid, DataGridContainer } from '@/components/ui/data-grid';
 import { DataGridColumnHeader } from '@/components/ui/data-grid-column-header';
 import { DataGridPagination } from '@/components/ui/data-grid-pagination';
@@ -62,7 +61,7 @@ export function TenantsListPage() {
   });
   const [createOpen, setCreateOpen] = useState(false);
 
-  const { data, isLoading, isError } = useTenants();
+  const { data, isLoading, isError, refetch } = useTenants();
   const activateTenant = useActivateTenant();
   const deactivateTenant = useDeactivateTenant();
 
@@ -199,45 +198,54 @@ export function TenantsListPage() {
         <title>{intl.formatMessage({ id: 'tenants.list.title' })}</title>
       </Helmet>
 
-      <Card>
-        <CardHeader className="py-5">
-          <CardHeading>
-            <CardTitle>
-              <FormattedMessage id="tenants.list.title" />
-            </CardTitle>
-            <CardDescription>
-              <FormattedMessage id="tenants.list.description" />
-            </CardDescription>
-          </CardHeading>
-          <CardToolbar>
-            <Can permission={TENANTS_MANAGE}>
-              <Button onClick={() => setCreateOpen(true)}>
-                <Plus />
-                <FormattedMessage id="tenants.list.create" />
-              </Button>
-            </Can>
-          </CardToolbar>
-        </CardHeader>
+      <PageHeader
+        title={<FormattedMessage id="tenants.list.title" />}
+        description={<FormattedMessage id="tenants.list.description" />}
+        actions={
+          <Can permission={TENANTS_MANAGE}>
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus />
+              <FormattedMessage id="tenants.list.create" />
+            </Button>
+          </Can>
+        }
+      />
 
-        <div className="flex flex-col gap-4 p-5">
-          {isError ? (
-            <p role="alert" className="text-sm text-destructive">
-              <FormattedMessage id="tenants.list.error" />
-            </p>
-          ) : (
-            <DataGrid
-              table={table}
-              recordCount={tenants.length}
-              isLoading={isLoading}
-              emptyMessage={intl.formatMessage({ id: 'tenants.list.empty' })}
-            >
+      <Card>
+        {isError ? (
+          <div className="p-5">
+            <DataError
+              message={intl.formatMessage({ id: 'tenants.list.error' })}
+              onRetry={() => refetch()}
+            />
+          </div>
+        ) : isLoading ? (
+          <div className="p-5">
+            <TableSkeleton rows={pagination.pageSize} cols={columns.length} />
+          </div>
+        ) : tenants.length === 0 ? (
+          <DataEmpty
+            icon={<Building2 />}
+            title={intl.formatMessage({ id: 'tenants.list.empty' })}
+            action={
+              <Can permission={TENANTS_MANAGE}>
+                <Button onClick={() => setCreateOpen(true)}>
+                  <Plus />
+                  <FormattedMessage id="tenants.list.create" />
+                </Button>
+              </Can>
+            }
+          />
+        ) : (
+          <div className="flex flex-col gap-4 p-5">
+            <DataGrid table={table} recordCount={tenants.length}>
               <DataGridContainer>
                 <DataGridTable />
               </DataGridContainer>
               <DataGridPagination />
             </DataGrid>
-          )}
-        </div>
+          </div>
+        )}
       </Card>
 
       <CreateTenantDialog open={createOpen} onOpenChange={setCreateOpen} />

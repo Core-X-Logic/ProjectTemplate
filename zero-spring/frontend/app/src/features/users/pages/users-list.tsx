@@ -15,6 +15,7 @@ import {
   ToggleLeft,
   ToggleRight,
   Trash2,
+  Users,
 } from 'lucide-react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { Helmet } from 'react-helmet-async';
@@ -30,14 +31,13 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTable } from '@/components/ui/card';
 import {
-  Card,
-  CardHeader,
-  CardHeading,
-  CardTable,
-  CardTitle,
-  CardToolbar,
-} from '@/components/ui/card';
+  DataEmpty,
+  DataError,
+  TableSkeleton,
+} from '@/components/common/data-state';
+import { PageHeader } from '@/components/common/page-header';
 import { DataGrid, DataGridContainer } from '@/components/ui/data-grid';
 import { DataGridPagination } from '@/components/ui/data-grid-pagination';
 import { DataGridTable } from '@/components/ui/data-grid-table';
@@ -104,7 +104,7 @@ function UsersListContent() {
     return () => window.clearTimeout(timer);
   }, [searchInput]);
 
-  const { data, isLoading } = useUsers(
+  const { data, isLoading, isError, refetch } = useUsers(
     pagination.pageIndex,
     pagination.pageSize,
     search,
@@ -303,64 +303,89 @@ function UsersListContent() {
         <title>{intl.formatMessage({ id: 'users.title' })}</title>
       </Helmet>
 
-      <DataGrid
-        table={table}
-        recordCount={recordCount}
-        isLoading={isLoading}
-        emptyMessage={intl.formatMessage({ id: 'users.empty' })}
-      >
-        <Card>
-          <CardHeader className="flex-wrap gap-2 py-4">
-            <CardHeading>
-              <CardTitle>
-                <FormattedMessage id="users.title" />
-              </CardTitle>
-            </CardHeading>
-            <CardToolbar className="flex flex-wrap items-center gap-2.5">
-              <div className="relative">
-                <Search className="size-4 text-muted-foreground absolute start-3 top-1/2 -translate-y-1/2" />
-                <Input
-                  className="ps-9 w-52"
-                  value={searchInput}
-                  onChange={(event) => setSearchInput(event.target.value)}
-                  placeholder={intl.formatMessage({
-                    id: 'users.searchPlaceholder',
-                  })}
-                  aria-label={intl.formatMessage({ id: 'common.search' })}
-                />
-              </div>
-              <Can permission="users.read">
-                <Button
-                  variant="outline"
-                  disabled={exportUsers.isPending}
-                  onClick={() =>
-                    exportUsers.mutate(undefined, {
-                      onSuccess: (blob) => downloadBlob(blob, 'users.xlsx'),
-                    })
-                  }
-                >
-                  <Download />
-                  <FormattedMessage id="users.action.export" />
-                </Button>
-              </Can>
+      <PageHeader
+        title={<FormattedMessage id="users.title" />}
+        description={<FormattedMessage id="users.subtitle" />}
+        actions={
+          <>
+            <Can permission="users.read">
+              <Button
+                variant="outline"
+                disabled={exportUsers.isPending}
+                onClick={() =>
+                  exportUsers.mutate(undefined, {
+                    onSuccess: (blob) => downloadBlob(blob, 'users.xlsx'),
+                  })
+                }
+              >
+                <Download />
+                <FormattedMessage id="users.action.export" />
+              </Button>
+            </Can>
+            <Can permission="users.create">
+              <Button onClick={openCreate}>
+                <Plus />
+                <FormattedMessage id="users.action.create" />
+              </Button>
+            </Can>
+          </>
+        }
+      />
+
+      <Card>
+        <CardHeader className="py-4">
+          <div className="relative w-full sm:w-64">
+            <Search className="size-4 text-muted-foreground absolute start-3 top-1/2 -translate-y-1/2" />
+            <Input
+              className="ps-9"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder={intl.formatMessage({
+                id: 'users.searchPlaceholder',
+              })}
+              aria-label={intl.formatMessage({ id: 'common.search' })}
+            />
+          </div>
+        </CardHeader>
+
+        {isError ? (
+          <div className="p-5">
+            <DataError
+              message={intl.formatMessage({ id: 'users.loadError' })}
+              onRetry={() => refetch()}
+            />
+          </div>
+        ) : isLoading ? (
+          <div className="p-5">
+            <TableSkeleton rows={pagination.pageSize} cols={columns.length} />
+          </div>
+        ) : recordCount === 0 ? (
+          <DataEmpty
+            icon={<Users />}
+            title={intl.formatMessage({ id: 'users.empty' })}
+            description={intl.formatMessage({ id: 'users.emptyDescription' })}
+            action={
               <Can permission="users.create">
                 <Button onClick={openCreate}>
                   <Plus />
                   <FormattedMessage id="users.action.create" />
                 </Button>
               </Can>
-            </CardToolbar>
-          </CardHeader>
-          <CardTable>
-            <DataGridContainer border={false}>
-              <DataGridTable />
-            </DataGridContainer>
-          </CardTable>
-          <div className="px-5 py-3 border-t border-border">
-            <DataGridPagination />
-          </div>
-        </Card>
-      </DataGrid>
+            }
+          />
+        ) : (
+          <DataGrid table={table} recordCount={recordCount}>
+            <CardTable>
+              <DataGridContainer border={false}>
+                <DataGridTable />
+              </DataGridContainer>
+            </CardTable>
+            <div className="px-5 py-3 border-t border-border">
+              <DataGridPagination />
+            </div>
+          </DataGrid>
+        )}
+      </Card>
 
       {formOpen && (
         <UserFormDialog

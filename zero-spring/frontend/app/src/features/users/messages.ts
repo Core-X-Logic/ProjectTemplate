@@ -10,7 +10,10 @@ export const usersMessagesEn: Record<string, string> = {
   'users.subtitle': 'Manage the user accounts of the active tenant.',
   'users.searchPlaceholder': 'Search users…',
   'users.empty': 'No users found.',
+  'users.emptyDescription':
+    'Add the first user account for this tenant to get started.',
   'users.error': 'The operation could not be completed.',
+  'users.loadError': 'Users could not be loaded.',
 
   // Columns
   'users.column.username': 'Username',
@@ -77,7 +80,10 @@ export const usersMessagesTr: Record<string, string> = {
   'users.subtitle': 'Aktif kiracının kullanıcı hesaplarını yönetin.',
   'users.searchPlaceholder': 'Kullanıcı ara…',
   'users.empty': 'Kullanıcı bulunamadı.',
+  'users.emptyDescription':
+    'Başlamak için bu kiracıya ilk kullanıcı hesabını ekleyin.',
   'users.error': 'İşlem tamamlanamadı.',
+  'users.loadError': 'Kullanıcılar yüklenemedi.',
 
   // Columns
   'users.column.username': 'Kullanıcı adı',

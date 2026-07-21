@@ -14,8 +14,9 @@
   --card-foreground: var(--color-zinc-950);
   --popover: var(--color-white);
   --popover-foreground: var(--color-zinc-950);
-  --primary: var(--color-zinc-900);
-  --primary-foreground: var(--color-white);
+  /* Brand primary — corporate indigo-blue (AA: white on primary = 5.46:1). */
+  --primary: oklch(0.52 0.17 265);
+  --primary-foreground: oklch(0.985 0 0);
   --secondary: var(--color-zinc-100);
   --secondary-foreground: var(--color-zinc-900);
   --muted: var(--color-zinc-100);
@@ -24,6 +25,11 @@
   --accent-foreground: var(--color-zinc-900);
   --destructive: var(--color-red-600);
   --destructive-foreground: var(--color-white);
+  /* Semantic state tokens (consumed by @theme inline below + shadcn state UI). */
+  --success: oklch(0.60 0.13 155);
+  --success-foreground: oklch(0.985 0 0);
+  --warning: oklch(0.70 0.15 70);
+  --warning-foreground: oklch(0.18 0.03 70);
   --chart-1: var(--color-blue-500);
   --chart-2: var(--color-green-500);
   --chart-3: var(--color-yellow-500);
@@ -31,7 +37,8 @@
   --chart-5: var(--color-purple-500);
   --border: oklch(94% 0.004 286.32); /* between --color-zinc-100 and --color-zinc-200 */
   --input: var(--color-zinc-200);
-  --ring: var(--color-zinc-400);
+  /* Branded focus ring — derived from primary, kept fully visible. */
+  --ring: oklch(0.52 0.17 265);
   --radius: 0.5rem;
 }
 
@@ -42,8 +49,9 @@
   --card-foreground: var(--color-zinc-50);
   --popover: var(--color-zinc-950);
   --popover-foreground: var(--color-zinc-50);
-  --primary: var(--color-zinc-300);
-  --primary-foreground: var(--color-zinc-950);
+  /* Brand primary — lighter indigo for dark surfaces (AA: fg on primary = 6.95:1). */
+  --primary: oklch(0.70 0.14 265);
+  --primary-foreground: oklch(0.18 0.03 265);
   --secondary: var(--color-zinc-800);
   --secondary-foreground: var(--color-zinc-50);
   --muted: var(--color-zinc-900);
@@ -52,6 +60,11 @@
   --accent-foreground: var(--color-zinc-50);
   --destructive: var(--color-red-600);
   --destructive-foreground: var(--color-white);
+  /* Semantic state tokens (dark). */
+  --success: oklch(0.70 0.13 155);
+  --success-foreground: oklch(0.18 0.02 155);
+  --warning: oklch(0.78 0.15 70);
+  --warning-foreground: oklch(0.18 0.03 70);
   --chart-1: var(--color-blue-500);
   --chart-2: var(--color-green-500);
   --chart-3: var(--color-yellow-500);
@@ -59,7 +72,8 @@
   --chart-5: var(--color-purple-500);
   --border: var(--color-zinc-800);
   --input: var(--color-zinc-800);
-  --ring: var(--color-zinc-600);
+  /* Branded focus ring (dark). */
+  --ring: oklch(0.70 0.14 265);
 }
 
 /** Theme Setup **/
@@ -82,6 +96,12 @@
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
 
+  /** Semantic State Colors **/
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+
   /** Base Styles **/
   --color-border: var(--border);
   --color-input: var(--input);
@@ -90,6 +110,12 @@
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
+
+  /** Elevation — subtle, low-spread corporate shadows (cards, popovers, bars) **/
+  --shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 0.05);
+  --shadow-sm: 0 1px 3px 0 oklch(0 0 0 / 0.07), 0 1px 2px -1px oklch(0 0 0 / 0.06);
+  --shadow-md:
+    0 4px 8px -2px oklch(0 0 0 / 0.08), 0 2px 4px -2px oklch(0 0 0 / 0.05);
 
   /** Animations **/
   --animate-marquee: marquee var(--duration) infinite linear;

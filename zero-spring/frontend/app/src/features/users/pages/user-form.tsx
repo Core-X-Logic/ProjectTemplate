@@ -183,7 +183,7 @@ export function UserFormDialog({ open, onOpenChange, user }: UserFormDialogProps
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
+          <form onSubmit={submit} className="flex flex-col gap-5" noValidate>
             <FormField
               control={form.control}
               name="username"

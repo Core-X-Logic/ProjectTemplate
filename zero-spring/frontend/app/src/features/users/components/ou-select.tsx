@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { ChevronDown, LoaderCircle } from 'lucide-react';
 import { useIntl } from 'react-intl';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -24,6 +25,12 @@ interface OuOption {
   label: string;
   depth: number;
 }
+
+/**
+ * Tree indentation as tokenized spacing classes (no inline `style`, no arbitrary
+ * `[px]`). Index = OU depth; deeper-than-max nodes clamp to the last step.
+ */
+const DEPTH_INDENT = ['ps-8', 'ps-12', 'ps-16', 'ps-20', 'ps-24'] as const;
 
 /** Depth-first flatten of the (parentId-linked) OU list, for indented options. */
 function flattenTree(nodes: OrganizationUnitDto[]): OuOption[] {
@@ -118,7 +125,9 @@ export function OuSelect({ value, onChange, disabled, id }: OuSelectProps) {
             checked={value.includes(option.id)}
             onCheckedChange={(checked) => toggle(option.id, checked === true)}
             onSelect={(event) => event.preventDefault()}
-            style={{ paddingInlineStart: `${2 + option.depth * 1}rem` }}
+            className={cn(
+              DEPTH_INDENT[Math.min(option.depth, DEPTH_INDENT.length - 1)],
+            )}
           >
             {option.label}
           </DropdownMenuCheckboxItem>

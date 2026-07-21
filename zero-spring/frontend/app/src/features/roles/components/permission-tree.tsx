@@ -3,7 +3,27 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { cn } from '@/lib/utils';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Skeleton } from '@/components/ui/skeleton';
 import type { PermissionNodeDto } from '../types';
+
+/**
+ * Loading placeholder shown while the permission catalogue resolves. Rows are
+ * indented to echo the tree's parent/child rhythm; decorative (hidden from AT).
+ */
+export function PermissionTreeSkeleton({ className }: { className?: string }) {
+  return (
+    <div
+      aria-hidden="true"
+      className={cn('flex flex-col gap-2.5', className)}
+    >
+      <Skeleton className="h-5 w-44" />
+      <Skeleton className="ms-6 h-5 w-56" />
+      <Skeleton className="ms-6 h-5 w-48" />
+      <Skeleton className="h-5 w-40" />
+      <Skeleton className="ms-6 h-5 w-52" />
+    </div>
+  );
+}
 
 /**
  * Controlled checkbox tree for the permission catalogue (`/api/permissions/tree`).

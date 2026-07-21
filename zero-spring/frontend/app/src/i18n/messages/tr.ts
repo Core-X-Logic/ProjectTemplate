@@ -59,6 +59,7 @@ const tr: Record<string, string> = {
   'common.edit': 'Düzenle',
   'common.search': 'Ara',
   'common.loading': 'Yükleniyor…',
+  'common.retry': 'Tekrar dene',
   'common.comingSoon': 'Yakında',
 
   // Errors

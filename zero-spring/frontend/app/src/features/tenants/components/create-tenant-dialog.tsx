@@ -3,6 +3,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Check, Copy, LoaderCircle, TriangleAlert } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { FormattedMessage, useIntl } from 'react-intl';
+import { ApiError } from '@/api/client';
 import {
   Alert,
   AlertContent,
@@ -77,6 +78,10 @@ export function CreateTenantDialog({
     null,
   );
 
+  // Inline surface for a failed submit (in addition to the hook's error toast),
+  // so the reason stays visible next to the form the operator must correct.
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   const schema = useMemo(
     () =>
       z.object({
@@ -115,10 +120,12 @@ export function CreateTenantDialog({
     if (open) {
       reset({ name: '', displayName: '', adminEmail: '', adminPassword: '' });
       setGeneratedPassword(null);
+      setSubmitError(null);
     }
   }, [open, reset]);
 
   const submit = form.handleSubmit(async (values) => {
+    setSubmitError(null);
     try {
       const created = await createTenant.mutateAsync({
         name: values.name.trim(),
@@ -135,9 +142,15 @@ export function CreateTenantDialog({
       } else {
         onOpenChange(false);
       }
-    } catch {
-      // Surfaced by the mutation's error toast (prefers ProblemDetail detail);
-      // the dialog stays open so the operator can correct the input.
+    } catch (error) {
+      // Also surfaced by the mutation's error toast (prefers ProblemDetail
+      // detail); the dialog stays open so the operator can correct the input,
+      // and the reason is echoed inline right above the form.
+      setSubmitError(
+        error instanceof ApiError && error.detail
+          ? error.detail
+          : intl.formatMessage({ id: 'tenants.toast.error' }),
+      );
     }
   });
 
@@ -216,6 +229,17 @@ export function CreateTenantDialog({
                 <FormattedMessage id="tenants.create.description" />
               </DialogDescription>
             </DialogHeader>
+
+            {submitError && (
+              <Alert variant="destructive" appearance="light" size="sm">
+                <AlertIcon>
+                  <TriangleAlert />
+                </AlertIcon>
+                <AlertContent>
+                  <AlertDescription>{submitError}</AlertDescription>
+                </AlertContent>
+              </Alert>
+            )}
 
             <Form {...form}>
               <form onSubmit={submit} className="flex flex-col gap-5" noValidate>
@@ -319,6 +343,7 @@ export function CreateTenantDialog({
                   <Button
                     type="button"
                     variant="outline"
+                    disabled={isSubmitting}
                     onClick={() => onOpenChange(false)}
                   >
                     <FormattedMessage id="tenants.create.cancel" />
