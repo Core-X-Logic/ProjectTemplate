@@ -477,5 +477,23 @@ sayısıyla ölçüldü**: allowlist'i yazarken bir base64 typo'su mevcut bir JW
 4→0 yerine 4→1 ölçümü yakaladı; düzeltildi → 0.
 
 **Kalan:** PROD-R49 (field-key rotasyon/re-encrypt + KMS), R51 (kurtarma UX + SMS/WebAuthn/QR — sonraki
-faz), R52 (admin 2FA-reset ucu yok — self-lock), ve `/me`'nin `twoFactorEnabled` yansıtmaması (küçük
-takip — kart mevcut durumu okuyamıyor, backend otoriter reddediyor).
+faz), R52 (admin 2FA-reset ucu yok — self-lock). *(Takip `/me` `twoFactorEnabled` yansıtması
+`fc67dfe`'de KAPANDI — aşağıya bakın.)*
+
+---
+
+## Mini-hardening — `/me` twoFactorEnabled yansıması — 2026-07-21, `fc67dfe`, **9/9** (run 29856589951)
+
+2FA diliminin küçük takip maddesi: profil 2FA kartı mevcut durumu backend'den okuyamıyordu (heuristic
+kullanıyordu). `MeDto`'ya `twoFactorEnabled` eklendi (`AuthService.me` → `user.isTwoFactorEnabled()`),
+typed client yeniden üretildi, kart artık **yalnız** `user.twoFactorEnabled`'dan render ediliyor
+(kapalı → yalnız enable akışı; açık → yalnız manage). Davranış değişikliği yok; yalnız görünürlük.
+
+| Kapı | Kanıt |
+|---|---|
+| `backend` | **549** (202u + 347IT, +2 me-flag IT); additive alan, mevcut /me tüketicileri (AuthFlowIT/JwtAudienceIT/ImpersonationIT/MeShouldChangePasswordIT) değişmeden yeşil |
+| `frontend` | **149** (+2 state-driven kart testi); heuristic + `idleHint`/`manageExisting` anahtarları kaldırıldı |
+| `typed-client-drift` | **yeşil** — backend + `schema.d.ts` **birlikte** landing (geçen dilimin dersi uygulandı, ara drift yok) |
+| Diğer 6 job | success |
+
+**Negatif kanıt:** true-case IT eski (alan-yok) kodda kırmızı — `Expecting true but was false` (Jackson eksik alanı `false`'a düşürüyor). Frontend "açıkken yalnız manage" testi eski kartta kırmızı (Disable butonu yok).

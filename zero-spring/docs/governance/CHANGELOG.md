@@ -49,6 +49,11 @@
 
 ### Değişti
 
+- **`/api/auth/me` artık `twoFactorEnabled` yansıtıyor.** Profil 2FA kartı mevcut durumu tahmin
+  eden heuristic'i bıraktı; enable/disable görünümünü **yalnız** backend'in otoriter `MeDto`
+  alanından türetiyor. Additive/non-breaking (mevcut /me tüketicileri değişmedi); yalnız
+  görünürlük, auth davranışı aynı. 2FA diliminin küçük takip maddesini kapatır.
+
 - **Release-hardening: CI/config uyarı temizliği (davranış değişikliği YOK).** (a) GitHub Actions
   major uplift — `checkout` v4→v7, `setup-node` v4→v7, `setup-java` v4→v5, `upload-artifact` v4→v7,
   `download-artifact` v4→v8; hepsi Node 24 runtime, "Node 20 deprecated" uyarısı kalktı (koşuda
