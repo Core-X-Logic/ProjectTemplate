@@ -15,8 +15,11 @@
 # (`JwtSecretValidatorTest`, 5 test). Yani sızmaları bir yetki değil, yalnızca gürültü üretir.
 #
 # ALLOWLIST DAR TUTULDU — bilerek yol bazlı DEĞİL: bu dosyalara gerçek bir secret eklenirse
-# yine yakalanmalı. O yüzden tam olarak bu üç base64 değerinin kendisi listelendi. Anahtarlar
-# değişirse tarama yeniden kırmızıya döner, ki istenen budur.
+# yine yakalanmalı. O yüzden tam olarak bu base64 değerlerinin kendileri listelendi (3 JWT test
+# anahtarı + 2 field-encryption test anahtarı = 5). Anahtarlar değişirse tarama yeniden kırmızıya
+# döner, ki istenen budur. Etki HER ZAMAN bulgu sayısıyla ölçülür, sözdizimine güvenilmez:
+# bu blok yazılırken bir base64 typo'su bir JWT girdisini sessizce bozdu, ancak 4→0 yerine 4→1
+# ölçümü yakaladı (gitleaks lokal koşuldu).
 
 title = "zero-platform gitleaks config"
 
@@ -42,6 +45,12 @@ regexes = [
   '''ZGVmYXVsdC1wcm9maWxlLWFzc2VydGlvbi1rZXktbm90LXVzZWQtYnktYW55LWRlcGxve''',
   # ProdApiDocsExposureIT — base64: "prod-profile-assertion-key-not-used-by-any-deployment-..."
   '''cHJvZC1wcm9maWxlLWFzc2VydGlvbi1rZXktbm90LXVzZWQtYnktYW55LWRlcGxveW1lbnQtMDE''',
+  # field-encryption test keys (2FA/PROD-R49) — aynı gerekçe: FieldEncryptionKeyValidator prod
+  # profilinde repoda commit'li HER field-key'i reddeder (FieldEncryptionKeyValidatorTest).
+  # application-dev.yml + FieldEncryptionKeyValidator — base64: "zero-FIELD-ENC-DEV--not-in-prod!"
+  '''emVyby1GSUVMRC1FTkMtREVW''',
+  # application-test.yml + FieldEncryptionServiceTest — base64: "zero-FIELD-ENC-TEST-never-deploy"
+  '''emVyby1GSUVMRC1FTkMtVEVTVC''',
 ]
 # Vendor referansı: takip edilmiyor ve ürün kodu değil.
 paths = [
