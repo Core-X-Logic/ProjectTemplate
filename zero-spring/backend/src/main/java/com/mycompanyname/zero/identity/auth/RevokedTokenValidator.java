@@ -7,6 +7,8 @@ import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 import org.springframework.security.oauth2.jwt.Jwt;
 
+import java.time.Instant;
+
 /**
  * Rejects a revoked access token (PROD-R16). Sits in the decoder's {@code DelegatingOAuth2TokenValidator}
  * chain, so it runs on <em>every</em> authenticated request after the signature, issuer, audience and
@@ -34,7 +36,7 @@ public class RevokedTokenValidator implements OAuth2TokenValidator<Jwt> {
     public OAuth2TokenValidatorResult validate(Jwt token) {
         try {
             Long userId = token.getSubject() == null ? null : Long.valueOf(token.getSubject());
-            if (revocationService.isRevoked(token.getId(), userId, token.getIssuedAt())) {
+            if (revocationService.isRevoked(token.getId(), userId, issueInstant(token))) {
                 return OAuth2TokenValidatorResult.failure(new OAuth2Error(
                         OAuth2ErrorCodes.INVALID_TOKEN,
                         "The token has been revoked",
@@ -50,5 +52,29 @@ public class RevokedTokenValidator implements OAuth2TokenValidator<Jwt> {
                     "The token could not be checked against the revocation store",
                     "https://tools.ietf.org/html/rfc6750#section-3.1"));
         }
+    }
+
+    /**
+     * The token's issue time for the "not before" comparison (PROD-R16 F3).
+     *
+     * <p>An {@code ims}-bearing token yields full millisecond precision: the same-second window is
+     * closed and there is no same-instant login loop.
+     *
+     * <p>A token minted before the {@code ims} upgrade (a pre-upgrade instance during a rolling deploy)
+     * carries only the second-granular {@code iat}. If that floored {@code iat} were compared against a
+     * sub-second {@code notBefore} written by an upgraded instance, a legitimate same-second re-login
+     * would be revoked ({@code iat_sec*1000 < iat_sec*1000+frac}) — a deploy-window login loop that the
+     * pre-F3 (seconds-vs-seconds, strict {@code <}) comparison never had. So for the fallback we add
+     * ~1s, making the comparison effectively second-granular and restoring the pre-F3 rule where a
+     * same-second re-login SURVIVES. Only legacy no-{@code ims} tokens take this path, and they age out
+     * within the access-token TTL. New tokens keep the precise millisecond path above.
+     */
+    private static Instant issueInstant(Jwt token) {
+        Object ims = token.getClaims().get("ims");
+        if (ims instanceof Number millis) {
+            return Instant.ofEpochMilli(millis.longValue());
+        }
+        Instant iat = token.getIssuedAt();
+        return iat == null ? null : iat.plusMillis(999);
     }
 }

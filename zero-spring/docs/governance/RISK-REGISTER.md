@@ -215,23 +215,51 @@ belgelenmiş** istisnadır; gerekçe hem `V6__hardening.sql` hem `SchedulingConf
   bilerek readiness grubunda **değildir** — revocation-store blip'i instance'ı rotasyondan çıkarmamalı.
   Kanıt: `TokenRevocationDegradeIT` (erişilemez Redis → 401) + `RevokedTokenValidatorTest`
   (fail-open varyantı token'ı geçirir — kaçınılan hata — fail-closed reddeder, yan yana asserte edilir).
-- **PROD-R16 — kabul edilen artık: aynı-saniye granülaritesi (F3, stack-review).** `revokeAllForUser`
-  bir "not before" işaretini **saniye** çözünürlüğünde yazar (`iat` de saniye). Kimlik değişiminden
-  **hemen önce, aynı duvar-saati saniyesinde** basılmış bir token `iat_sec == notBefore_sec` olur;
-  karşılaştırma katı `<` olduğu için iptal edilmez ve kendi (kısa) TTL'i boyunca yaşar. `<=`
-  kullanmak **daha kötü** olurdu: aynı saniyedeki meşru bir yeniden-login'i iptal eder (kullanıcıyı
-  bir iptal döngüsüne sokar). Bu, JWT saniye-granülaritesinin **doğasında olan** bir sınırdır; güvenli
-  yön (aynı-saniye token'ı yaşasın, meşru re-login iptal edilmesin) **bilinçle** seçildi. Pencere access
-  token TTL'i (15 dk) değil, aynı-saniye çakışması kadar dardır. Testlerdeki ~1.1 sn uyku bu sınırın
-  kanıtıdır: `iat`'ı işaretin kesin altına almak için gerekli.
-- **PROD-R16 — kabul edilen artık: yazma fail-open / okuma fail-closed asimetrisi (F4, stack-review).**
-  Okuma yolu (`isRevoked`) **fail-closed'dır** (Redis erişilemezse istek reddedilir). Yazma yolu
-  (`revokeAccessToken` / `revokeAllForUser`) ise **best-effort'tur**: geçici bir Redis yazma blip'i
-  sırasında yapılan bir kimlik değişimi (parola/2FA) açık token'ları iptal **edemeyebilir** ve blip'ten
-  sonra iptal kaydı yoktur (yeniden denenmez). Yani yazma yarısı **fail-open**, okuma yarısı
-  fail-closed. Gerekçe: yazmayı fail-closed yapmak, birincil işlemi (parola değişimi DB'ye zaten
-  commit'lendi) bir cache yazması yüzünden bozardı; token yine kısa TTL'iyle doğal olarak ölür. Kalıcı
-  (durable) revocation bir outbox/retry gerektirir — **kapsam dışı**; bu asimetri bilinçli bir takastır.
+- **PROD-R16 — daraltıldı: aynı-saniye granülaritesi (F3).** Önceki tur `revokeAllForUser`'ı **saniye**
+  çözünürlüğünde yazıyordu (`iat` de saniye), bu yüzden kimlik değişiminden aynı duvar-saati saniyesinde
+  **hemen önce** basılmış bir token `iat_sec == notBefore_sec` olur ve katı `<` altında iptal edilmeden
+  kendi TTL'i boyunca yaşardı. Bu tur pencere **saat çözünürlüğüne** indirildi: her access token ek bir
+  `ims` (issued-at millis) claim'i taşır (additive, kırıcı değil), `revokeAllForUser` "not before"
+  işaretini **milisaniye** yazar ve `RevokedTokenValidator`/`isRevoked` karşılaştırmayı `ims < notBefore`
+  (millis) olarak yapar. Aynı-saniye önceki token artık iptal edilir (`ims < notBefore`); değişimden
+  **sonra** basılan meşru re-login (daha büyük `ims`) yaşar — iptal **döngüsü yok**. `<` katı kaldı;
+  `<=` yasaktı (aynı-an re-login'i iptal ederdi). Kanıt: `TokenRevocationSubSecondIT` (aynı-saniye token
+  401, sonraki re-login 200; eski testlerdeki ~1.1 sn uyku artık gereksiz). Negatif: karşılaştırma
+  saniye granülaritesine geri çekildiğinde aynı-saniye token **200** döner (kayda alındı). **Rolling
+  deploy / eski token'lar (döngüsüz):** `ims` taşımayan (upgrade öncesi) bir token yalnızca saniye
+  granülaritesinde `iat` taşır; upgrade edilmiş bir instance'ın yazdığı **alt-saniye** `notBefore` ile
+  ham karşılaştırılsaydı, aynı saniyedeki meşru bir re-login iptal edilir (`iat_sec*1000 <
+  iat_sec*1000+frac`) ve **deploy penceresinde bir giriş döngüsü** doğardı — pre-F3'te olmayan bir
+  gerileme. Bu yüzden fallback yoluna ~1 sn tolerans eklenir (`iat.plusMillis(999)`,
+  `RevokedTokenValidator#issueInstant`): karşılaştırma legacy token'lar için etkin olarak saniye
+  granülaritesine döner, yani **aynı-saniye re-login yaşar (pre-F3 davranışı, döngü yok)**; tolerans bir
+  saniyeyle sınırlıdır (önceki saniyeden bir legacy token hâlâ iptal edilir). `ims` taşıyan yeni
+  token'lar tam millis hassasiyetini korur (sızıntı kapalı **ve** döngü yok). Kanıt:
+  `TokenRevocationSubSecondIT.aSameSecondLegacyTokenWithoutImsSurvivesAReloginAfterRevocation` (no-`ims`
+  aynı-saniye re-login 200; önceki-saniye legacy token 401). Negatif: +999 toleransı kaldırıldığında bu
+  token **401** ile iptal edilir (kayda alındı). Böylece steady-state'te **sıfır döngü**, deploy
+  penceresinde de legacy token'lar için pre-F3 saniye-granülaritesi = **döngü yok**; legacy token'lar
+  TTL içinde tükendikçe fallback kendiliğinden kapanır. Upgrade öncesi saniye cinsinden yazılmış bir
+  işaret büyüklükle millis'e normalize edilir (`asMillis`), böylece deploy boyunca onurlandırılmaya
+  devam eder. **Kalan (Düşük):** millis hassasiyeti, kimlik değişimiyle meşru re-login arasında oluşan
+  **geriye** giden bir NTP adımına (slew değil, birkaç ms'lik sıçrama) duyarlıdır — saat `notBefore`'u
+  geçene dek geçici bir yanlış-iptal olur. Düşük maruziyet (NTP küçük düzeltmeleri slew ile uygular).
+- **PROD-R16 — daraltıldı: yazma fail-open / okuma fail-closed asimetrisi (F4).** Okuma yolu
+  (`isRevoked`) hâlâ **fail-closed'dır** (değişmedi). Yazma yolu (`revokeAccessToken` /
+  `revokeAllForUser`) hâlâ non-throwing — birincil işlem (parola/2FA değişimi) DB'ye zaten commit'lendi,
+  bir cache yazması yüzünden geri alınamaz — ama artık **sınırlı retry + gözlemlenebilirlik** taşır:
+  geçici bir Redis yazma blip'i en fazla 3 deneme (kademeli backoff 50ms→100ms, en kötü ~150ms toplam)
+  ile atlatılır; retry'ler tükenirse
+  `jwt.revocation.write_failures` sayacı (`operation` etiketiyle) artırılır ve stabil, greppable bir
+  `REVOCATION_WRITE_FAILED` WARN'u basılır (token/jti/secret değeri **taşımaz**). Böylece önceki turun
+  **sessiz** yazma-fail-open'ı, dar bir blip için otomatik toparlanmaya + kalıcı hata için sayaç/log'a
+  dönüştü. Kanıt: `TokenRevocationWriteRetryTest` (iki geçici hata sonrası kayıt yine yapılır; kalıcı
+  hatada sayaç+WARN, fırlatma yok, jti sızmaz). Negatif: yazma no-op yapıldığında mevcut
+  `TokenRevocationIT.revokingAllForAUserRejectsOlderTokensButNotNewerOnes` **200** döner (kayda alındı).
+  **Kalan artık:** token süresi dolmadan önce toparlanan **sürekli** bir yazma kesintisi hâlâ açık
+  token'ları kaçırabilir — kısa access-token TTL'iyle sınırlı ve artık **gözlemlenebilir**. Kalıcı
+  (durable) revocation için DB-commit'li bir outbox (arka-plan job ile drain edilen) daha güçlü
+  sertleştirmedir — **ertelendi, bu dilimin kapsamı dışı**.
 - **PROD-R9 / PROD-R13:** Kodda kapalı, ancak davranışsal testi yok (pool tükenmesi ve Redis kesintisi
   enjekte etmeyi gerektirir). Konfigürasyon ve hata yolu kod incelemesiyle doğrulandı.
 

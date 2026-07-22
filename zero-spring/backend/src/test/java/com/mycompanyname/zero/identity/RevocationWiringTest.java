@@ -111,7 +111,7 @@ class RevocationWiringTest {
     }
 
     private static TokenRevocationService service(boolean revoked) {
-        return new TokenRevocationService(null, null, null) {
+        return new TokenRevocationService(null, null, null, null) {
             @Override
             public boolean isRevoked(String jti, Long userId, Instant issuedAt) {
                 return revoked;

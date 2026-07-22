@@ -85,7 +85,7 @@ class RevokedTokenValidatorTest {
     }
 
     private static TokenRevocationService serviceReturning(boolean revoked) {
-        return new TokenRevocationService(null, null, null) {
+        return new TokenRevocationService(null, null, null, null) {
             @Override
             public boolean isRevoked(String jti, Long userId, Instant issuedAt) {
                 return revoked;
@@ -94,7 +94,7 @@ class RevokedTokenValidatorTest {
     }
 
     private static TokenRevocationService serviceThrowing() {
-        return new TokenRevocationService(null, null, null) {
+        return new TokenRevocationService(null, null, null, null) {
             @Override
             public boolean isRevoked(String jti, Long userId, Instant issuedAt) {
                 throw new IllegalStateException("Redis is unreachable");

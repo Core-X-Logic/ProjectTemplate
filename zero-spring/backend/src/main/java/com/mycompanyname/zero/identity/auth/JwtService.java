@@ -56,6 +56,12 @@ public class JwtService {
                 // PROD-R16: the revocation handle. Random per token, so revoking one leaves siblings alone.
                 .id(UUID.randomUUID().toString())
                 .issuedAt(now)
+                // PROD-R16 (F3): millisecond-precision issue time. The standard `iat` is second-granular,
+                // so a token minted in the SAME wall-clock second just before a credential change would
+                // tie the per-user "not before" marker and survive. This additive claim lets the
+                // revocation check compare at millisecond resolution. Additive/non-breaking: decoders
+                // that read claims by name are unaffected; a token without it falls back to `iat`.
+                .claim("ims", now.toEpochMilli())
                 .expiresAt(now.plus(properties.getAccessTokenTtl()))
                 .claim("username", user.getUsername())
                 .claim("authorities", List.copyOf(authorities));
