@@ -2,6 +2,26 @@
 
 Skala: Olasılık (L/M/H) × Etki (L/M/H) → Seviye. Durum: `Open` · `Mitigating` · `Closed`.
 
+> **Okuma uyarısı:** aşağıdaki **findings** tablosu her riskin ORİJİNAL bulgusunu "Open" olarak
+> tutar (tarihsel kayıt); GÜNCEL durum **status/mitigation** tablosundadır. PROD-R1..R16 status
+> tablosunda **Closed**'dır. Bir riski "açık" ilan etmeden önce status tablosuna bakın.
+
+---
+
+## RC v1.0.0-rc.1 — blocker / non-blocker sınıflandırması (2026-07-22)
+
+Aday `513ede6`, CI 9/9. **Template kod blocker'ı: YOK.** Genuine açık kalanlar:
+
+| ID | Kalem | Sınıf | Neden blocker değil |
+|---|---|---|---|
+| **PROD-R23** | Branch protection ücretsiz private planda kurulamıyor → kırmızı check push'u engellemez | **Non-blocker (org-policy)** | Kod değil; klon ücretli plan/kendi org'unda etkinleştirir (SETUP §2). CI zinciri `needs:` ile workflow-içi sırayı zorluyor |
+| **PROD-R13** | Redis artık auth için sert bağımlılık (revocation fail-closed); kesinti auth'u reddeder | **Non-blocker (operatör-ops)** | Bilinçli fail-closed trade; operatör Redis HA çalıştırır (RUNBOOK §1.1, §1.3-K). Access token kısa |
+| **PROD-R44b / R47** | PayTR canlı get-token + iyzico canlı doğrulama | **Non-blocker (operatör-bağımlı, opsiyonel)** | Yalnız klon ödeme açarsa; kendi merchant kimlik bilgisi + sandbox smoke (`scripts/sandbox-smoke.sh`, RUNBOOK §3.10) gerekir. Kod tarafı offline-kanıtlı |
+| **Kayıtlı residual'lar** | Durable revocation outbox · 2FA SMS/WebAuthn/QR + admin 2FA-reset · asimetrik JWKS | **Non-blocker (next-phase)** | Sonraki faz; hiçbiri mevcut template çekirdeğini bloklamaz |
+
+**Gate politikası (RC penceresi):** yalnız **blocker sınıfı** düzeltme kabul; non-blocker iyileştirmeler
+**backlog**'a (sonraki faz). Blocker listesi boş → **GO**.
+
 ---
 
 ## ⚠️ Şablonu klonluyorsanız — devraldığınız açık kısıtlar

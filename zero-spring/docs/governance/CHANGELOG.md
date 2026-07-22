@@ -10,6 +10,21 @@
 ## [Yayınlanmamış]
 
 ### Eklendi
+### Değişti
+### Kaldırıldı
+### Düzeltildi
+### Güvenlik
+
+---
+
+## [1.0.0-rc.1] — 2026-07-22
+
+Release candidate. `513ede6` üzerinde donduruldu, CI 9/9 (run 29907487912): 586 backend + 149
+frontend test, image hardening ✓, npm audit 0, gitleaks temiz, V1..V10 doğrulandı. Blocker yok;
+açık kalanlar org-policy / operatör-ops / next-phase (RISK-REGISTER RC bölümü). Bu sürüme dahil
+olan değişiklikler aşağıdadır.
+
+### Eklendi
 
 - **iyzico + retrieve-otoriter doğrulama + mutabakat job'u (P2'-B).** Hiçbir webhook/callback
   payload'ı tek başına aktive etmez: her tetik tek huniye düşer, iyzico'ya `retrieve` ile sorulur,

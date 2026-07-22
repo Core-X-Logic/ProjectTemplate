@@ -550,3 +550,36 @@ opaque JWT içinde). Kanıt: [run 29904735484](https://github.com/Core-X-Logic/P
 **Stack-review (güvenlik):** steady-state sıfır loop + `asMillis` 1e11 eşiği (yıl ~5138'e dek net) doğrulandı; 1 bulgu (legacy no-ims deploy-window loop) commit öncesi kapatıldı (fallback `+999`), 2 doküman düzeltmesi (150ms; geri-NTP-step ms hassasiyeti).
 
 **Kalan (RISK-REGISTER PROD-R16 residual):** canlı çok-node rolling deploy (karışık ims/no-ims) forge'lu IT dikişinde kanıtlı ama gerçek iki-sürüm cluster'ında koşulmadı → **durable outbox** ertelenmiş; geri-NTP-step ms hassasiyeti (düşük). Hiçbiri blocker değil.
+
+---
+
+## RELEASE CANDIDATE — v1.0.0-rc.1 — 2026-07-22
+
+**Aday commit:** `513ede6` · **Tag:** `v1.0.0-rc.1` (annotated) · **CI:**
+[run 29907487912](https://github.com/Core-X-Logic/ProjectTemplate/actions/runs/29907487912) — **9/9 success**.
+
+### Release-readiness — tek tablo
+
+| Kapı | Sonuç | Kanıt |
+|---|---|---|
+| `build` | ✅ | jar üretildi, sonraki gate'ler yeniden derlemeden kullandı |
+| `backend` | ✅ | **222 unit + 364 IT = 586**, 0 fail/error/skip; coverage geçti |
+| `frontend` | ✅ | **149 test / 30 dosya**, tsc + vite build |
+| `docker-build` | ✅ | imaj build + *"Image hardening doğrulandı: non-root · healthcheck · prod profil · heap tavanı"* |
+| `typed-client-drift` | ✅ | `schema.d.ts` API yüzeyiyle senkron |
+| `migration-drift` | ✅ | V1..V10 `Successfully validated 10 migrations` (mevcut-kurulum simülasyonu) |
+| `live-smoke` | ✅ | authenticated + negatif tenant assertion'ları (Redis'li ortam, fail-closed revocation hizmet veriyor) |
+| `security-checks` | ✅ | gitleaks **no leaks** · npm audit **0 vulnerabilities** (frontend + build) |
+| `release` | ✅ | artifact hazır + deploy-plan dry-run (DEPLOY_ENABLED=false → gerçek deploy KOŞMADI; placeholder+scaffold) |
+
+**Lokal ↔ CI:** backend 586 = 586 · frontend 149 = 149. Sapma yok.
+
+### Blocker durumu — **BOŞ (kod blocker'ı yok)**
+
+RISK-REGISTER status/mitigation tablosu: PROD-R1..R16 **hepsi Closed** (R6/R16 residual'lı). Genuine
+açık kalanlar org-policy / operatör-ops / kayıtlı next-phase — hiçbiri **template kod blocker'ı değil**
+(sınıflandırma RISK-REGISTER RC bölümünde).
+
+### Karar
+
+**GO** — RC v1.0.0-rc.1. Blocker listesi boş; kanıt tek yerde (bu tablo + tag notu); dokümanlar tutarlı.
