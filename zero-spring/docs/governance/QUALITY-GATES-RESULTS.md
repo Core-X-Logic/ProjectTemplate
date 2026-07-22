@@ -525,3 +525,28 @@ Security-critical; API non-breaking (kid = JWT header, jti = additive claim; HS5
 **Stack-review (güvenlik):** fail-closed / alg-pinning / TTL matematiği rijitçe temiz doğrulandı; 2 bulgu (F1 enabled⟹enforced fail-fast, F2 alg-confusion testi) commit öncesi kapatıldı; F3 (aynı-saniye iat granülaritesi) + F4 (write best-effort vs read fail-closed asimetrisi) RISK-REGISTER'a dokümante.
 
 **Kalan (RISK-REGISTER PROD-R16 residual):** Redis kesintisi auth'u reddeder (fail-closed trade; access token kısa, operatör Redis HA); asimetrik JWKS + iki granülarite limiti kayıtlı, blocker değil. Rotasyon prosedürü: RELEASE-RUNBOOK §1.3-K.
+
+---
+
+## PROD-R16 F3 + F4 daraltması — 2026-07-22, `8c1cd42`, **9/9** (run 29904735484)
+
+JWT revocation'ın iki kayıtlı residual'ı daraltıldı; yeni feature yok, API non-breaking (`ims`
+opaque JWT içinde). Kanıt: [run 29904735484](https://github.com/Core-X-Logic/ProjectTemplate/actions/runs/29904735484).
+
+| Konu | Eski → yeni |
+|---|---|
+| **F3** aynı-saniye `iat` granülaritesi | notBefore artık **millis**; access token'a additive `ims` (issued-millis) claim'i; karşılaştırma ms çözünürlükte. Aynı-saniye ama-önce basılan token (`ims < notBefore`) artık **revoke**, sonraki re-login (`ims > notBefore`) hayatta — pencere 1sn → saat çözünürlüğü, **login-loop yok** (strict `<`). Legacy (ims'siz) token → `iat+999ms` = pre-F3 saniye davranışı → deploy-window loop da yok, kendini iyileştirir |
+| **F4** revocation-write fail-open asimetrisi | Redis write **3 denemeli bounded retry** (50/100ms, ~150ms en kötü), tükenince throw etmez (credential-change DB-committed), Micrometer counter `jwt.revocation.write_failures` (operation tag) + greppable WARN `REVOCATION_WRITE_FAILED` (jti/token yok). **Read yolu değişmedi, hâlâ fail-closed** |
+
+| Kapı | Kanıt |
+|---|---|
+| `backend` | **222 unit + 364 IT = 586** (581→586, +5) |
+| `TokenRevocationSubSecondIT` | aynı-saniye token revoke + sonraki re-login hayatta (loop yok); **legacy no-ims token** aynı-saniye re-login hayatta (deploy-window loop yok), önceki-saniye legacy revoke |
+| `TokenRevocationWriteRetryTest` | transient write → retry ile kaydedilir; sürekli hata → counter++ + WARN, throw yok; access-token write ayrı tag'li, jti loglamaz |
+| Diğer 6 job | success (live-smoke Redis'li) |
+
+**Üç mutasyon kanıtı:** saniyeye çökert → SubSecond kırmızı (401≠200); write no-op → revoke IT kırmızı; `+999` fallback geri alındı → legacy no-ims IT kırmızı (`200 beklenirken 401`).
+
+**Stack-review (güvenlik):** steady-state sıfır loop + `asMillis` 1e11 eşiği (yıl ~5138'e dek net) doğrulandı; 1 bulgu (legacy no-ims deploy-window loop) commit öncesi kapatıldı (fallback `+999`), 2 doküman düzeltmesi (150ms; geri-NTP-step ms hassasiyeti).
+
+**Kalan (RISK-REGISTER PROD-R16 residual):** canlı çok-node rolling deploy (karışık ims/no-ims) forge'lu IT dikişinde kanıtlı ama gerçek iki-sürüm cluster'ında koşulmadı → **durable outbox** ertelenmiş; geri-NTP-step ms hassasiyeti (düşük). Hiçbiri blocker değil.

@@ -81,6 +81,15 @@
 
 ### Güvenlik
 
+- **JWT revocation sertleştirmesi (PROD-R16 F3+F4 daraltıldı).** (F3) Access token'lar additive bir
+  `ims` (issued-millis) claim'i taşıyor ve kullanıcı-bazlı iptal işareti artık millis çözünürlükte
+  karşılaştırılıyor: kimlik değişiminden aynı saniye hemen önce basılan bir token artık iptal
+  ediliyor, sonraki re-login hayatta kalıyor — pencere 1 saniyeden saat çözünürlüğüne indi,
+  login-loop yok (ims'siz eski tokenlar pre-F3 saniye davranışını korur, deploy-window loop da
+  yok). (F4) Redis iptal-yazımı sınırlı retry+backoff ile deneniyor ve başarısızlıkta bir Micrometer
+  sayacı + greppable WARN ile gözlemlenebilir (token/jti loglanmaz); okuma yolu değişmedi, hâlâ
+  fail-closed. Üçü de mutasyon-kanıtlı; 586 backend test, CI 9/9. Durable outbox ertelenmiş residual.
+
 - **JWT anahtar rotasyonu (kid key-ring) + access-token revocation (PROD-R16 kapandı).** Access
   token'lar artık `kid` başlığı taşıyor ve doğrulama, anahtar halkasından (active imzalar,
   previous'lar grace penceresinde doğrular) kid ile seçilen HS512 anahtarıyla yapılıyor — böylece
