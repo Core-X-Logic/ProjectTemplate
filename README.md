@@ -64,6 +64,7 @@ Yeni bir repo kurarken (branch protection, CI, secret'lar):
 
 | Ne yapacaksınız | Nereye bakın |
 |---|---|
+| **Ekibi hızlı başlatmak / AI ile çalışmak** | `zero-spring/docs/usage/` — quickstart, prompt kataloğu, kanıt disiplini, ilk 7 gün, cheat sheet |
 | **Yeni modül/özellik eklemek** | `zero-spring/docs/ADDING-A-MODULE.md` — atlanan her adım sessiz bir açıktır |
 | Mimariyi anlamak | `zero-spring/docs/ARCHITECTURE.md` |
 | Uyulması gereken kurallar | `zero-spring/docs/ARCHITECTURE-RULES.md` |

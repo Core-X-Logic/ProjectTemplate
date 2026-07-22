@@ -11,6 +11,19 @@
 
 ### Eklendi
 
+- **Kullanım + AI prompt dokümantasyon seti (`docs/usage/`).** Klonlayan ekip için operasyonel
+  rehberler — kod/davranış değişmedi, sadece doküman. 7 dosya: `QUICKSTART.md` (15–30 dk ayağa
+  kaldırma + ilk smoke akışı + sık kurulum hataları tablosu), `WORKING-WITH-AI.md` (Codex/Claude
+  çalışma modeli, hangi ajan/rol ne zaman, paralel çalışma + aynı-dosya çakışması önleme),
+  `PROMPT-CATALOG.md` (backend/frontend/security/review/release için kopyala-kullan role-based
+  promptlar; her biri scope-lock + kabul kriteri + kanıt formatı + no-fake-green + non-goals
+  taşır), `EVIDENCE-AND-GATES.md` (minimum kanıt, negatif kanıt örnekleri, test/CI/governance
+  senkron checklist, drift + false-green önleme), `OPERATOR-HANDOFF.md` (geliştirici↔operatör
+  sınırı, secret sınırları, prod provisioning checklist, deploy/rollback kısa akışları),
+  `FIRST-7-DAYS.md` (gün bazlı onboarding), `CHEAT-SHEET.md` (1 sayfalık ilk gün özeti). `usage/README.md`
+  index + `docs/README.md` ve kök `README.md`'ye işaretçiler. Mevcut governance (AGENT-WORKING-AGREEMENT,
+  QUALITY-GATES, RISK-REGISTER, SETUP §6, RELEASE-RUNBOOK) ile hizalı; tekrar değil, kullanım katmanı.
+
 - **CI release hattı prod-tetiklemeye hazır (altyapı, deploy YOK).** `docker-build` job'ına
   **kapılı** registry login + push adımları eklendi (`a8a8262`, CI 9/9 run 29910265282). Varsayılan
   **güvenli no-op**: `PUSH_IMAGE=true` (Actions Variable) olmadan imaj build edilip sertleştirmesi

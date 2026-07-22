@@ -7,7 +7,9 @@ React 19 / Vite / TypeScript admin arayüzü.
 
 | Durumun | Oku |
 |---|---|
-| Şablonu yeni klonladım | Repo kökündeki `README.md`, sonra `RENAME.md` |
+| Şablonu yeni klonladım | Repo kökündeki `README.md`, sonra **`usage/QUICKSTART.md`** + `usage/CHEAT-SHEET.md` |
+| AI (Codex/Claude) ile geliştireceğim | **`usage/WORKING-WITH-AI.md`** + `usage/PROMPT-CATALOG.md` |
+| Ekibi onboard ediyorum | **`usage/FIRST-7-DAYS.md`** (gün bazlı plan) |
 | Yeni bir modül/özellik ekleyeceğim | **`ADDING-A-MODULE.md`** — atlanan her adım sessiz bir açık |
 | Sistemin nasıl kurulduğunu anlamak istiyorum | `ARCHITECTURE.md` |
 | Bir kuralın neden böyle olduğunu merak ediyorum | `ARCHITECTURE-RULES.md`, sonra `governance/ADR/` |
@@ -19,6 +21,7 @@ React 19 / Vite / TypeScript admin arayüzü.
 
 | Dosya | Ne işe yarar |
 |---|---|
+| `usage/` | **Kullanım + AI ile çalışma** rehberleri: quickstart, prompt kataloğu, kanıt disiplini, operatör handoff, ilk 7 gün, cheat sheet. Klonlayan ekip buradan başlar. |
 | `ADDING-A-MODULE.md` | Yeni modül eklemenin tam yordamı: Modulith sınırı, migration, izin kaydı, kiracılık, i18n, test. Kontrol listesiyle. |
 | `ARCHITECTURE-RULES.md` | Kodda uyulması zorunlu kurallar, gerekçeleriyle. Çoğu burada bir kez ihlal edilip hataya yol açtığı için yazıldı. |
 | `ARCHITECTURE.md` | Backend mimarisi: modül sınırları, çok kiracılık, kimlik doğrulama, veri katmanı. |
