@@ -114,4 +114,11 @@ public interface UserRepository extends JpaRepository<User, Long> {
      */
     @EntityGraph(attributePaths = "roles")
     List<User> findAllByIdIn(Collection<Long> ids);
+
+    /**
+     * Members of a tenant-side role by name — the recipient set of the SaaS notification bridge
+     * (a subscription event notifies the tenant's {@code Admin} role members). Derived across the
+     * {@code user_roles} join; active-only so a deactivated admin is not notified.
+     */
+    List<User> findByTenantIdAndActiveTrueAndRoles_NameIgnoreCase(Long tenantId, String roleName);
 }

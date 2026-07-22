@@ -31,4 +31,14 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
 
     /** S10: candidates for the downgrade onto their edition's (free) expiring edition. */
     List<Subscription> findByStatusOrderByIdAsc(SubscriptionStatus status);
+
+    // --- pre-expiry notice queries (window scan, not exact-day equality) ---
+
+    /** Paid subscriptions whose billed period ends inside the notice window. */
+    List<Subscription> findByStatusAndCurrentPeriodEndAtBetweenOrderByIdAsc(
+            SubscriptionStatus status, Instant from, Instant to);
+
+    /** Trials ending inside the notice window. */
+    List<Subscription> findByStatusAndTrialEndAtBetweenOrderByIdAsc(
+            SubscriptionStatus status, Instant from, Instant to);
 }

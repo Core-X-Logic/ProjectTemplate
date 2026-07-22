@@ -11,4 +11,11 @@ public interface SubscriptionEventRepository extends JpaRepository<SubscriptionE
      * and the identity sequence is the only strictly monotonic tiebreaker.
      */
     List<SubscriptionEvent> findBySubscriptionIdOrderByIdAsc(Long subscriptionId);
+
+    /**
+     * Idempotency ledger for the pre-expiry notice: "was a notice already recorded inside the
+     * current period's window?" — a renewal moves the window forward, which re-arms the notice.
+     */
+    boolean existsBySubscriptionIdAndReasonAndOccurredAtGreaterThanEqual(
+            Long subscriptionId, String reason, java.time.Instant since);
 }

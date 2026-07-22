@@ -690,6 +690,26 @@ raporuyla birebir aynı kök nedendi). Görsel önce/sonra yerine kanıt: test +
 
 ---
 
+## SaaS parite kapanışı — 2026-07-22 — bildirim köprüsü + expiry notice + geçmiş UI + matris
+
+Parite ölçümü `docs/SAAS-PARITY-MATRIX.md`'de kalıcı (kanıt-linkli). Bu koşuda ölçülenler:
+
+| Kanıt | Ölçüm |
+|---|---|
+| Backend `clean verify` | **BUILD SUCCESS — 222 unit + 367 IT** (0 fail/skip); +3 yeni IT |
+| Yeni IT'ler | `SaasNotificationBridgeIT` (aktivasyon+iptal → tenant Admin bildirimi; **provisioning bildirmez** negatifi) · `SubscriptionExpiryNoticeIT` (pencere dışı 0 → içi 1 → saatlik tekrar koşu **yine 1**, ledger idempotency) |
+| **Negatif kanıt (ölçüldü)** | İlk koşu KIRMIZI: `Expecting [] to contain ["saas.subscription.activated"]` + `Expected size: 1 but was: 0` — teslimat yokken testler düşüyor. Kök neden: tenancy `hostFilter` alıcı sorgusunu gizliyordu; filtre yalnız o sorgu için askıya alınıp geri yüklenerek yeşile döndü. Yani testler tam da korumanın (teslimatın) kalkmasını yakalıyor |
+| Modulith | `ArchitectureRulesTest` 9/9 — saas modülü YENİ bağımlılık almadı (event saas::api'de; köprü identity'de mevcut kenarlarla) |
+| Frontend | build (`tsc -b`) temiz; **32 dosya / 168 test** (+3: detay sheet — geçmiş render, boş-geçmiş, hata+retry; endpoint'in doğru tenant'la çağrıldığı assert'li) |
+| İzolasyon güvenliği | Filtre askıya alma tek sorgu kapsamında ve `finally` ile geri yükleniyor; sorgunun kendisi zaten explicit tenant-parametreli (birincil savunma). `TenantIsolationIT` 4/4 yeşil |
+
+Deferred kalemler matrise gerekçeli işlendi: toplu tenant taşıma (edition düzenlenebilir + snapshot
+fiyat ihtiyacı düşürdü), otomatik kart-tahsilatlı recurring (TR sağlayıcıları re-checkout modeli;
+Stripe SPI uykuda), fatura üretimi/PDF (şema hazır; kaynaktaki race'li manuel üretim taşınmadı),
+host gelir istatistikleri.
+
+---
+
 ## Tab-bazlı dashboard yönetim merkezi — 2026-07-22, `85c42e8`, gerçek `push`, **9/9** (run 29927220897)
 
 Yalnız frontend; `schema.d.ts` dokunulmadı (typed-client-drift yeşili bağımsız kanıt); yeni bağımlılık yok.

@@ -8,6 +8,7 @@ import {
 import {
   CreditCard,
   EllipsisVertical,
+  History,
   Package,
   Play,
   SlidersHorizontal,
@@ -48,6 +49,7 @@ import {
 import { Can } from '@/auth/rbac';
 import { AssignEditionDialog } from '../components/assign-edition-dialog';
 import { CheckoutDialog } from '../components/checkout-dialog';
+import { SubscriptionDetailSheet } from '../components/subscription-detail-sheet';
 import { TenantFeaturesPanel } from '../components/tenant-features-panel';
 import {
   useActivateSubscription,
@@ -113,6 +115,7 @@ interface SubscriptionRowActionsProps {
   onActivate: (subscription: SubscriptionDto) => void;
   onCancel: (subscription: SubscriptionDto) => void;
   onFeatures: (subscription: SubscriptionDto) => void;
+  onDetail: (subscription: SubscriptionDto) => void;
 }
 
 function SubscriptionRowActions({
@@ -122,6 +125,7 @@ function SubscriptionRowActions({
   onActivate,
   onCancel,
   onFeatures,
+  onDetail,
 }: SubscriptionRowActionsProps) {
   const intl = useIntl();
 
@@ -138,6 +142,11 @@ function SubscriptionRowActions({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" side="bottom">
+        {/* Read-only detail (event history): the page permission suffices. */}
+        <DropdownMenuItem onSelect={() => onDetail(subscription)}>
+          <History />
+          <FormattedMessage id="subscriptions.actions.detail" />
+        </DropdownMenuItem>
         <Can permission="subscriptions.manage">
           <DropdownMenuItem onSelect={() => onAssign(subscription)}>
             <Package />
@@ -204,6 +213,7 @@ function SubscriptionsListContent() {
   const cancel = useCancelSubscription();
 
   const [assignTarget, setAssignTarget] = useState<SubscriptionDto | null>(null);
+  const [detailTarget, setDetailTarget] = useState<SubscriptionDto | null>(null);
   const [checkoutTarget, setCheckoutTarget] = useState<SubscriptionDto | null>(
     null,
   );
@@ -341,6 +351,7 @@ function SubscriptionsListContent() {
             onActivate={handleActivate}
             onCancel={setCancelTarget}
             onFeatures={setFeaturesTarget}
+            onDetail={setDetailTarget}
           />
         ),
         enableSorting: false,
@@ -414,6 +425,15 @@ function SubscriptionsListContent() {
           }
         }}
         subscription={assignTarget}
+      />
+
+      <SubscriptionDetailSheet
+        subscription={detailTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDetailTarget(null);
+          }
+        }}
       />
 
       <CheckoutDialog

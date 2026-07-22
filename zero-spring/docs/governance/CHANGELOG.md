@@ -11,6 +11,27 @@
 
 ### Eklendi
 
+- **SaaS parite kapanışı: yaşam döngüsü bildirimleri + abonelik geçmişi UI + parite matrisi.**
+  ASP.NET Zero SaaS davranışıyla kalem kalem parite ölçüldü ve iki kritik boşluk kapatıldı
+  (`docs/SAAS-PARITY-MATRIX.md` — Tam/Tam+/Kısmi/Deferred + kanıt + bilinçli farklar):
+  (1) **SaaS olay → bildirim köprüsü:** her `subscription_events` girdisi artık `SubscriptionChanged`
+  (saas::api) yayınlar; identity'deki `SubscriptionNotificationBridge` operasyonel olayları
+  (activated/cancelled/period-ended/expired/downgraded/expiring-soon) tenant **Admin** üyelerine
+  in-app bildirime çevirir (i18n en+tr, aynı transaction — yarım-durum yok). Alıcı sorgusu bilinçli
+  cross-tenant: tenancy filtresi yalnız o sorgu için askıya alınıp **geri yüklenir** (ikinci savunma
+  hattı transaction'ın kalanında aynen). (2) **Süre-dolumu ön uyarısı:** lifecycle job'a pencere
+  taraması (`zero.saas.expiry-notice-days`, varsayılan 7) + `EXPIRY_NOTICE` event-ledger idempotency —
+  kaynaktaki tam-gün-eşitliği kusurunun (koşu kaçarsa uyarı kaybolur) aksine geç koşu yine uyarır,
+  saatlik koşu çift uyarmaz. (3) **Abonelik detay + yaşam döngüsü geçmişi UI:** subscriptions
+  listesine "Geçmiş ve detay" sheet'i — durum anlık görüntüsü + from→to/reason/actor/zaman
+  çizelgesi (backend'de zaten vardı, ilk kez görünür). Kanıt: backend 222 unit + **367 IT** (+3:
+  `SaasNotificationBridgeIT` 2, `SubscriptionExpiryNoticeIT` 1) `clean verify` yeşil; frontend 32
+  dosya / **168 test** (+3 detay sheet). Negatif kanıt ölçüldü: bildirim teslimi yokken testler
+  KIRMIZI (`Expecting [] to contain ["saas.subscription.activated"]` — tenancy-filtre kök nedeni
+  bulunup kapatıldı), provisioning-bildirmez gürültü negatifi, pencere-dışı-0/tekrar-koşu-1
+  idempotency kanıtı. Modulith sınırları korunuyor (ArchitectureRulesTest 9/9; saas yeni bağımlılık
+  ALMADI — köprü identity'de, mevcut `identity → saas::api + notification` kenarlarıyla).
+
 - **Tab-bazlı dashboard yönetim merkezi (yalnız frontend).** Widget dashboard'ı 5 sekmeli yönetim
   merkezine yükseltildi (`85c42e8`, CI 9/9 run 29927220897): Genel Bakış (KPI + trend + hızlı
   erişim, herkese) · Operasyon (bildirim gelen kutusu + son hesaplar) · Aktivite (trend + zaman

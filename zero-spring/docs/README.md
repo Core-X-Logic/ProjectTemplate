@@ -27,6 +27,7 @@ React 19 / Vite / TypeScript admin arayüzü.
 | `ARCHITECTURE.md` | Backend mimarisi: modül sınırları, çok kiracılık, kimlik doğrulama, veri katmanı. |
 | `SECURITY.md` | Güvenlik modeli: kiracı izolasyonu, üçlü kilit, JWT, rate limit, secret yönetimi, log bütünlüğü. Her başlıkta neyin garanti **edilmediği** ve hangi testin tuttuğu yazılı. |
 | `SAAS-ARCHITECTURE.md` | Editions / subscriptions / features katmanı: durum makinesi, fiyat snapshot'ı, `BillingProvider` SPI, webhook idempotency. |
+| `SAAS-PARITY-MATRIX.md` | ASP.NET Zero ↔ zero-spring SaaS parite matrisi — kalem kalem durum (Tam/Tam+/Kısmi/Deferred) + test kanıtları + bilinçli farklar. |
 | `FRONTEND-ARCHITECTURE.md` | Frontend yığını, provider zinciri, klasör yapısı, feature şablonu. |
 | `QUALITY-GATES.md` | "Bitti"nin tanımı, coverage eşikleri, güvenlik ve performans kontrol listeleri. |
 | `RELEASE-RUNBOOK.md` | Yayına çıkarma: config kontrol listesi, deploy adımları, rollback, olay müdahalesi. |

@@ -1,6 +1,7 @@
 package com.mycompanyname.zero.saas.subscription;
 
 import com.mycompanyname.zero.saas.EvictsSaasCaches;
+import com.mycompanyname.zero.saas.api.SubscriptionChanged;
 import com.mycompanyname.zero.saas.edition.Edition;
 import com.mycompanyname.zero.saas.edition.EditionRepository;
 import com.mycompanyname.zero.saas.subscription.web.dto.AssignEditionRequest;
@@ -14,6 +15,7 @@ import com.mycompanyname.zero.tenancy.Tenant;
 import com.mycompanyname.zero.tenancy.TenantRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -69,6 +71,7 @@ public class SubscriptionService {
     private final EditionRepository editionRepository;
     private final TenantRepository tenantRepository;
     private final ProrationCalculator prorationCalculator;
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     // --- reads ---
@@ -388,6 +391,17 @@ public class SubscriptionService {
         }
     }
 
+    /**
+     * Writes the pre-expiry notice into the event trail (no status change) and publishes the
+     * corresponding {@link SubscriptionChanged}. The event row doubles as the idempotency ledger:
+     * the lifecycle job asks "has a notice been recorded since this period's window opened?"
+     * before calling this — so a job that runs hourly still notifies exactly once per period.
+     */
+    public void recordExpiryNotice(Subscription subscription) {
+        recordEvent(subscription, subscription.getStatus(), subscription.getStatus(),
+                SubscriptionChanged.REASON_EXPIRY_NOTICE, SYSTEM_ACTOR);
+    }
+
     private void recordEvent(Subscription subscription, SubscriptionStatus from, SubscriptionStatus to,
                              String reason, String actor) {
         SubscriptionEvent event = new SubscriptionEvent();
@@ -398,6 +412,22 @@ public class SubscriptionService {
         event.setOccurredAt(clock.instant());
         event.setActor(actor == null || actor.isBlank() ? SYSTEM_ACTOR : actor);
         subscriptionEventRepository.save(event);
+
+        // Every event-trail entry is also an application event (saas :: api). Synchronous, same
+        // transaction: a listener's write (e.g. the identity notification bridge) commits or rolls
+        // back WITH the transition — no "status changed but nobody was told" half-state.
+        Edition edition = editionRepository.findById(subscription.getEditionId()).orElse(null);
+        eventPublisher.publishEvent(new SubscriptionChanged(
+                subscription.getTenantId(),
+                subscription.getId(),
+                edition == null ? null : edition.getName(),
+                edition == null ? null : edition.getDisplayName(),
+                from == null ? null : from.name(),
+                to.name(),
+                reason,
+                event.getOccurredAt(),
+                subscription.getCurrentPeriodEndAt(),
+                subscription.getTrialEndAt()));
     }
 
     private Subscription requireSubscription(Long tenantId) {

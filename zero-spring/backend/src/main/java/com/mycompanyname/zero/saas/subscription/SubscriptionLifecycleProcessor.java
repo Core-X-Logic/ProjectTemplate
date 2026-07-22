@@ -1,13 +1,16 @@
 package com.mycompanyname.zero.saas.subscription;
 
+import com.mycompanyname.zero.saas.api.SubscriptionChanged;
 import com.mycompanyname.zero.saas.edition.Edition;
 import com.mycompanyname.zero.saas.edition.EditionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 
@@ -42,9 +45,18 @@ public class SubscriptionLifecycleProcessor {
     public static final String REASON_GRACE_ENDED = "GRACE_ENDED";
 
     private final SubscriptionRepository subscriptionRepository;
+    private final SubscriptionEventRepository subscriptionEventRepository;
     private final EditionRepository editionRepository;
     private final SubscriptionService subscriptionService;
     private final Clock clock;
+
+    /**
+     * How many days before a trial/period end the tenant is warned. The source system's notifier
+     * matched the exact day and silently skipped a tenant whenever a run was missed; here the check
+     * is a WINDOW ("ends within N days") plus a per-period ledger, so a late run still notifies.
+     */
+    @Value("${zero.saas.expiry-notice-days:7}")
+    private int expiryNoticeDays;
 
     /** Processes everything due at the current {@link Clock} instant. */
     public int processDueSubscriptions() {
@@ -57,6 +69,9 @@ public class SubscriptionLifecycleProcessor {
      * @return the number of subscriptions whose status actually changed
      */
     public int processDueSubscriptions(Instant asOf) {
+        // Notices run FIRST: a subscription that is about to expire on this very run still gets its
+        // warning recorded before the expiry pass moves it on.
+        noticeUpcomingExpiries(asOf);
         int changed = 0;
         changed += expireElapsedTrials(asOf);
         changed += endElapsedPeriods(asOf);
@@ -66,6 +81,51 @@ public class SubscriptionLifecycleProcessor {
             log.info("Subscription lifecycle run at {} advanced {} subscription(s)", asOf, changed);
         }
         return changed;
+    }
+
+    /**
+     * Pre-expiry warning: {@code ACTIVE} subscriptions whose period — and {@code TRIALING} ones
+     * whose trial — ends within {@link #expiryNoticeDays}. No status changes; the notice is an
+     * event-trail row ({@code EXPIRY_NOTICE}) whose presence inside the current window IS the
+     * idempotency ledger — an hourly job records it once per period, and a renewal that pushes the
+     * deadline forward re-arms the notice for the next period.
+     *
+     * @return the number of notices recorded
+     */
+    int noticeUpcomingExpiries(Instant asOf) {
+        Instant horizon = asOf.plus(expiryNoticeDays, ChronoUnit.DAYS);
+        int notices = 0;
+        notices += noticeIfDue(subscriptionRepository
+                .findByStatusAndCurrentPeriodEndAtBetweenOrderByIdAsc(SubscriptionStatus.ACTIVE, asOf, horizon),
+                Subscription::getCurrentPeriodEndAt);
+        notices += noticeIfDue(subscriptionRepository
+                .findByStatusAndTrialEndAtBetweenOrderByIdAsc(SubscriptionStatus.TRIALING, asOf, horizon),
+                Subscription::getTrialEndAt);
+        if (notices > 0) {
+            log.info("Recorded {} pre-expiry notice(s) at {}", notices, asOf);
+        }
+        return notices;
+    }
+
+    private int noticeIfDue(List<Subscription> due, java.util.function.Function<Subscription, Instant> deadline) {
+        int notices = 0;
+        for (Subscription subscription : due) {
+            Instant windowStart = deadline.apply(subscription).minus(expiryNoticeDays, ChronoUnit.DAYS);
+            boolean alreadyNoticed = subscriptionEventRepository
+                    .existsBySubscriptionIdAndReasonAndOccurredAtGreaterThanEqual(
+                            subscription.getId(), SubscriptionChanged.REASON_EXPIRY_NOTICE, windowStart);
+            if (alreadyNoticed) {
+                continue;
+            }
+            try {
+                subscriptionService.recordExpiryNotice(subscription);
+                notices++;
+            } catch (RuntimeException ex) {
+                log.error("Expiry notice for tenant {} failed: {}",
+                        subscription.getTenantId(), ex.getMessage(), ex);
+            }
+        }
+        return notices;
     }
 
     /** S6: {@code TRIALING -> EXPIRED}. A trial never enters the grace window. */
