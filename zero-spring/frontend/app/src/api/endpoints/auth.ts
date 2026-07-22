@@ -30,7 +30,13 @@ export interface MeResponse {
   id: string;
   username: string;
   email: string;
-  tenantId: string;
+  /**
+   * Wire truth (`MeDto.tenantId`: `Long`, schema `tenantId?: number`): a NUMBER
+   * in tenant sessions and NULL for host users. The host/tenant split in the UI
+   * (`user.tenantId == null` → host) hangs on this nullability — do not "tidy"
+   * it to a plain string/number.
+   */
+  tenantId: number | null;
   roles: string[];
   permissions: string[];
   /**

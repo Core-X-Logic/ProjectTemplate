@@ -1,5 +1,6 @@
 import { accountMessages } from '@/features/account/messages';
 import { auditMessagesEn } from '@/features/audit/messages';
+import { dashboardMessages } from '@/features/dashboard/messages';
 import { editionsMessages } from '@/features/editions/messages';
 import { profileMessages } from '@/features/profile/messages';
 import { tenantsMessages } from '@/features/tenants/messages';
@@ -79,6 +80,7 @@ const en: Record<string, string> = {
   'common.search': 'Search',
   'common.loading': 'Loading…',
   'common.retry': 'Retry',
+  'common.refresh': 'Refresh',
   'common.comingSoon': 'Coming soon',
 
   // Errors
@@ -135,6 +137,8 @@ const en: Record<string, string> = {
   ...accountMessages.en,
   ...profileMessages.en,
   ...tenantsMessages.en,
+  // Dashboard widget system (modular widgets)
+  ...dashboardMessages.en,
 };
 
 export default en;

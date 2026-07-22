@@ -1,5 +1,6 @@
 import { accountMessages } from '@/features/account/messages';
 import { auditMessagesTr } from '@/features/audit/messages';
+import { dashboardMessages } from '@/features/dashboard/messages';
 import { editionsMessages } from '@/features/editions/messages';
 import { profileMessages } from '@/features/profile/messages';
 import { tenantsMessages } from '@/features/tenants/messages';
@@ -78,6 +79,7 @@ const tr: Record<string, string> = {
   'common.search': 'Ara',
   'common.loading': 'Yükleniyor…',
   'common.retry': 'Tekrar dene',
+  'common.refresh': 'Yenile',
   'common.comingSoon': 'Yakında',
 
   // Errors
@@ -135,6 +137,8 @@ const tr: Record<string, string> = {
   ...accountMessages.tr,
   ...profileMessages.tr,
   ...tenantsMessages.tr,
+  // Dashboard widget sistemi (modüler widget'lar)
+  ...dashboardMessages.tr,
 };
 
 export default tr;
