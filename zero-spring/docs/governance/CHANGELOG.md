@@ -10,10 +10,31 @@
 ## [Yayınlanmamış]
 
 ### Eklendi
+
+- **CI release hattı prod-tetiklemeye hazır (altyapı, deploy YOK).** `docker-build` job'ına
+  **kapılı** registry login + push adımları eklendi (`a8a8262`, CI 9/9 run 29910265282). Varsayılan
+  **güvenli no-op**: `PUSH_IMAGE=true` (Actions Variable) olmadan imaj build edilip sertleştirmesi
+  doğrulanır ama registry'e **push edilmez**. Push açıkken imaj `sha-<kısa-sha>` (+ opsiyonel
+  `IMAGE_EXTRA_TAG`) etiketiyle push edilir, tag+digest step summary'e yazılır; GHCR'da `REGISTRY_TOKEN`
+  boşsa built-in `GITHUB_TOKEN`'a (`packages: write`) düşer. **Sıra garanti:** hardening assert
+  push'tan önce koşar — doğrulanmamış imaj push edilemez. Yeni Actions Variables: `PUSH_IMAGE`,
+  `IMAGE_EXTRA_TAG`, `REGISTRY_USERNAME`; Secret: `REGISTRY_TOKEN` (opsiyonel). SETUP §6 tam
+  Variables/Secrets tablolarıyla yeniden yazıldı.
+
 ### Değişti
+
+- **`release` guarded deploy fail-fast sertleşti.** `DEPLOY_ENABLED=true` iken artık `IMAGE_REGISTRY`
+  eksikse de (yalnız `DEPLOY_COMMAND` değil) anlaşılır hatayla durur — girdiler eksikken sessiz yanlış
+  deploy yerine gürültülü hata. Dry-run plan ve `DEPLOY_ENABLED!=true` no-op davranışı değişmedi.
+
 ### Kaldırıldı
 ### Düzeltildi
 ### Güvenlik
+
+- **Secret'lar repoya yazılmadı.** Registry + deploy kimlik bilgileri yalnız Actions Secrets/Variables
+  ve prod secret store üzerinden tüketiliyor; `docker login` `--password-stdin` ile, kimlik bilgisi
+  log'lanmıyor. Değişiklik kapsamı yalnız `.github/workflows/ci.yml` + docs — domain/API/auth/tenant/
+  frontend davranışı değişmedi.
 
 ---
 

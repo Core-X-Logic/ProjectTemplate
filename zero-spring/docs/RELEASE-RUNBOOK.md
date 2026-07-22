@@ -37,6 +37,29 @@ her adımın komutu ve beklenen çıktısı var.
 
 **Vite değişkenleri build-time'dır** — imaj/dist üretilirken enjekte edilmeli, çalışma anında değiştirilemez.
 
+Yukarıdaki tablo **prod host / secret store** tarafıdır (uygulamanın çalışma-anı ortamı). Bunları
+repoya YAZMA — orchestrator/secret manager'dan gelir.
+
+### 1.1b CI pipeline tetikleyicileri — Actions **Variables/Secrets** (repoya YAZILMAZ)
+
+`docker-build` push ve `release` deploy **kapılıdır**; varsayılan güvenli no-op. Açmak için (tam
+tablolar + sıra: SETUP §6):
+
+| Konum | Anahtar | Rol |
+|---|---|---|
+| Variables | `IMAGE_REGISTRY` | registry prefix `ghcr.io/<org>` |
+| Variables | `IMAGE_NAME` | imaj adı (varsayılan `zero-backend`) |
+| Variables | `PUSH_IMAGE=true` | docker-build push'u açar (yoksa **no-op**) |
+| Variables | `IMAGE_EXTRA_TAG` | (ops.) sha yanında `rc`/`prod`/`latest` |
+| Variables | `DEPLOY_ENVIRONMENT` | `dev`\|`stage`\|`prod` |
+| Variables | `DEPLOY_ENABLED=true` | release gerçek deploy'u açar (yoksa **dry-run**) |
+| Variables | `REGISTRY_USERNAME` | (ops.) login user; boşsa `github.actor` |
+| Secrets | `REGISTRY_TOKEN` | registry push token; GHCR'da boşsa `GITHUB_TOKEN`'a düşer |
+| Secrets | `DEPLOY_COMMAND` | cloud-agnostic deploy komutu; `IMAGE_REF` env hazır verilir |
+
+**Fail-fast:** `DEPLOY_ENABLED=true` ama `IMAGE_REGISTRY`/`DEPLOY_COMMAND` eksikse release job
+anlaşılır hatayla **durur** — sessiz yanlış deploy yok.
+
 ### 1.2 Deploy öncesi kapı (gate) — hepsi yeşil olmadan devam etme
 
 ```bash

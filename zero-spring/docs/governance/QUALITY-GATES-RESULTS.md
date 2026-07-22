@@ -627,3 +627,39 @@ deploy olmadığı için rollback tetiklenecek bir şey yok.
 **Karar:** RC artifact **deploy-ready ve sağlıklı** (prova 7/7 + CI 9/9), ama **gerçek go-live için
 NO-GO** — operatör prod ortamı + secret + deploy hedefi sağlamadan çıkış yapılamaz. Ne GO-LIVE SUCCESS
 (hiçbir şey canlıya çıkmadı) ne ROLLBACK (geri alınacak deploy yok): **BLOCKED-AT-PREFLIGHT**.
+
+---
+
+## CI release hattı prod-tetiklemeye hazırlık — 2026-07-22, `a8a8262`, gerçek `push`, **9/9** (run 29910265282)
+
+Sadece pipeline hazırlığı — **gerçek deploy YOK**, domain/API/auth/tenant/frontend değişmedi (yalnız
+`.github/workflows/ci.yml` + SETUP §6). `docker-build` job'ına **kapılı** registry login + push eklendi;
+varsayılan **güvenli no-op** (`PUSH_IMAGE` yok → push yok). Secret repoya yazılmadı — hepsi Actions
+Variables/Secrets üzerinden tüketiliyor.
+
+**Vakum-yeşil riski + log kanıtı** (bu koşuda gerçekten ölçülen):
+
+| Gate/adım | Vakum-yeşil riski | Bu koşudaki kanıt (step conclusion) |
+|---|---|---|
+| `docker-build` → Build backend image | — | **success** — imaj `load:true` ile build edildi |
+| → Assert image hardening (PROD-R27) | — | **success** — `Image hardening doğrulandı: non-root · healthcheck · prod profil · heap tavanı` (push'tan **ÖNCE**) |
+| → **Registry login** | doğrulanmamış imajı push etmek | **skipped** — `if: env.PUSH_IMAGE == 'true'`, varsayılan false → **koşmadı** |
+| → **Push backend image** | varsayılan push açık | **skipped** — aynı kapı → **koşmadı** |
+| → **Push skipped (safe default)** | sessiz atlama | **success** — echo: *"PUSH_IMAGE != 'true' → imaj build + sertleştirme doğrulandı ama registry'e PUSH EDİLMEDİ (varsayılan güvenli no-op)"* |
+| `release` → Deploy plan (dry-run) | — | **success** — plan yazıldı |
+| `release` → Deploy (guarded — no-op) | `DEPLOY_ENABLED=false` iken deploy | **success** — no-op (koşacak komut yok) |
+
+**Sıralama garantisi kanıtlı:** hardening assert **success** → login/push **skipped**. Yani imaj önce
+sertleştirmesiyle doğrulanır, ancak ondan sonra (ve yalnız `PUSH_IMAGE=true` iken) push edilir —
+doğrulanmamış imaj hiçbir koşulda registry'e çıkamaz.
+
+**Fail-fast (kod-tamamlandı, bu koşuda tetiklenmedi):** `PUSH_IMAGE=true` + `IMAGE_REGISTRY` boş →
+login adımı anlaşılır hata; `DEPLOY_ENABLED=true` + `IMAGE_REGISTRY`/`DEPLOY_COMMAND` boş → release
+`: "${VAR:?...}"` ile durur. Bu koşu her iki bayrak da kapalı (varsayılan) olduğu için ilgili adımlar
+**skipped** — fail-fast'in kendisi operatör imzasız çalıştırılamaz (registry kimlik bilgisi gerekir),
+bu yüzden **fabrike edilmedi**; SETUP §6.4'te operatörün doğrulayacağı adım olarak yazıldı.
+
+**Push-ON kanıtı (operatör-kapılı, BU KOŞUDA YOK):** gerçek registry push'u (tag `sha-<kısa>` + digest'in
+step summary'e basılması) operatörün `PUSH_IMAGE=true` + registry kimlik bilgisi ile ilk koşusunda
+üretilir. Kimlik bilgisi olmadan (ve secret-handling yasağı gereği) burada **koşturulamadı** — dürüst
+kayıt: push-OFF no-op CI-kanıtlı ✅, push-ON kod-tamamlandı ama operatör-doğrulamalı ⏳.
