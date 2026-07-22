@@ -908,6 +908,18 @@ jobs:
     name: docker-build
     runs-on: ubuntu-latest
     needs: build
+    # `packages: write` yalnız GHCR'a GITHUB_TOKEN ile push için gerekir ve YALNIZ PUSH_IMAGE=true
+    # iken kullanılır. Push kapalıyken (varsayılan) hiçbir yazma yetkisi kullanılmaz.
+    permissions:
+      contents: read
+      packages: write
+    # Push parametreleri — hepsi Actions Variables/Secrets'tan. Varsayılan GÜVENLİ: PUSH_IMAGE boş →
+    # imaj build edilir + sertleştirmesi doğrulanır ama REGISTRY'E PUSH EDİLMEZ.
+    env:
+      IMAGE_REGISTRY: ${{ vars.IMAGE_REGISTRY }}
+      IMAGE_NAME: ${{ vars.IMAGE_NAME || 'zero-backend' }}
+      PUSH_IMAGE: ${{ vars.PUSH_IMAGE || 'false' }}
+      IMAGE_EXTRA_TAG: ${{ vars.IMAGE_EXTRA_TAG }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -917,6 +929,10 @@ jobs:
 
       # NOTE (CLAUDE.md trap): action `with:` inputs resolve to the WORKSPACE ROOT, so context/file
       # are repo-root-relative here — NOT under defaults.run.working-directory (zero-spring).
+      #
+      # `load: true` (push DEĞİL): imaj yerel docker'a yüklenir ki sertleştirme assert'i inspect
+      # edebilsin. Push, assert GEÇTİKTEN sonra ayrı, GATE'li bir adımda yapılır — böylece
+      # doğrulanmamış bir imaj asla push edilmez.
       - name: Build backend image
         uses: docker/build-push-action@v7
         with:
@@ -944,6 +960,53 @@ jobs:
             || { echo "::error::image container-farkındalı heap tavanı (MaxRAMPercentage) set etmiyor"; fail=1; }
           [ "$fail" = 0 ] && echo "Image hardening doğrulandı: non-root · healthcheck · prod profil · heap tavanı."
           exit "$fail"
+
+      # ── PUSH (opsiyonel, GATE'li) ── Yalnız PUSH_IMAGE=true iken. Login registry HOST'una
+      # (IMAGE_REGISTRY'nin ilk path segmenti) `--password-stdin` ile yapılır; kimlik bilgisi
+      # loglanmaz. GHCR: REGISTRY_TOKEN boşsa built-in GITHUB_TOKEN'a düşer (packages: write).
+      - name: Registry login
+        if: env.PUSH_IMAGE == 'true'
+        env:
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN || secrets.GITHUB_TOKEN }}
+          REGISTRY_USERNAME: ${{ vars.REGISTRY_USERNAME || github.actor }}
+        run: |
+          set -euo pipefail
+          : "${IMAGE_REGISTRY:?PUSH_IMAGE=true ama IMAGE_REGISTRY (Actions Variable) tanımlı değil}"
+          : "${REGISTRY_TOKEN:?PUSH_IMAGE=true ama registry kimlik bilgisi yok (secrets.REGISTRY_TOKEN veya GITHUB_TOKEN)}"
+          HOST="${IMAGE_REGISTRY%%/*}"
+          echo "${REGISTRY_TOKEN}" | docker login "${HOST}" -u "${REGISTRY_USERNAME}" --password-stdin
+          echo "Logged in to ${HOST} as ${REGISTRY_USERNAME}"
+
+      - name: Push backend image
+        if: env.PUSH_IMAGE == 'true'
+        run: |
+          set -euo pipefail
+          : "${IMAGE_REGISTRY:?PUSH_IMAGE=true ama IMAGE_REGISTRY yok}"
+          SHORT_SHA="${GITHUB_SHA::12}"
+          REF="${IMAGE_REGISTRY}/${IMAGE_NAME}:sha-${SHORT_SHA}"
+          docker tag "zero-backend:ci-${GITHUB_SHA}" "${REF}"
+          docker push "${REF}"
+          PUSHED="${REF}"
+          # Opsiyonel rc/prod etiketi (IMAGE_EXTRA_TAG variable'ı, ör. `rc`, `prod`, `latest`).
+          if [ -n "${IMAGE_EXTRA_TAG}" ]; then
+            XREF="${IMAGE_REGISTRY}/${IMAGE_NAME}:${IMAGE_EXTRA_TAG}"
+            docker tag "zero-backend:ci-${GITHUB_SHA}" "${XREF}"
+            docker push "${XREF}"
+            PUSHED="${PUSHED}, ${XREF}"
+          fi
+          DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' "${REF}" 2>/dev/null || echo '(digest okunamadı)')"
+          {
+            echo "## Image pushed"
+            echo "- tags: \`${PUSHED}\`"
+            echo "- digest: \`${DIGEST}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+          echo "Pushed: ${PUSHED}  (digest ${DIGEST})"
+
+      - name: Push skipped (safe default)
+        if: env.PUSH_IMAGE != 'true'
+        run: |
+          echo "PUSH_IMAGE != 'true' → imaj build edildi + sertleştirmesi doğrulandı, ama registry'e PUSH EDİLMEDİ (varsayılan güvenli no-op)."
+          echo "Push için: Actions Variables → PUSH_IMAGE=true, IMAGE_REGISTRY, IMAGE_NAME; Secrets → REGISTRY_TOKEN (GHCR'da opsiyonel)." >> "${GITHUB_STEP_SUMMARY}"
 
   # ŞU AN gerçek deploy KOŞMAZ (DEPLOY_ENABLED varsayılan false). Parametrik, cloud-agnostic
   # scaffold: klonlayan repo Settings'ten Variables/Secrets doldurup DEPLOY_ENABLED=true yapar.
@@ -1028,8 +1091,10 @@ jobs:
             echo "DEPLOY_ENABLED != true → scaffold no-op. Klonlayan Settings'ten açar. Deploy KOŞMADI."
             exit 0
           fi
+          # Fail-fast: DEPLOY_ENABLED=true iken eksik girdi = anlaşılır hata, sessiz yanlış deploy DEĞİL.
+          : "${IMAGE_REGISTRY:?DEPLOY_ENABLED=true ama IMAGE_REGISTRY (Actions Variable) yok — deploy edilecek imajın nereden çekileceği belirsiz. docker-build'de PUSH_IMAGE=true ile imajı push ettiğinizden emin olun}"
           : "${DEPLOY_COMMAND:?DEPLOY_ENABLED=true ama DEPLOY_COMMAND secret'i tanımlı değil — deploy komutu yok}"
           SHORT_SHA="${GITHUB_SHA::12}"
-          export IMAGE_REF="${IMAGE_REGISTRY:+${IMAGE_REGISTRY}/}${IMAGE_NAME}:sha-${SHORT_SHA}"
+          export IMAGE_REF="${IMAGE_REGISTRY}/${IMAGE_NAME}:sha-${SHORT_SHA}"
           echo "Deploying ${IMAGE_REF} → ${DEPLOY_ENVIRONMENT}…"
           bash -c "${DEPLOY_COMMAND}"

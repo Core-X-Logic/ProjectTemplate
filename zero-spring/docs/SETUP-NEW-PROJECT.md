@@ -96,22 +96,45 @@ Bu ikisi **fail-closed**'dır ve öyle kalmalıdır. Eksikse container başlamaz
 
 ## 6. Deploy — minimum adımlar (klonlayan doldurur)
 
-CI `docker-build` gate'i imajı build edip sertleştirmesini doğrular ama **push ETMEZ**; `release`
-job'ı **parametrik bir deploy scaffold**'udur — `DEPLOY_ENABLED=true` olana dek yalnız bir "Deploy
-plan (dry-run)" yazar, gerçek deploy KOŞMAZ. Canlıya çıkmak için:
+Pipeline **prod-tetiklemeye hazır** ama varsayılanı **güvenli no-op**: `docker-build` imajı build edip
+sertleştirmesini doğrular ve `PUSH_IMAGE=true` olana dek **push ETMEZ**; `release` job'ı
+`DEPLOY_ENABLED=true` olana dek yalnız **dry-run plan** yazar, gerçek deploy KOŞMAZ. Hiçbir secret
+repoya yazılmaz — hepsi Actions Variables/Secrets ya da prod secret store'undan tüketilir.
 
-1. **Registry:** Settings → Variables → `IMAGE_REGISTRY` (ör. `ghcr.io/<org>`), `IMAGE_NAME`
-   (varsayılan `zero-backend`); Secrets → registry kimlik bilgisi.
-2. **İmajı push et:** `docker-build` job'una registry login + `push: true` ekle (veya ayrı publish
-   adımı). Şablon bilinçle push etmiyor — hedef sizin.
-3. **Deploy komutu:** Settings → Secrets → `DEPLOY_COMMAND` — cloud-agnostic, ör.
-   `kubectl apply -f k8s/`, `flyctl deploy`, `aws ecs update-service …`. `IMAGE_REF`
-   (`<registry>/<name>:sha-<kısa-sha>`) env olarak komuta hazır verilir.
-4. **Environment:** Settings → Variables → `DEPLOY_ENVIRONMENT` = `dev` | `stage` | `prod`
-   (istenirse GitHub Environments + protection rules).
-5. **Uygulama sırları:** prod profili `${VAR}` bekler (DB_URL, JWT secret, Redis, mail…) —
-   orchestrator/secret store'dan gelir, **repoya yazılmaz**; `application-prod.yml` env-referanslı.
-6. **Aç:** Settings → Variables → `DEPLOY_ENABLED=true`. İlk push'ta önce dry-run planını okuyun,
-   sonra gerçek deploy koşar.
-7. **Doğrula:** imajın HEALTHCHECK'i `/actuator/health/readiness`'e bakar; orchestrator readiness
-   probe'unu **aynı yola** bağlayın (liveness'a değil — health/readiness ayrımı, runbook).
+### 6.1 Gerekli Actions **Variables** (Settings → Secrets and variables → Actions → Variables)
+
+| Variable | Örnek | Rol |
+|---|---|---|
+| `IMAGE_REGISTRY` | `ghcr.io/<org>` | İmaj registry prefix'i (host + namespace) |
+| `IMAGE_NAME` | `zero-backend` (varsayılan) | İmaj adı |
+| `PUSH_IMAGE` | `true` | `true` → docker-build imajı push eder (varsayılan `false` = no-op) |
+| `IMAGE_EXTRA_TAG` | `rc` / `prod` / `latest` | (opsiyonel) sha yanında ikinci etiket |
+| `DEPLOY_ENVIRONMENT` | `prod` | `dev` \| `stage` \| `prod` |
+| `DEPLOY_ENABLED` | `true` | `true` → release gerçek deploy'u koşar (varsayılan `false`) |
+| `REGISTRY_USERNAME` | (opsiyonel) | Login kullanıcı adı; boşsa `github.actor` |
+
+### 6.2 Gerekli Actions **Secrets**
+
+| Secret | Rol |
+|---|---|
+| `REGISTRY_TOKEN` | Registry push kimlik bilgisi. **GHCR'da opsiyonel** — boşsa built-in `GITHUB_TOKEN`'a düşer (`packages: write` yetkisi zaten var) |
+| `DEPLOY_COMMAND` | Cloud-agnostic deploy komutu, ör. `kubectl apply -f k8s/`, `flyctl deploy`, `aws ecs update-service …`. `IMAGE_REF` (`<registry>/<name>:sha-<kısa-sha>`) env olarak hazır verilir |
+
+### 6.3 Uygulama sırları — **prod secret store'una** (repoya/Actions'a DEĞİL, orchestrator'a)
+
+`application-prod.yml` env-referanslı; prod profili şunları bekler ve eksikse **boot reddeder**:
+`JWT_SECRET` (≥64B base64), `FIELD_ENCRYPTION_KEY` (base64 32B), `DB_URL`/`DB_USER`/`DB_PASSWORD`,
+`REDIS_HOST`/`REDIS_PORT` (**revocation fail-closed → Redis auth için zorunlu**), `CORS_ALLOWED_ORIGINS`,
+(mail gerekiyorsa `MAIL_*`). `VITE_API_BASE_URL` frontend **build-time**.
+
+### 6.4 Sıra
+
+1. 6.3 sırlarını prod secret store'una koy (K8s Secret / cloud secret manager). **Redis HA** hazır olsun.
+2. 6.1/6.2'yi doldur, önce `PUSH_IMAGE=true` (deploy KAPALI) ile push'u doğrula (registry'de `sha-…` tag + digest).
+3. `DEPLOY_ENABLED=true` yap. main'e push → önce **dry-run plan** özeti çıkar, sonra `DEPLOY_COMMAND` koşar.
+   Eksik `IMAGE_REGISTRY`/`DEPLOY_COMMAND` → job **fail-fast** anlaşılır hata verir (sessiz yanlış deploy yok).
+4. **Doğrula:** imajın HEALTHCHECK'i `/actuator/health/readiness`'e bakar; orchestrator readiness
+   probe'unu **aynı yola** bağla (liveness'a değil). Zorunlu prod smoke: readiness · login · `/me` ·
+   anonim `/me` 401 · tenant negatif · forgot-password · 2FA second-step (RUNBOOK §3).
+5. **Branch protection** (ücretli plan) → required checks: 9 job. **Rollback:** RUNBOOK §4 (imajı
+   önceki tag'e; **şema geri alınmaz** — V1..V10 geriye-uyumlu).
