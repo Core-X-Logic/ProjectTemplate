@@ -10,6 +10,7 @@ import {
   Settings,
   ShieldCheck,
   Store,
+  UserCog,
   Users,
 } from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
@@ -29,49 +30,20 @@ export const MENU_SIDEBAR: MenuConfig = [
     path: '/',
   },
   {
-    title: 'nav.users',
-    icon: Users,
-    path: '/users',
-    permission: 'users.read',
-  },
-  {
-    title: 'nav.roles',
-    icon: ShieldCheck,
-    path: '/roles',
-    permission: 'roles.read',
-  },
-  {
-    title: 'nav.organizationUnits',
-    icon: Building2,
-    path: '/organization-units',
-    permission: 'organizationunits.manage',
-  },
-  {
-    // Host-only: `tenants.manage` is declared `Side.HOST`, so a tenant-side
-    // role can never hold it and the entry never renders for tenant operators.
-    title: 'nav.tenants',
-    icon: Building,
-    path: '/tenants',
-    permission: 'tenants.manage',
-  },
-  {
-    title: 'nav.notifications',
-    icon: Bell,
-    path: '/notifications',
-  },
-  {
-    title: 'nav.audit',
-    icon: ScrollText,
-    path: '/audit',
-    permission: 'auditlogs.read',
-  },
-  {
-    // SaaS group (F5 slice A). It has no path of its own, so
-    // `filterMenuByPermission` drops the whole group once a user can see
-    // neither child — a tenant operator never sees a "Saas" heading.
+    // SaaS group (F5 slice A). No path of its own, so `filterMenuByPermission`
+    // drops the whole group once a user can see no child — a tenant operator
+    // never sees a "Saas" heading. Tenants lives here too (host-only:
+    // `tenants.manage` is `Side.HOST`, so a tenant-side role never holds it
+    // and the entry never renders).
     title: 'nav.saas',
     icon: Store,
     children: [
+      {
+        title: 'nav.tenants',
+        icon: Building,
+        path: '/tenants',
+        permission: 'tenants.manage',
+      },
       {
         title: 'nav.editions',
         icon: Package,
@@ -87,11 +59,49 @@ export const MENU_SIDEBAR: MenuConfig = [
     ],
   },
   {
-    title: 'nav.settings',
-    icon: Settings,
-    path: '/settings',
-    // Visible to tenant OR host operators; the route + page gate the scopes.
-    anyPermission: ['settings.tenant.manage', 'settings.host.manage'],
+    // Administration group, kept LAST. No path of its own, so
+    // `filterMenuByPermission` drops it once a user can see none of its
+    // children. Settings lives here (bottom-most): visible to tenant OR host
+    // operators; the route + page gate the scopes.
+    title: 'nav.administration',
+    icon: UserCog,
+    children: [
+      {
+        title: 'nav.users',
+        icon: Users,
+        path: '/users',
+        permission: 'users.read',
+      },
+      {
+        title: 'nav.roles',
+        icon: ShieldCheck,
+        path: '/roles',
+        permission: 'roles.read',
+      },
+      {
+        title: 'nav.organizationUnits',
+        icon: Building2,
+        path: '/organization-units',
+        permission: 'organizationunits.manage',
+      },
+      {
+        title: 'nav.notifications',
+        icon: Bell,
+        path: '/notifications',
+      },
+      {
+        title: 'nav.audit',
+        icon: ScrollText,
+        path: '/audit',
+        permission: 'auditlogs.read',
+      },
+      {
+        title: 'nav.settings',
+        icon: Settings,
+        path: '/settings',
+        anyPermission: ['settings.tenant.manage', 'settings.host.manage'],
+      },
+    ],
   },
 ];
 

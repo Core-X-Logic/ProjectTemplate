@@ -56,6 +56,7 @@ const tr: Record<string, string> = {
 
   // Navigation
   'nav.dashboard': 'Panel',
+  'nav.administration': 'Yönetim',
   'nav.users': 'Kullanıcılar',
   'nav.roles': 'Roller',
   'nav.organizationUnits': 'Organizasyon Birimleri',

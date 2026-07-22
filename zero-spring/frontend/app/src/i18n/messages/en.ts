@@ -57,6 +57,7 @@ const en: Record<string, string> = {
 
   // Navigation
   'nav.dashboard': 'Dashboard',
+  'nav.administration': 'Administration',
   'nav.users': 'Users',
   'nav.roles': 'Roles',
   'nav.organizationUnits': 'Organization Units',
