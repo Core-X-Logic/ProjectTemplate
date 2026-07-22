@@ -583,3 +583,47 @@ açık kalanlar org-policy / operatör-ops / kayıtlı next-phase — hiçbiri *
 ### Karar
 
 **GO** — RC v1.0.0-rc.1. Blocker listesi boş; kanıt tek yerde (bu tablo + tag notu); dokümanlar tutarlı.
+
+---
+
+## Go-Live yürütme — 2026-07-22 — **PREFLIGHT'TA DURDU (gerçek deploy KOŞMADI)**
+
+RC `v1.0.0-rc.1` (`513ede6`) tabanından go-live denendi. **Sonuç: prod deploy YAPILMADI** — dürüst kayıt.
+
+**1) Preflight (RUNBOOK §1.2): DURDU.** 10/10 zorunlu prod env/secret **EKSİK**
+(`SPRING_PROFILES_ACTIVE, DB_URL/USER/PASSWORD, JWT_SECRET, FIELD_ENCRYPTION_KEY, REDIS_HOST/PORT,
+CORS_ALLOWED_ORIGINS, VITE_API_BASE_URL`), deploy hedefi **bağlı değil** (`IMAGE_REGISTRY` boş,
+`DEPLOY_COMMAND` boş, `DEPLOY_ENABLED=false`). `release` job bilinçle placeholder+scaffold; prod ortam,
+secret ve deploy komutu **operatör tarafından sağlanmalı** (SETUP §6). §1.2 gate'i uyarınca deploy'a
+GEÇİLMEDİ. **Gerçek deploy fabrike edilmedi.**
+
+**2) Dry-run plan:** scaffold'un CI-kanıtlı çıktısı (RC run 29907487912): *"Deploy plan yazıldı
+(dry-run). DEPLOY_ENABLED=false"* + *"scaffold no-op … Deploy KOŞMADI"*. Bağlandığında koşacak
+adımlar: image `sha-<kısa-sha>` → `DEPLOY_COMMAND` (cloud-agnostic). Bugün: no-op.
+
+**3) Go-live PROVASI (çalışan RC build, dev/8080 — prod DEĞİL):** artifact'ın kritik akışları sağlıklı.
+
+| Smoke | Beklenen | Sonuç |
+|---|---|---|
+| readiness UP | 200 | ✅ 200 |
+| login → token (key-ring `kid=legacy`) | token | ✅ |
+| /me (revocation validator + Redis) | 200 | ✅ 200 |
+| NEG anonim /me | 401 | ✅ 401 |
+| NEG bilinmeyen tenant | 400 | ✅ 400 |
+| forgot-password (non-disclosure) | 204 | ✅ 204 |
+| 2FA verify gate wired (bogus challenge) | 401 | ✅ 401 |
+
+**7/7 yeşil.** (2FA açık kullanıcı ikinci-adım zorlaması: dev'de kayıtlı 2FA kullanıcısı yok; gate'in
+wired olduğu bogus-challenge→401 ile + CI `TwoFactorLoginIT` bypass-mutasyonuyla kanıtlı.)
+
+**5) Ops güvenlik:** Redis ayakta → revocation fail-closed auth'a hizmet veriyor (login→/me 200 bunu
+kanıtlar; Redis-down→401 fail-closed CI `TokenRevocationDegradeIT`'te). gitleaks/audit **yeniden
+koşulmadı** — en son yeşil kanıt RC run 29907487912 (no leaks · npm audit 0). Kritik log anomalisi yok.
+
+**6) Rollback hazır (RUNBOOK §4):** uygulama sürüm geri alma (imajı önceki tag'e) hazır komut; **şema
+GERİ ALINMAZ** (V1..V10 geriye-uyumlu: yeni kolonlar defaulted/nullable, yeni tablolar additive). Bugün
+deploy olmadığı için rollback tetiklenecek bir şey yok.
+
+**Karar:** RC artifact **deploy-ready ve sağlıklı** (prova 7/7 + CI 9/9), ama **gerçek go-live için
+NO-GO** — operatör prod ortamı + secret + deploy hedefi sağlamadan çıkış yapılamaz. Ne GO-LIVE SUCCESS
+(hiçbir şey canlıya çıkmadı) ne ROLLBACK (geri alınacak deploy yok): **BLOCKED-AT-PREFLIGHT**.
