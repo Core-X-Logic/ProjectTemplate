@@ -663,3 +663,27 @@ bu yüzden **fabrike edilmedi**; SETUP §6.4'te operatörün doğrulayacağı ad
 step summary'e basılması) operatörün `PUSH_IMAGE=true` + registry kimlik bilgisi ile ilk koşusunda
 üretilir. Kimlik bilgisi olmadan (ve secret-handling yasağı gereği) burada **koşturulamadı** — dürüst
 kayıt: push-OFF no-op CI-kanıtlı ✅, push-ON kod-tamamlandı ama operatör-doğrulamalı ⏳.
+
+---
+
+## Dashboard widget sistemi + login stale-tenant düzeltmesi — 2026-07-22, `41dafbd`+`8f8452b`, gerçek `push`, **9/9** (run 29919645849)
+
+Yalnız frontend (backend/`schema.d.ts`/API sözleşmesi değişmedi — typed-client-drift yeşilliği bunu
+bağımsız doğrular). Yeni npm bağımlılığı yok.
+
+| Kanıt | Ölçüm |
+|---|---|
+| Frontend suite | **31 dosya / 161 test, 0 fail** (lokalde 2× + CI `frontend` job) |
+| Dashboard suite | 10 test: izinli KPI render · **negatif izin = widget yok VE sorgu hiç atılmadı** (mock not-called assert) · widget-başına hata izolasyonu + retry refetch · boş durumlar · host/tenant bağlam ayrımı (`/subscriptions/me` host'ta çağrılmıyor, tenants KPI tenant'ta izne rağmen yok) · 404→empty · **örneklem beyanı iki yönlü** (totalElements>sample → gösterge var; == → yok) |
+| Login testleri | 5 test; **negatif kanıt eski kodda ölçüldü**: `clears a STALE persisted tenant` eski kodda `expected 'stale-tenant' to be null` ile KIRMIZI, düzeltmeyle yeşil |
+| Build | `tsc -b` + vite temiz |
+| Review | stack-reviewer 5 bulgu (1 yüksek: trend örneklemi sunucunun sessiz `max-page-size:100` tavanına takılıyordu) — commit ÖNCESİ 5/5 kapatıldı |
+
+**Vakum-yeşil notu:** trend bulgusu tam bu sınıftandı — 500'lük istek sunucuda sessizce 100'e
+kırpılıyor, dev'in küçük verisinde ve mock'lu testte görünmüyordu. Kapanış: sabit 100'e hizalandı
+**ve** kısmi örneklem UI'da beyan ediliyor **ve** iki yönlü test mock'u `totalElements=250` ile
+kırpmayı gerçekten simüle ediyor.
+
+**Ekran kanıtı alınamadı (dürüst):** tarayıcı uzantısı oturum ortasında koptu; ayrıca canlı denemede
+bayat `X-Tenant` bug'ı bulundu (yukarıdaki fix'in kaynağı — otomasyonun "giremiyorum" hali kullanıcının
+raporuyla birebir aynı kök nedendi). Görsel önce/sonra yerine kanıt: test + build + CI + review zinciri.

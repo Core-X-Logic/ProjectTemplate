@@ -11,6 +11,19 @@
 
 ### Eklendi
 
+- **Enterprise dashboard widget sistemi (yalnız frontend).** Quick-access-only dashboard,
+  modüler widget mimarisine dönüştü (`41dafbd`, CI 9/9 run 29919645849): ortak `Widget`
+  container'ı (gerçek `h2` + `aria-labelledby`, aksiyon slotu, i18n'li refresh, footer) +
+  standart durum bileşenleri (skeleton kpi/chart/list · hata+retry · boş) ve 6 widget — KPI
+  kartları (kullanıcı/rol/kiracı/okunmamış), aktivite trend grafiği (recharts, 14 günlük denetim
+  hacmi), son kullanıcılar, aktivite zaman çizelgesi, abonelik (yalnız tenant bağlamı; 404 = boş),
+  hızlı erişim. 12 kolonlu responsive grid; izinsiz widget hem gizli hem **sorgusu hiç atılmıyor**
+  (`enabled`); tüm veri MEVCUT uçlardan (yeni endpoint yok, `schema.d.ts` değişmedi, yeni bağımlılık
+  yok). Commit öncesi stack-reviewer'ın 5 bulgusu kapatıldı — en önemlisi: trend örneklemi sunucunun
+  sessiz `max-page-size: 100` tavanına hizalandı ve kısmi örneklem artık footer'da beyan ediliyor
+  (`totalElements` kıyası, iki yönlü testli). Kanıt: 31 dosya / 161 frontend testi (dashboard suite
+  10: negatif izin = sorgu yok, widget-başına hata izolasyonu, host/tenant bağlamı, örneklem beyanı).
+
 - **Kullanım + AI prompt dokümantasyon seti (`docs/usage/`).** Klonlayan ekip için operasyonel
   rehberler — kod/davranış değişmedi, sadece doküman. 7 dosya: `QUICKSTART.md` (15–30 dk ayağa
   kaldırma + ilk smoke akışı + sık kurulum hataları tablosu), `WORKING-WITH-AI.md` (Codex/Claude
@@ -42,6 +55,16 @@
 
 ### Kaldırıldı
 ### Düzeltildi
+
+- **Login: boş kiracı alanı bayat kalıcı kiracıyı temizliyor (`8f8452b`).** Eski davranış: alan
+  doluysa `setTenant`, boşsa hiçbir şey — önceki oturumun kiracısı localStorage'da kalıyor ve her
+  isteğe `X-Tenant` olarak biniyordu; "varsayılan için boş bırakın" bayat kiracıya giriş yapıyordu
+  (canlıda gözlendi: kalıntı `cafer` kiracısı → Invalid credentials → o kiracının admin'i kilitlendi;
+  host admin API'de 200 — parola doğruydu). Düzeltme: login ekranında tek kiracı otoritesi form
+  alanı — boş alan depoyu temizler. Negatif kanıt eski kodda ölçüldü (`expected 'stale-tenant' to be
+  null` kırmızı → düzeltmeyle yeşil); dolu-alan kalıcılık yolu ikinci testle sabit. `MeResponse.tenantId`
+  tip yalanı da giderildi (`string` → `number | null`, wire gerçeği; host/tenant ayrımı bu nullability'e
+  yaslanıyor).
 
 - **Doküman tutarlılık düzeltmesi (yalnız doküman).** Kök `README.md`'deki eski metrikler
   (`330 backend + 90 frontend testi`, `8 kapılı CI`) kaldırıldı — kırılgan sabit sayı yerine
