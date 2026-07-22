@@ -42,6 +42,16 @@
 
 ### Kaldırıldı
 ### Düzeltildi
+
+- **Doküman tutarlılık düzeltmesi (yalnız doküman).** Kök `README.md`'deki eski metrikler
+  (`330 backend + 90 frontend testi`, `8 kapılı CI`) kaldırıldı — kırılgan sabit sayı yerine
+  dayanıklı ifade + governance kaydına işaretçi (güncel sayı `QUALITY-GATES-RESULTS.md`'de).
+  `SETUP-NEW-PROJECT.md` içindeki CI job sayısı çelişkisi giderildi: §1 "sekiz job" → "dokuz job";
+  §2 required-check listesine `docker-build` eklendi (8 job, `release` hariç — push-gated, PR'da
+  skipped); §6.4 "9 job" ifadesi §2 listesine hizalandı. `usage/WORKING-WITH-AI.md`'ye üç skill
+  (`migration-safety`, `permission-model`, `tenant-isolation`) doğru ad + `.claude/skills/<ad>/SKILL.md`
+  path'iyle eklendi (skill'ler mevcut; doğrulandı). Kod/CI akışı/test/konfig değişmedi.
+
 ### Güvenlik
 
 - **Secret'lar repoya yazılmadı.** Registry + deploy kimlik bilgileri yalnız Actions Secrets/Variables

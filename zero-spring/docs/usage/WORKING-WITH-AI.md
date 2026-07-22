@@ -36,6 +36,15 @@ Claude Code'da `.claude/agents/` altında hazır takım. Görevin katman sayıs�
 - **Çok katmanlı** iş (backend + frontend + izin + i18n + test) → `tech-lead`.
 - Kod yazıldı → `stack-reviewer`. Yeni gate eklendi → `gate-auditor`. İkisi ayrı işlerdir.
 
+**Skill'ler** (`.claude/skills/<ad>/SKILL.md`) — riskli bir alana dokunduğunda yüklenen, bu depoya
+özgü kural setleri. Ajanla ya da elle çalış, ilgili skill'i oku:
+
+| Skill | Ne zaman yükle |
+|---|---|
+| `migration-safety` | Flyway `V<n>__*.sql` eklerken/değiştirirken ya da şema değişikliği planlarken (değişmezlik, rolling deploy güvenliği). |
+| `permission-model` | Yeni yetki gerektiren uç/ekran eklerken (AppPermissions + PermissionDefinitions + üçlü kilit). |
+| `tenant-isolation` | Kiracıya ait veri okuyan/yazan entity/repository/uç eklerken (tenant filtresi, JWT claim otoritesi, negatif test). |
+
 **Codex kullanıyorsan:** aynı roller senin promptunda **rol tanımı** olarak yaşar — `PROMPT-CATALOG.md`
 şablonları "Rol: backend-engineer …" satırıyla başlar. Ajan altyapısı olmadan da aynı disiplin uygulanır.
 

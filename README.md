@@ -7,7 +7,9 @@ Yeni bir SaaS ürününe sıfırdan başlamak yerine buradan başlarsınız: kim
 tabanlı yetkilendirme, çok kiracılılık, kullanıcı/rol/organizasyon yönetimi, denetim kaydı,
 ayarlar, i18n, bildirimler ve editions/subscriptions/features SaaS katmanı hazır gelir.
 
-**330 backend + 90 frontend testi**, 8 kapılı bir CI zinciri ve yayına çıkarma runbook'u ile.
+**Kapsamlı backend + frontend test suite'i**, 9 kapılı bir CI zinciri ve yayına çıkarma
+runbook'u ile — güncel test ve kapı sayıları `zero-spring/docs/governance/QUALITY-GATES-RESULTS.md`'de
+doğrulanır (bu satırda sabit sayı tutulmaz; ölçüm governance kaydındadır).
 
 ---
 

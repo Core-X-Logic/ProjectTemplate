@@ -5,7 +5,7 @@ bu liste. Kod tarafı değil, **GitHub tarafı**.
 
 ## 1. CI'ı etkinleştirin
 
-Şablonda workflow **kapalı** gelir (`disabled_manually`) — klonladığınız anda sekiz job'lık bir
+Şablonda workflow **kapalı** gelir (`disabled_manually`) — klonladığınız anda dokuz job'lık bir
 zincir koşup Actions dakikanızı harcamasın diye.
 
 ```bash
@@ -46,10 +46,11 @@ verir. Yani üç seçeneğiniz var:
 Üçüncüsünü seçerseniz **bunu bilerek seçin** ve ekibe söyleyin. "CI yeşil olmadan merge yok"
 kuralı o durumda bir sözleşmedir, bir kontrol değil.
 
-Koruma kurabiliyorsanız, required status check adları:
+Koruma kurabiliyorsanız, required status check adları (zincirdeki 9 job'dan `release` hariç 8'i;
+`release` yalnız `push` + `main`'de koşar, PR'da **skipped** olduğu için required check yapılamaz):
 
 ```
-build · backend · frontend · typed-client-drift · migration-drift · live-smoke · security-checks
+build · backend · frontend · docker-build · typed-client-drift · migration-drift · live-smoke · security-checks
 ```
 
 `backend` ve `frontend` job adları bu yüzden kasıtlı olarak sade bırakılmıştır — yeniden
@@ -136,5 +137,5 @@ repoya yazılmaz — hepsi Actions Variables/Secrets ya da prod secret store'und
 4. **Doğrula:** imajın HEALTHCHECK'i `/actuator/health/readiness`'e bakar; orchestrator readiness
    probe'unu **aynı yola** bağla (liveness'a değil). Zorunlu prod smoke: readiness · login · `/me` ·
    anonim `/me` 401 · tenant negatif · forgot-password · 2FA second-step (RUNBOOK §3).
-5. **Branch protection** (ücretli plan) → required checks: 9 job. **Rollback:** RUNBOOK §4 (imajı
-   önceki tag'e; **şema geri alınmaz** — V1..V10 geriye-uyumlu).
+5. **Branch protection** (ücretli plan) → required checks: **§2'deki 8 job** (`release` hariç).
+   **Rollback:** RUNBOOK §4 (imajı önceki tag'e; **şema geri alınmaz** — V1..V10 geriye-uyumlu).
