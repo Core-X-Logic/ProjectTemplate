@@ -78,4 +78,37 @@ describe('LoginPage', () => {
     // Empty tenant field collapses to `undefined` (default/host tenant).
     expect(loginMock).toHaveBeenCalledWith('admin', 'Passw0rd!', undefined);
   });
+
+  it('clears a STALE persisted tenant when the tenant field is left blank', async () => {
+    // A previous session left a tenant behind (localStorage-backed store).
+    // Submitting with the field EMPTY must clear it — otherwise apiFetch keeps
+    // sending `X-Tenant: stale-tenant` and "leave blank for the default
+    // tenant" silently logs into the wrong tenant (observed live: stale
+    // "cafer" → Invalid credentials + that tenant's admin locked out).
+    localStorage.setItem('tenant', 'stale-tenant');
+    const user = userEvent.setup();
+    renderWithProviders(<LoginPage />);
+
+    await user.type(screen.getByLabelText('Username or email'), 'admin');
+    await user.type(screen.getByLabelText('Password'), 'Passw0rd!');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+
+    await waitFor(() => expect(loginMock).toHaveBeenCalledTimes(1));
+    expect(localStorage.getItem('tenant')).toBeNull();
+    expect(loginMock).toHaveBeenCalledWith('admin', 'Passw0rd!', undefined);
+  });
+
+  it('persists the tenant when one IS typed', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<LoginPage />);
+
+    await user.type(screen.getByLabelText('Username or email'), 'admin');
+    await user.type(screen.getByLabelText('Password'), 'Passw0rd!');
+    await user.type(screen.getByLabelText('Tenant'), 'acme');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+
+    await waitFor(() => expect(loginMock).toHaveBeenCalledTimes(1));
+    expect(localStorage.getItem('tenant')).toBe('acme');
+    expect(loginMock).toHaveBeenCalledWith('admin', 'Passw0rd!', 'acme');
+  });
 });

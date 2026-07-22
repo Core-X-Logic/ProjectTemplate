@@ -65,9 +65,12 @@ export function LoginPage() {
     setServerError(null);
     const tenant = values.tenant?.trim() ? values.tenant.trim() : undefined;
     try {
-      if (tenant) {
-        setTenant(tenant);
-      }
+      // The form field is the ONLY tenant authority on this screen. An empty
+      // field must CLEAR the persisted tenant, otherwise a stale localStorage
+      // value from an earlier session rides in as `X-Tenant` and the "leave
+      // blank for the default tenant" promise silently logs into the wrong
+      // tenant ("Invalid credentials" against its unrelated admin password).
+      setTenant(tenant ?? null);
       const outcome = await login(values.usernameOrEmail, values.password, tenant);
       // 2FA account: no session yet. Carry the short-lived challenge to the
       // second step in router state (never localStorage) — a refresh drops it
