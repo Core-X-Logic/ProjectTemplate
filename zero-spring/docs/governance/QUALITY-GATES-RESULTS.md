@@ -690,7 +690,7 @@ raporuyla birebir aynı kök nedendi). Görsel önce/sonra yerine kanıt: test +
 
 ---
 
-## SaaS parite kapanışı — 2026-07-22 — bildirim köprüsü + expiry notice + geçmiş UI + matris
+## SaaS parite kapanışı — 2026-07-22, `21609ce`+`df7ab28`, gerçek `push`, **9/9** (run 29932283294)
 
 Parite ölçümü `docs/SAAS-PARITY-MATRIX.md`'de kalıcı (kanıt-linkli). Bu koşuda ölçülenler:
 
@@ -707,6 +707,14 @@ Deferred kalemler matrise gerekçeli işlendi: toplu tenant taşıma (edition d�
 fiyat ihtiyacı düşürdü), otomatik kart-tahsilatlı recurring (TR sağlayıcıları re-checkout modeli;
 Stripe SPI uykuda), fatura üretimi/PDF (şema hazır; kaynaktaki race'li manuel üretim taşınmadı),
 host gelir istatistikleri.
+
+**CI notu (dürüst kayıt):** ilk koşu (`21609ce`, run 29931261884) `backend`'de KIRMIZI —
+`BillingReconciliationJobIT.twoBackToBackJobTriggersRunOnce` "expected 1 but was 0". Kök neden yeni
+kod DEĞİL: paylaşılan context'te daha önce koşan bir sınıf aynı job'ın ShedLock'unu almış,
+`lockAtLeastFor` (PT30S) yavaş CI makinesinde iki tetiği de atlatmış — yeni IT sınıflarının sırayı
+kaydırmasıyla açığa çıkan **gizli sıra-bağımlılığı**. Düzeltme test tarafında (`df7ab28`): test kendi
+kilit satırını sıfırlayıp ölçüyor (senkron tetik, mid-run job yok → bypass değil temiz reset).
+İlgili 4 sınıf lokalde birlikte yeşil + CI 9/9 ile mühürlendi.
 
 ---
 
