@@ -5,6 +5,28 @@
  */
 export const dashboardMessages = {
   en: {
+    // Tabs
+    'dashboard.tab.overview': 'Overview',
+    'dashboard.tab.operations': 'Operations',
+    'dashboard.tab.activity': 'Activity',
+    'dashboard.tab.finance': 'Finance',
+    'dashboard.tab.management': 'Management',
+
+    // Operations inbox
+    'dashboard.inbox.title': 'Inbox',
+    'dashboard.inbox.description': 'Your latest notifications',
+    'dashboard.inbox.viewAll': 'Open notifications',
+    'dashboard.inbox.empty': 'No notifications yet.',
+    'dashboard.inbox.error': 'Notifications could not be loaded.',
+
+    // Host finance — subscriptions overview
+    'dashboard.subsOverview.title': 'Subscriptions',
+    'dashboard.subsOverview.description':
+      '{total, plural, one {# subscription} other {# subscriptions}} across tenants',
+    'dashboard.subsOverview.viewAll': 'Manage subscriptions',
+    'dashboard.subsOverview.empty': 'No subscriptions yet.',
+    'dashboard.subsOverview.error': 'Subscriptions could not be loaded.',
+
     // KPI band
     'dashboard.kpi.users': 'Users',
     'dashboard.kpi.roles': 'Roles',
@@ -52,6 +74,28 @@ export const dashboardMessages = {
     'dashboard.subscription.manage': 'Go to subscriptions',
   },
   tr: {
+    // Sekmeler
+    'dashboard.tab.overview': 'Genel Bakış',
+    'dashboard.tab.operations': 'Operasyon',
+    'dashboard.tab.activity': 'Aktivite',
+    'dashboard.tab.finance': 'Finans',
+    'dashboard.tab.management': 'Yönetim',
+
+    // Operasyon gelen kutusu
+    'dashboard.inbox.title': 'Gelen kutusu',
+    'dashboard.inbox.description': 'Son bildirimleriniz',
+    'dashboard.inbox.viewAll': 'Bildirimleri aç',
+    'dashboard.inbox.empty': 'Henüz bildirim yok.',
+    'dashboard.inbox.error': 'Bildirimler yüklenemedi.',
+
+    // Host finans — abonelik özeti
+    'dashboard.subsOverview.title': 'Abonelikler',
+    'dashboard.subsOverview.description':
+      'Kiracılar genelinde {total, plural, one {# abonelik} other {# abonelik}}',
+    'dashboard.subsOverview.viewAll': 'Abonelikleri yönet',
+    'dashboard.subsOverview.empty': 'Henüz abonelik yok.',
+    'dashboard.subsOverview.error': 'Abonelikler yüklenemedi.',
+
     // KPI bandı
     'dashboard.kpi.users': 'Kullanıcılar',
     'dashboard.kpi.roles': 'Roller',

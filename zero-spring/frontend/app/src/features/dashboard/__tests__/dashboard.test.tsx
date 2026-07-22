@@ -9,17 +9,18 @@ import type { PageUserDto } from '@/features/users/types';
 import { renderWithProviders, screen, waitFor } from '@/test/utils';
 
 /**
- * Dashboard widget-system behaviour tests (FRONTEND-ARCHITECTURE.md §9).
+ * Dashboard tab-center behaviour tests (FRONTEND-ARCHITECTURE.md §9).
  *
  * The owning features' endpoint modules are mocked (the dashboard has no
  * endpoints of its own), so the REAL hooks + react-query run against fake
  * wire responses. Assertions cover what the user sees:
+ *  - tab visibility follows permissions/context (a useless tab is not offered),
+ *  - a tab's queries fire on FIRST activation only (lazy per-tab data),
  *  - KPI values for granted permissions,
  *  - NEGATIVE permission → widget absent AND its query never sent,
- *  - per-widget error + retry (a failing widget never takes the page down),
+ *  - per-widget error + retry (a failing widget never takes a tab down),
  *  - per-widget empty states,
- *  - host/tenant context split (subscription vs tenants KPI),
- *  - the permission-filtered quick-actions grid.
+ *  - host/tenant context split (subscription vs tenants KPI vs host finance).
  */
 
 const {
@@ -30,6 +31,8 @@ const {
   listTenantsMock,
   getUnreadCountMock,
   getMySubscriptionMock,
+  listSubscriptionsMock,
+  listNotificationsMock,
   listAuditLogsMock,
   userCountPage,
   recentUsersPage,
@@ -91,6 +94,8 @@ const {
     listTenantsMock: vi.fn(),
     getUnreadCountMock: vi.fn(),
     getMySubscriptionMock: vi.fn(),
+    listSubscriptionsMock: vi.fn(),
+    listNotificationsMock: vi.fn(),
     listAuditLogsMock: vi.fn(),
     userCountPage,
     recentUsersPage,
@@ -136,10 +141,12 @@ vi.mock('@/features/tenants/api', () => ({
 
 vi.mock('@/features/notifications/api', () => ({
   getUnreadCount: getUnreadCountMock,
+  listNotifications: listNotificationsMock,
 }));
 
 vi.mock('@/features/subscriptions/api', () => ({
   getMySubscription: getMySubscriptionMock,
+  listSubscriptions: listSubscriptionsMock,
 }));
 
 vi.mock('@/features/audit/api', () => ({
@@ -154,6 +161,8 @@ beforeEach(() => {
   listTenantsMock.mockReset();
   getUnreadCountMock.mockReset();
   getMySubscriptionMock.mockReset();
+  listSubscriptionsMock.mockReset();
+  listNotificationsMock.mockReset();
   listAuditLogsMock.mockReset();
 
   // size=1 → the KPI count probe; anything else → the recent-users page.
@@ -174,11 +183,92 @@ beforeEach(() => {
     status: 'ACTIVE',
     currentPeriodEndAt: '2026-08-01T00:00:00Z',
   });
+  listSubscriptionsMock.mockResolvedValue({
+    content: [
+      {
+        id: 11,
+        tenantName: 'acme',
+        editionDisplayName: 'Pro Plan',
+        status: 'ACTIVE',
+      },
+      {
+        id: 12,
+        tenantName: 'globex',
+        editionDisplayName: 'Starter',
+        status: 'CANCELLED',
+      },
+    ],
+    totalElements: 8,
+  });
+  listNotificationsMock.mockResolvedValue({
+    content: [
+      {
+        id: 21,
+        title: 'Deploy finished',
+        body: 'v1.0.0-rc.1 is live',
+        level: 'SUCCESS',
+        isRead: false,
+        createdAt: new Date().toISOString(),
+      },
+    ],
+    totalElements: 1,
+  });
   listAuditLogsMock.mockResolvedValue(auditPage);
   localStorage.clear();
 });
 
-describe('DashboardPage — KPI band', () => {
+/** Clicks a dashboard tab by its accessible name. */
+async function switchTab(name: string) {
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('tab', { name }));
+}
+
+describe('DashboardPage — tab visibility', () => {
+  it('offers only the tabs the user can use', async () => {
+    tenantIdState.current = null; // host
+    grantedPermissions.current = []; // no audit, no subscriptions, no admin
+
+    renderWithProviders(<DashboardPage />);
+
+    expect(await screen.findByRole('tab', { name: 'Overview' })).toBeVisible();
+    expect(screen.getByRole('tab', { name: 'Operations' })).toBeVisible();
+    // No auditlogs.read → no Activity tab; host without subscriptions.read →
+    // no Finance tab; no admin permission → no Management tab.
+    expect(screen.queryByRole('tab', { name: 'Activity' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Finance' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Management' })).toBeNull();
+  });
+
+  it('offers Activity/Finance/Management when permissions and context allow', async () => {
+    tenantIdState.current = 5; // tenant → Finance is always offered
+    grantedPermissions.current = ['auditlogs.read', 'users.read'];
+
+    renderWithProviders(<DashboardPage />);
+
+    expect(await screen.findByRole('tab', { name: 'Activity' })).toBeVisible();
+    expect(screen.getByRole('tab', { name: 'Finance' })).toBeVisible();
+    expect(screen.getByRole('tab', { name: 'Management' })).toBeVisible();
+  });
+});
+
+describe('DashboardPage — lazy per-tab data', () => {
+  it('does not fetch a tab’s data until the tab is first opened', async () => {
+    tenantIdState.current = 5;
+    grantedPermissions.current = [];
+
+    renderWithProviders(<DashboardPage />);
+    expect(await screen.findByText('12')).toBeInTheDocument(); // overview settled
+
+    // Operations content (inbox) is unmounted → its query has NOT fired.
+    expect(listNotificationsMock).not.toHaveBeenCalled();
+
+    await switchTab('Operations');
+    expect(await screen.findByText('Deploy finished')).toBeInTheDocument();
+    expect(listNotificationsMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('DashboardPage — KPI band (Overview)', () => {
   it('renders KPI values for the permissions the user holds', async () => {
     tenantIdState.current = 5;
     grantedPermissions.current = ['users.read', 'roles.read'];
@@ -200,8 +290,11 @@ describe('DashboardPage — KPI band', () => {
 
     renderWithProviders(<DashboardPage />);
 
-    // Wait for the page to settle on a widget that IS visible.
-    expect(await screen.findByText('audit.alice')).toBeInTheDocument();
+    // Wait for the page to settle on widgets that ARE visible.
+    expect(await screen.findByText('12')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Activity trend' }),
+    ).toBeInTheDocument();
 
     expect(
       screen.queryByRole('heading', { name: 'Users' }),
@@ -215,7 +308,7 @@ describe('DashboardPage — KPI band', () => {
 });
 
 describe('DashboardPage — widget states', () => {
-  it('shows a per-widget error with Retry when the audit source fails, and Retry refetches', async () => {
+  it('shows per-widget errors with Retry when the audit source fails, and Retry refetches', async () => {
     tenantIdState.current = 5;
     grantedPermissions.current = ['auditlogs.read'];
     listAuditLogsMock.mockRejectedValue(new Error('boom'));
@@ -236,15 +329,17 @@ describe('DashboardPage — widget states', () => {
 
     renderWithProviders(<DashboardPage />, { queryClient });
 
-    // Both audit-backed widgets fail INDEPENDENTLY — the page itself survives
-    // (the unread KPI still renders).
+    // Overview: the trend fails but the page survives (unread KPI renders).
     expect(
       await screen.findByText('The activity trend could not be loaded.'),
     ).toBeInTheDocument();
+    expect(await screen.findByText('12')).toBeInTheDocument();
+
+    // Activity tab: the timeline fails independently.
+    await switchTab('Activity');
     expect(
       await screen.findByText('Recent activity could not be loaded.'),
     ).toBeInTheDocument();
-    expect(await screen.findByText('12')).toBeInTheDocument();
 
     const callsBeforeRetry = listAuditLogsMock.mock.calls.length;
     const user = userEvent.setup();
@@ -267,6 +362,8 @@ describe('DashboardPage — widget states', () => {
     expect(
       await screen.findByText('No activity in the last 14 days.'),
     ).toBeInTheDocument();
+
+    await switchTab('Activity');
     expect(await screen.findByText('No recent activity.')).toBeInTheDocument();
   });
 
@@ -296,7 +393,8 @@ describe('DashboardPage — widget states', () => {
 
     renderWithProviders(<DashboardPage />);
 
-    await screen.findByText('audit.alice');
+    await screen.findByRole('heading', { name: 'Activity trend' });
+    await waitFor(() => expect(listAuditLogsMock).toHaveBeenCalled());
     expect(screen.queryByText(/Based on the latest/)).not.toBeInTheDocument();
   });
 });
@@ -320,13 +418,15 @@ describe('DashboardPage — host/tenant context', () => {
     expect(getMySubscriptionMock).not.toHaveBeenCalled();
   });
 
-  it('tenant: shows the subscription widget, hides the tenants KPI and never calls /api/tenants', async () => {
+  it('tenant: Finance shows the own subscription, the tenants KPI stays hidden and /api/tenants is never called', async () => {
     tenantIdState.current = 5;
     // Even WITH the (host-side) permission, tenant context hides the KPI.
     grantedPermissions.current = ['tenants.manage'];
 
     renderWithProviders(<DashboardPage />);
+    expect(await screen.findByText('12')).toBeInTheDocument();
 
+    await switchTab('Finance');
     expect(await screen.findByText('Pro Plan')).toBeInTheDocument();
     expect(await screen.findByText('Active')).toBeInTheDocument();
 
@@ -334,6 +434,19 @@ describe('DashboardPage — host/tenant context', () => {
       screen.queryByRole('heading', { name: 'Tenants' }),
     ).not.toBeInTheDocument();
     expect(listTenantsMock).not.toHaveBeenCalled();
+  });
+
+  it('host with subscriptions.read: Finance shows the subscriptions overview', async () => {
+    tenantIdState.current = null;
+    grantedPermissions.current = ['subscriptions.read'];
+
+    renderWithProviders(<DashboardPage />);
+    await switchTab('Finance');
+
+    expect(await screen.findByText('acme')).toBeInTheDocument();
+    expect(await screen.findByText('globex')).toBeInTheDocument();
+    // The own-subscription endpoint is tenant-only and must stay untouched.
+    expect(getMySubscriptionMock).not.toHaveBeenCalled();
   });
 
   it('tenant without a subscription (404) renders the empty state, not an error', async () => {
@@ -348,6 +461,7 @@ describe('DashboardPage — host/tenant context', () => {
     );
 
     renderWithProviders(<DashboardPage />);
+    await switchTab('Finance');
 
     expect(
       await screen.findByText('No subscription yet.'),

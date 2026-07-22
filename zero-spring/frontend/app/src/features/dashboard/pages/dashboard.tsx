@@ -1,58 +1,131 @@
+import { lazy, Suspense, useMemo } from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { Helmet } from 'react-helmet-async';
+import { useSearchParams } from 'react-router-dom';
+import {
+  Activity,
+  Bell,
+  CreditCard,
+  Gauge,
+  ShieldCheck,
+} from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
 import { useTenant } from '@/providers/tenant-provider';
 import { usePermission } from '@/auth/rbac';
 import { PageHeader } from '@/components/common/page-header';
-import { ActivityTrendWidget } from '../widgets/activity-trend';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs';
+import { WidgetSkeleton } from '@/components/widgets/widget-states';
 import { KpiCards } from '../widgets/kpi-cards';
+import { NotificationsInboxWidget } from '../widgets/notifications-inbox';
 import { QuickActionsWidget } from '../widgets/quick-actions';
 import { RecentActivityWidget } from '../widgets/recent-activity';
 import { RecentUsersWidget } from '../widgets/recent-users';
 import { SubscriptionWidget } from '../widgets/subscription-widget';
+import { SubscriptionsOverviewWidget } from '../widgets/subscriptions-overview';
 
 /**
- * Dashboard — a modular widget grid (the ASP.NET Zero dashboard-widget idea,
- * done the modern way). Every widget owns its OWN query, states (loading /
- * error / empty / filled) and permission, so one failing widget can never take
- * the page down, and a permission the user lacks removes both the tile and its
- * network call.
+ * Dashboard — a tab-based management center over the modular widget system.
  *
- * Layout: a 12-column grid that RE-FLOWS as widgets disappear —
- *  - KPI band (up to four permission-gated tiles),
- *  - trend (8) + side slot (4): subscription in tenant context; in host
- *    context recent-users moves up beside the trend and the bottom row
- *    re-flows,
- *  - recent-users (7) + recent-activity (5) when both fit below,
- *  - quick actions (12) — the original quick-access grid, preserved as a
- *    widget with the same i18n keys and the same permission filtering.
+ * Tabs (each permission/context-gated; a tab the user can't use is not
+ * rendered at all):
+ *  - overview    — the system pulse: KPI band + trend + quick access
+ *  - operations  — the caller's inbox + newest accounts
+ *  - activity    — the audit home: trend + event timeline (`auditlogs.read`)
+ *  - finance     — tenant: own subscription · host: subscriptions overview
+ *  - management  — admin work surface: KPIs + users + admin shortcuts
+ *
+ * Behavior notes:
+ *  - The active tab lives in the URL (`?tab=…`), so tabs deep-link and survive
+ *    refresh; an unknown/hidden value falls back to overview.
+ *  - Radix unmounts inactive tab content: a tab's queries fire on FIRST visit
+ *    and are served from the 60s query cache afterwards — switching tabs is
+ *    instant and adds no polling.
+ *  - The trend widget (recharts) is `lazy()`-split so the chart library stays
+ *    out of the initial bundle; its Suspense fallback is the chart skeleton.
  */
+
+const ActivityTrendWidget = lazy(() =>
+  import('../widgets/activity-trend').then((m) => ({
+    default: m.ActivityTrendWidget,
+  })),
+);
+
+function LazyTrend({ className }: { className?: string }) {
+  return (
+    <Suspense fallback={<WidgetSkeleton variant="chart" className={className} />}>
+      <ActivityTrendWidget className={className} />
+    </Suspense>
+  );
+}
+
+export type DashboardTab =
+  | 'overview'
+  | 'operations'
+  | 'activity'
+  | 'finance'
+  | 'management';
+
 export function DashboardPage() {
   const intl = useIntl();
   const { user } = useAuth();
   const { tenant } = useTenant();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const canUsers = usePermission('users.read');
+  const canRoles = usePermission('roles.read');
+  const canTenants = usePermission('tenants.manage');
   const canAudit = usePermission('auditlogs.read');
+  const canSubscriptions = usePermission('subscriptions.read');
   // Tenant context = the session carries a `tenant` claim; host = it doesn't.
   const isTenant = user?.tenantId != null;
+  const isHost = !isTenant;
 
   const displayName = user?.username ?? user?.email ?? '';
   const tenantLabel = tenant ?? user?.tenantId ?? '—';
 
-  const showTrend = canAudit;
-  const showSubscription = isTenant;
-  // The 4-column slot beside the trend: subscription (tenant) — otherwise
-  // recent-users moves up so the host layout leaves no hole.
-  const sideIsRecentUsers = !showSubscription && showTrend && canUsers;
-  const hasSideWidget = showSubscription || sideIsRecentUsers;
-  // Bottom row: recent-users (unless it moved up) + recent-activity.
-  const showRecentUsersBelow = canUsers && !sideIsRecentUsers;
+  // A tab is offered only when it has something the user may see.
+  const visibleTabs = useMemo(() => {
+    const tabs: Array<{ value: DashboardTab; icon: typeof Gauge }> = [
+      { value: 'overview', icon: Gauge },
+      { value: 'operations', icon: Bell },
+    ];
+    if (canAudit) {
+      tabs.push({ value: 'activity', icon: Activity });
+    }
+    if (isTenant || canSubscriptions) {
+      tabs.push({ value: 'finance', icon: CreditCard });
+    }
+    if (canUsers || canRoles || canTenants) {
+      tabs.push({ value: 'management', icon: ShieldCheck });
+    }
+    return tabs;
+  }, [canAudit, canSubscriptions, canUsers, canRoles, canTenants, isTenant]);
+
+  const requestedTab = searchParams.get('tab');
+  const activeTab: DashboardTab = visibleTabs.some(
+    (tab) => tab.value === requestedTab,
+  )
+    ? (requestedTab as DashboardTab)
+    : 'overview';
+
+  const selectTab = (value: string) => {
+    // `replace` keeps tab hopping out of the back-button history.
+    setSearchParams(value === 'overview' ? {} : { tab: value }, {
+      replace: true,
+    });
+  };
 
   return (
     <div className="container-fluid">
       <Helmet>
-        <title>{intl.formatMessage({ id: 'nav.dashboard' })}</title>
+        <title>
+          {`${intl.formatMessage({ id: 'nav.dashboard' })} · ${intl.formatMessage({ id: `dashboard.tab.${activeTab}` })}`}
+        </title>
       </Helmet>
 
       <PageHeader
@@ -73,40 +146,91 @@ export function DashboardPage() {
         }
       />
 
-      <div className="grid grid-cols-12 gap-4">
-        <KpiCards />
+      <Tabs value={activeTab} onValueChange={selectTab} className="gap-4">
+        <div className="overflow-x-auto">
+          <TabsList>
+            {visibleTabs.map(({ value, icon: Icon }) => (
+              <TabsTrigger key={value} value={value} className="gap-1.5">
+                <Icon aria-hidden="true" className="size-4" />
+                <FormattedMessage id={`dashboard.tab.${value}`} />
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
 
-        {showTrend ? (
-          <ActivityTrendWidget
-            className={
-              hasSideWidget ? 'col-span-12 lg:col-span-8' : 'col-span-12'
-            }
-          />
-        ) : null}
-        {showSubscription ? (
-          <SubscriptionWidget
-            className={showTrend ? 'col-span-12 lg:col-span-4' : 'col-span-12'}
-          />
-        ) : null}
-        {sideIsRecentUsers ? (
-          <RecentUsersWidget className="col-span-12 lg:col-span-4" />
-        ) : null}
+        {/* Overview — the system pulse. */}
+        <TabsContent value="overview">
+          <div className="grid grid-cols-12 gap-4">
+            <KpiCards />
+            {canAudit ? (
+              <LazyTrend
+                className={
+                  isTenant || canUsers
+                    ? 'col-span-12 lg:col-span-8'
+                    : 'col-span-12'
+                }
+              />
+            ) : null}
+            {isTenant ? (
+              <SubscriptionWidget
+                className={
+                  canAudit ? 'col-span-12 lg:col-span-4' : 'col-span-12'
+                }
+              />
+            ) : canUsers && canAudit ? (
+              <RecentUsersWidget className="col-span-12 lg:col-span-4" />
+            ) : canUsers ? (
+              <RecentUsersWidget className="col-span-12" />
+            ) : null}
+            <QuickActionsWidget className="col-span-12" />
+          </div>
+        </TabsContent>
 
-        {showRecentUsersBelow ? (
-          <RecentUsersWidget
-            className={canAudit ? 'col-span-12 lg:col-span-7' : 'col-span-12'}
-          />
-        ) : null}
-        {canAudit ? (
-          <RecentActivityWidget
-            className={
-              showRecentUsersBelow ? 'col-span-12 lg:col-span-5' : 'col-span-12'
-            }
-          />
-        ) : null}
+        {/* Operations — the caller's own work surface. */}
+        <TabsContent value="operations">
+          <div className="grid grid-cols-12 gap-4">
+            <NotificationsInboxWidget
+              className={canUsers ? 'col-span-12 lg:col-span-7' : 'col-span-12'}
+            />
+            {canUsers ? (
+              <RecentUsersWidget className="col-span-12 lg:col-span-5" />
+            ) : null}
+          </div>
+        </TabsContent>
 
-        <QuickActionsWidget className="col-span-12" />
-      </div>
+        {/* Activity — the audit home (tab exists only with auditlogs.read). */}
+        <TabsContent value="activity">
+          <div className="grid grid-cols-12 gap-4">
+            <LazyTrend className="col-span-12" />
+            <RecentActivityWidget className="col-span-12" />
+          </div>
+        </TabsContent>
+
+        {/* Finance — tenant sees its own subscription, host the overview. */}
+        <TabsContent value="finance">
+          <div className="grid grid-cols-12 gap-4">
+            {isTenant ? (
+              <SubscriptionWidget className="col-span-12 lg:col-span-6" />
+            ) : null}
+            {isHost && canSubscriptions ? (
+              <SubscriptionsOverviewWidget className="col-span-12 lg:col-span-8" />
+            ) : null}
+          </div>
+        </TabsContent>
+
+        {/* Management — the admin work surface. */}
+        <TabsContent value="management">
+          <div className="grid grid-cols-12 gap-4">
+            <KpiCards />
+            {canUsers ? (
+              <RecentUsersWidget className="col-span-12 lg:col-span-7" />
+            ) : null}
+            <QuickActionsWidget
+              className={canUsers ? 'col-span-12 lg:col-span-5' : 'col-span-12'}
+            />
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

@@ -2,8 +2,11 @@ import { useQuery } from '@tanstack/react-query';
 import { ApiError } from '@/api/client';
 import { listAuditLogs } from '@/features/audit/api';
 import type { AuditLogDto } from '@/features/audit/types';
-import { getUnreadCount } from '@/features/notifications/api';
+import { getUnreadCount, listNotifications } from '@/features/notifications/api';
 import { NOTIFICATIONS_UNREAD_KEY } from '@/features/notifications/hooks';
+import type { NotificationDto } from '@/features/notifications/types';
+import { listSubscriptions } from '@/features/subscriptions/api';
+import type { SubscriptionDto } from '@/features/subscriptions/types';
 import { listRoles } from '@/features/roles/api';
 import { getMySubscription } from '@/features/subscriptions/api';
 import { listTenants } from '@/features/tenants/api';
@@ -35,6 +38,9 @@ export const dashboardKeys = {
   recentUsers: () => [...dashboardKeys.all, 'recent-users'] as const,
   recentActivity: () => [...dashboardKeys.all, 'recent-activity'] as const,
   mySubscription: () => [...dashboardKeys.all, 'my-subscription'] as const,
+  inbox: () => [...dashboardKeys.all, 'inbox'] as const,
+  subscriptionsOverview: () =>
+    [...dashboardKeys.all, 'subscriptions-overview'] as const,
 };
 
 /**
@@ -221,4 +227,36 @@ export function useMySubscription(enabled: boolean) {
 /** `true` when the query failed with the "no subscription" 404 (empty, not error). */
 export function isSubscriptionMissing(error: unknown): boolean {
   return error instanceof ApiError && error.status === 404;
+}
+
+export const INBOX_SIZE = 6;
+export const SUBSCRIPTIONS_OVERVIEW_SIZE = 5;
+
+/** Latest notifications for the operations inbox widget (auth only). */
+export function useInbox(enabled: boolean) {
+  return useQuery({
+    queryKey: dashboardKeys.inbox(),
+    queryFn: () => listNotifications({ page: 0, size: INBOX_SIZE }),
+    select: (page): NotificationDto[] => page.content ?? [],
+    enabled,
+    ...WIDGET_QUERY_DEFAULTS,
+  });
+}
+
+/**
+ * Host finance view: the newest subscriptions across tenants
+ * (`subscriptions.read`, host-only endpoint).
+ */
+export function useSubscriptionsOverview(enabled: boolean) {
+  return useQuery({
+    queryKey: dashboardKeys.subscriptionsOverview(),
+    queryFn: () =>
+      listSubscriptions({ page: 0, size: SUBSCRIPTIONS_OVERVIEW_SIZE }),
+    select: (page): { rows: SubscriptionDto[]; total: number } => ({
+      rows: page.content ?? [],
+      total: page.totalElements ?? page.content?.length ?? 0,
+    }),
+    enabled,
+    ...WIDGET_QUERY_DEFAULTS,
+  });
 }
