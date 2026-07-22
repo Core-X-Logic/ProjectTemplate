@@ -316,6 +316,12 @@ class BillingReconciliationJobIT extends AbstractSaasIT {
     @Test
     @DisplayName("two back-to-back job triggers acquire the ShedLock once (single execution across nodes)")
     void twoBackToBackJobTriggersRunOnce() {
+        // Class-order independence: another test class in the SHARED context may have triggered
+        // this job moments ago, and lockAtLeastFor (default PT30S) would then make BOTH runs below
+        // skip (observed on CI: expected 1 but was 0 — the first trigger already found the lock
+        // held). No job is mid-run here (test triggers are synchronous), so dropping the row is a
+        // clean reset, not a lock bypass.
+        jdbc.update("delete from shedlock where name = ?", BillingReconciliationJob.LOCK_NAME);
         int before = reconciliationJob.executionCount();
 
         reconciliationJob.run();
