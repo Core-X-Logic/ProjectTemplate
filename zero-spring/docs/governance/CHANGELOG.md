@@ -11,6 +11,19 @@
 
 ### Eklendi
 
+- **Tab-bazlı dashboard yönetim merkezi (yalnız frontend).** Widget dashboard'ı 5 sekmeli yönetim
+  merkezine yükseltildi (`85c42e8`, CI 9/9 run 29927220897): Genel Bakış (KPI + trend + hızlı
+  erişim, herkese) · Operasyon (bildirim gelen kutusu + son hesaplar) · Aktivite (trend + zaman
+  çizelgesi; `auditlogs.read`) · Finans (tenant: kendi aboneliği / host: abonelik özeti;
+  `subscriptions.read`) · Yönetim (KPI + kullanıcılar + admin kısayolları; herhangi bir admin izni).
+  Kullanılamayacak sekme HİÇ sunulmaz. Aktif sekme URL'de (`?tab=…`) — deep-link + refresh dayanıklı;
+  Radix tablist = klavye/erişilebilirlik hazır. 2 yeni widget (bildirim gelen kutusu · host abonelik
+  özeti) mevcut Widget/durum/`enabled` deseninde. **Performans:** pasif sekme unmount → sorgular ilk
+  ziyarette atılır (testle kanıtlı: Operasyon açılana dek `listNotifications` çağrılmıyor); recharts
+  `lazy()` ile ayrı chunk'a bölündü — ilk bundle 1557→1166 kB (gzip 439→331, ~%25 hafifleme). Kanıt:
+  31 dosya / 165 test; dashboard suite 14 (sekme görünürlüğü iki yönlü, tembel sekme verisi, negatif
+  izin, sekmeler-arası hata izolasyonu, host/tenant finans ayrımı).
+
 - **Enterprise dashboard widget sistemi (yalnız frontend).** Quick-access-only dashboard,
   modüler widget mimarisine dönüştü (`41dafbd`, CI 9/9 run 29919645849): ortak `Widget`
   container'ı (gerçek `h2` + `aria-labelledby`, aksiyon slotu, i18n'li refresh, footer) +

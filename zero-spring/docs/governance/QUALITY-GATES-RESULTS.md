@@ -687,3 +687,20 @@ kırpmayı gerçekten simüle ediyor.
 **Ekran kanıtı alınamadı (dürüst):** tarayıcı uzantısı oturum ortasında koptu; ayrıca canlı denemede
 bayat `X-Tenant` bug'ı bulundu (yukarıdaki fix'in kaynağı — otomasyonun "giremiyorum" hali kullanıcının
 raporuyla birebir aynı kök nedendi). Görsel önce/sonra yerine kanıt: test + build + CI + review zinciri.
+
+---
+
+## Tab-bazlı dashboard yönetim merkezi — 2026-07-22, `85c42e8`, gerçek `push`, **9/9** (run 29927220897)
+
+Yalnız frontend; `schema.d.ts` dokunulmadı (typed-client-drift yeşili bağımsız kanıt); yeni bağımlılık yok.
+
+| Kanıt | Ölçüm |
+|---|---|
+| Frontend suite | **31 dosya / 165 test, 0 fail** (lokal + CI `frontend`) |
+| Dashboard suite | **14 test**: sekme görünürlüğü **iki yönlü** (izinsiz → Aktivite/Finans/Yönetim sunulmuyor; izinli → sunuluyor) · **tembel sekme verisi** (`listNotifications` Operasyon açılana dek çağrılmıyor, mock not-called) · negatif izin = widget yok + sorgu yok · sekmeler-arası hata izolasyonu + Retry refetch · boş durumlar · host/tenant Finans ayrımı (host'ta `/subscriptions/me` hiç çağrılmıyor; host+`subscriptions.read` → abonelik özeti) · örneklem beyanı iki yönlü |
+| Bundle | recharts `lazy()` chunk'ı: index **1557→1166 kB** (gzip 439→331); `activity-trend` chunk'ı 396 kB talep-üzerine |
+| Build | `tsc -b` + vite temiz |
+
+**Davranış korunumu:** auth/tenant/permission davranışı değişmedi — aynı izin literalleri, aynı
+`enabled` disiplini; sekme kapısı da aynı izinlerden türetiliyor (ayrı bir izin kaynağı İCAT EDİLMEDİ).
+Redis şartı: yeni backend çağrısı yok → dashboard'ın Redis'e bağımlılığı bu turda da sıfır.
