@@ -23,6 +23,7 @@ silmeyin: yeni bir ADR yazın ve eskisini `Superseded by` ile işaretleyin — k
 | [0014](ADR-0014-server-authoritative-activation.md) | Server-authoritative aktivasyon (webhook + reconciliation) | Accepted |
 | [0015](ADR-0015-saas-tenant-isolation.md) | SaaS'ta `@Filter` yok; host-only izin + explicit sorgu izolasyonu | Accepted |
 | [0016](ADR-0016-module-root-declaration-rule.md) | ArchUnit Rule 4 modül kökünün beyanını ölçer, entity'nin paketini değil | Accepted |
+| [0017](ADR-0017-payment-provider-strategy.md) | Ödeme sağlayıcı stratejisi — TR pazarı: PayTR + iyzico; Stripe uykuda | Accepted |
 
 ## Numara boşlukları
 
