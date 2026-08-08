@@ -55,25 +55,16 @@ export const CODE_QUERY_PARAM = 'code';
 export const INVITATION_TOKEN_QUERY_PARAM = 'token';
 
 /**
- * TODO(gen:api): HAND-DECLARED until the generated schema is regenerated with
- * the invitation endpoints — then replace both with
- * `components['schemas'][…]` aliases like everything above (a hand copy lets a
- * backend field rename slip through the compiler).
+ * Aliased from the generated schema like everything above (they were briefly
+ * hand-declared while the schema lagged the new endpoints; the
+ * typed-client-drift gate caught the lag on the first post-merge CI run).
  *
  * `InvitationInfoDto.status`: `PENDING` → show the password form; `ACCEPTED` →
  * point at sign-in.
  */
-export interface InvitationInfoDto {
-  username?: string | null;
-  email?: string | null;
-  status?: string;
-}
-
-/** TODO(gen:api): see above — mirrors backend `AcceptInvitationRequest`. */
-export interface AcceptInvitationRequest {
-  token: string;
-  password: string;
-}
+export type InvitationInfoDto = components['schemas']['InvitationInfoDto'];
+export type AcceptInvitationRequest =
+  components['schemas']['AcceptInvitationRequest'];
 
 /**
  * DTO floor of `AcceptInvitationRequest.password` (`@Size(min = 6, max = 128)`)
