@@ -9,6 +9,8 @@ import {
   Download,
   EllipsisVertical,
   LockOpen,
+  MailPlus,
+  Mails,
   Pencil,
   Plus,
   Search,
@@ -51,6 +53,8 @@ import { Input } from '@/components/ui/input';
 import { Can } from '@/auth/rbac';
 import { RequireAuth } from '@/auth/require-auth';
 import { ImpersonateAction } from '@/features/impersonation/components/impersonate-action';
+import { InvitationsDialog } from '@/features/users/components/invitations-dialog';
+import { InviteUserDialog } from '@/features/users/components/invite-dialog';
 import { UserFormDialog } from '@/features/users/pages/user-form';
 import {
   useActivateUser,
@@ -92,6 +96,9 @@ function UsersListContent() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserDto | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UserDto | null>(null);
+  // Davet akışı — iki bağımsız dialog, kapalıyken hiçbir istek atmaz.
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [invitationsOpen, setInvitationsOpen] = useState(false);
 
   // Debounced server-side search; a new term resets to the first page.
   useEffect(() => {
@@ -323,6 +330,21 @@ function UsersListContent() {
               </Button>
             </Can>
             <Can permission="users.create">
+              <Button
+                variant="outline"
+                onClick={() => setInvitationsOpen(true)}
+              >
+                <Mails />
+                <FormattedMessage id="users.action.invitations" />
+              </Button>
+            </Can>
+            <Can permission="users.create">
+              <Button variant="outline" onClick={() => setInviteOpen(true)}>
+                <MailPlus />
+                <FormattedMessage id="users.action.invite" />
+              </Button>
+            </Can>
+            <Can permission="users.create">
               <Button onClick={openCreate}>
                 <Plus />
                 <FormattedMessage id="users.action.create" />
@@ -392,6 +414,17 @@ function UsersListContent() {
           open={formOpen}
           onOpenChange={setFormOpen}
           user={editingUser}
+        />
+      )}
+
+      {inviteOpen && (
+        <InviteUserDialog open={inviteOpen} onOpenChange={setInviteOpen} />
+      )}
+
+      {invitationsOpen && (
+        <InvitationsDialog
+          open={invitationsOpen}
+          onOpenChange={setInvitationsOpen}
         />
       )}
 

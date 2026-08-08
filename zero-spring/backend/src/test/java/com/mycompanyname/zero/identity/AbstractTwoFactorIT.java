@@ -43,6 +43,14 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * <p>Host users also sidestep the subscription gate (which only applies to a tenant), so the
  * authenticated management endpoints are reachable without provisioning a subscription.
+ *
+ * <p><b>Why the fixtures write inside {@code asHostDatabase}.</b> Since {@code V12__rls_identity.sql}
+ * the {@code users} table carries a row-level policy, and a test thread crosses no {@code @Service}
+ * boundary — so nothing publishes {@code app.current_tenant}/{@code app.is_host} for it and the
+ * inserts below are refused ("new row violates row-level security policy"). Host is the honest
+ * context for them: provisioning a user is a host operation here, and a {@code tenant_id IS NULL}
+ * row cannot be written from any tenant context by design (see V12's header). What is under test —
+ * the 2FA flows themselves — still runs entirely over HTTP, where the production aspect decides.
  */
 abstract class AbstractTwoFactorIT extends AbstractIntegrationIT {
 
@@ -78,12 +86,14 @@ abstract class AbstractTwoFactorIT extends AbstractIntegrationIT {
     /** A plain host user with NO second factor (for the regression path). */
     protected TwoFactorUser createHostUserWithoutTwoFactor(String password) {
         String username = uniqueUsername("2fa_off");
-        User user = new User();
-        user.setUsername(username);
-        user.setEmail(username + "@host.local");
-        user.setPasswordHash(passwordEncoder.encode(password));
-        user.setActive(true);
-        long id = userRepository.saveAndFlush(user).getId();
+        long id = asHostDatabase(() -> {
+            User user = new User();
+            user.setUsername(username);
+            user.setEmail(username + "@host.local");
+            user.setPasswordHash(passwordEncoder.encode(password));
+            user.setActive(true);
+            return userRepository.saveAndFlush(user).getId();
+        });
         return new TwoFactorUser(id, username, password, null, List.of());
     }
 
@@ -101,16 +111,20 @@ abstract class AbstractTwoFactorIT extends AbstractIntegrationIT {
     protected TwoFactorUser createUserWithTwoFactor(Long tenantId, String password, int recoveryCodeCount) {
         String secret = new DefaultSecretGenerator().generate();
         String username = uniqueUsername("2fa_on");
-        User user = new User();
-        user.setTenantId(tenantId);
-        user.setUsername(username);
-        user.setEmail(username + "@host.local");
-        user.setPasswordHash(passwordEncoder.encode(password));
-        user.setActive(true);
-        user.setTwoFactorEnabled(true);
-        user.setTwoFactorSecret(fieldEncryptionService.encrypt(secret));
-        long id = userRepository.saveAndFlush(user).getId();
+        long id = asHostDatabase(() -> {
+            User user = new User();
+            user.setTenantId(tenantId);
+            user.setUsername(username);
+            user.setEmail(username + "@host.local");
+            user.setPasswordHash(passwordEncoder.encode(password));
+            user.setActive(true);
+            user.setTwoFactorEnabled(true);
+            user.setTwoFactorSecret(fieldEncryptionService.encrypt(secret));
+            return userRepository.saveAndFlush(user).getId();
+        });
 
+        // two_factor_recovery_codes has no tenant_id and therefore no policy; it is keyed on the
+        // global user id, exactly like refresh_tokens. No context needed.
         List<String> codes = new ArrayList<>();
         for (int i = 0; i < recoveryCodeCount; i++) {
             String code = "RECOVERY-" + username + "-" + i;

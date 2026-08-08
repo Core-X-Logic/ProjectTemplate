@@ -30,7 +30,7 @@ Portlar: Postgres **5433**, Redis **6380**, Mailpit **1025** (SMTP) / **8025** (
 
 **Konteynere servis adıyla eriş** (konteyner adı bilinçli yok — R-01b):
 ```bash
-docker compose exec postgres psql -U zero -d zero -c '\dt'
+docker compose exec postgres psql -U postgres -d zero -c '\dt'
 docker compose exec redis redis-cli ping        # PONG
 ```
 

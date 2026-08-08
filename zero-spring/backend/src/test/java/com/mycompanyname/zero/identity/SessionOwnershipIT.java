@@ -249,15 +249,22 @@ class SessionOwnershipIT extends AbstractIntegrationIT {
 
         Tenant tenant = tenantRepository.findByNameIgnoreCase(OTHER_TENANT).orElseThrow();
         long tenantId = tenant.getId();
-        if (userRepository.findByTenantIdAndUsernameIgnoreCase(tenantId, OUTSIDER_USERNAME).isEmpty()) {
-            User outsider = new User();
-            outsider.setTenantId(tenantId);
-            outsider.setUsername(OUTSIDER_USERNAME);
-            outsider.setEmail(OUTSIDER_USERNAME + "@acme.local");
-            outsider.setPasswordHash(passwordEncoder.encode(OUTSIDER_PASSWORD));
-            outsider.setActive(true);
-            userRepository.save(outsider);
-        }
+        // The lookup AND the insert run in one transaction that names the tenant to the row-level
+        // policies of V12: a test thread is not a @Service, so nothing publishes app.current_tenant
+        // for it, and `users` then answers 0 rows on the read and refuses the write outright ("new
+        // row violates row-level security policy"). One wrapper for both, so the check-then-insert
+        // cannot straddle two contexts.
+        inTenantDatabase(tenantId, () -> {
+            if (userRepository.findByTenantIdAndUsernameIgnoreCase(tenantId, OUTSIDER_USERNAME).isEmpty()) {
+                User outsider = new User();
+                outsider.setTenantId(tenantId);
+                outsider.setUsername(OUTSIDER_USERNAME);
+                outsider.setEmail(OUTSIDER_USERNAME + "@acme.local");
+                outsider.setPasswordHash(passwordEncoder.encode(OUTSIDER_PASSWORD));
+                outsider.setActive(true);
+                userRepository.save(outsider);
+            }
+        });
         return tenantId;
     }
 }

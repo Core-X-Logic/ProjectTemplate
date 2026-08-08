@@ -197,7 +197,9 @@ class TokenRevocationSubSecondIT extends AbstractIntegrationIT {
         user.setEmail(username + "@host.local");
         user.setPasswordHash(passwordEncoder.encode(PASSWORD));
         user.setActive(true);
-        return userRepository.saveAndFlush(user);
+        // Host-global row: only the host branch of the V12 policy can write it, and a test thread
+        // announces no context of its own.
+        return asHostDatabase(() -> userRepository.saveAndFlush(user));
     }
 
     /**

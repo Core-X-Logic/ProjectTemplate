@@ -36,14 +36,16 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: zero
-      POSTGRES_USER: zero
-      POSTGRES_PASSWORD: zero
+      # Owner/superuser = migration kimliği (RLS taban çizgisi Adım 1). Uygulama BU kimlikle
+      # bağlanmaz; `zero_app` rolünü V11__app_role.sql yaratır ve uygulama onu kullanır.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     ports:
       # host 5433 — 5432 başka bir lokal proje tarafından kullanılıyor olabilir
       # (bu makinede gerçekten öyle). Değiştirirsen DB_URL'i de güncelle — yukarıdaki nota bak.
       - "${POSTGRES_PORT:-5433}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U zero -d zero"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d zero"]
       interval: 5s
       timeout: 3s
       retries: 10

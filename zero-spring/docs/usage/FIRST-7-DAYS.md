@@ -22,8 +22,10 @@ devraldığı riskleri biliyor ve go-live yolunu anlıyor.
 - `../governance/RISK-REGISTER.md` **tümü** — özellikle PROD-R23 (branch protection), PROD-R13
   (Redis hard auth), PROD-R6/R16 durumları, ödeme sağlayıcı kısıtları.
 - `../ARCHITECTURE.md` + `../README.md` (doküman haritası) hızlı geçiş.
-- **Başarı ölçütü:** "şablon bana ne vermedi?" sorusuna 5 madde sayabiliyorsun (şifre sıfırlama
-  ekranı, dosya yükleme, kullanıcı daveti, ödeme entegrasyonu canlı doğrulaması, …).
+- **Başarı ölçütü:** "şablon bana ne vermedi?" sorusuna madde sayabiliyorsun (dosya yükleme,
+  ödeme entegrasyonu canlı doğrulaması, authenticated uçlarda hız sınırı — R-42, …). Şifre
+  sıfırlama ekranları ve kullanıcı daveti bu listede DEĞİL: ikisi de şablonda uçtan uca var
+  (`features/account` + `InvitationFlowIT`; eski "eksik" kaydı bayattı, düzeltildi).
 - **Hemen kapat (erken risk):** yok — önce anla, sonra kapat. Yanlış erken düzeltme borç yaratır.
 
 ## Gün 3 — Güvenlik modeli + üçlü kilit

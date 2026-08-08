@@ -103,13 +103,23 @@ class TenantBootstrapIT extends AbstractIntegrationIT {
         // The bootstrapped rows must carry the NEW tenant's id (tenancy trap: a filter or context
         // mistake writes them into host scope or another tenant, silently).
         Long tenantId = tenantRepository.findByNameIgnoreCase(name).orElseThrow().getId();
-        User admin = userRepository.findByTenantIdAndUsernameIgnoreCase(tenantId, ADMIN_USERNAME).orElseThrow();
+        //
+        // Read inside inTenantDatabase: since V12 `users` and `roles` are under row-level policies,
+        // and a test thread is not a @Service — nothing publishes app.current_tenant for it, so an
+        // unwrapped read answers 0 rows (correctly: that is the fail-closed guarantee). Naming the
+        // tenant here also SHARPENS the claim below: the rows are asserted to be visible from the new
+        // tenant's own point of view, which is the thing that would be false if the bootstrap had
+        // written them into host scope or another tenant.
+        User admin = inTenantDatabase(tenantId, () -> userRepository
+                .findByTenantIdAndUsernameIgnoreCase(tenantId, ADMIN_USERNAME).orElseThrow());
         assertThat(admin.getTenantId()).isEqualTo(tenantId);
         assertThat(admin.getEmail()).isEqualTo("admin@" + name + ".test");
-        Role adminRole = roleRepository.findByTenantIdAndNameIgnoreCase(tenantId, "Admin").orElseThrow();
+        Role adminRole = inTenantDatabase(tenantId, () -> roleRepository
+                .findByTenantIdAndNameIgnoreCase(tenantId, "Admin").orElseThrow());
         assertThat(adminRole.getTenantId()).isEqualTo(tenantId);
         // Via SQL, not adminRole.getPermissions(): the element collection is lazy and the entity is
-        // detached out here.
+        // detached out here. `role_permissions` carries no tenant_id and therefore no policy
+        // (ADR-0019: not exempt, not a candidate), so this read needs no context.
         List<String> permissions = jdbcTemplate.queryForList(
                 "select permission from role_permissions where role_id = ?", String.class, adminRole.getId());
         assertThat(permissions).isNotEmpty();
@@ -149,8 +159,10 @@ class TenantBootstrapIT extends AbstractIntegrationIT {
         // Distinct rows, each in its own tenant; and tenant A's user listing must not leak B's admin.
         Long tenantAId = tenantRepository.findByNameIgnoreCase(nameA).orElseThrow().getId();
         Long tenantBId = tenantRepository.findByNameIgnoreCase(nameB).orElseThrow().getId();
-        User adminA = userRepository.findByTenantIdAndUsernameIgnoreCase(tenantAId, ADMIN_USERNAME).orElseThrow();
-        User adminB = userRepository.findByTenantIdAndUsernameIgnoreCase(tenantBId, ADMIN_USERNAME).orElseThrow();
+        User adminA = inTenantDatabase(tenantAId, () -> userRepository
+                .findByTenantIdAndUsernameIgnoreCase(tenantAId, ADMIN_USERNAME).orElseThrow());
+        User adminB = inTenantDatabase(tenantBId, () -> userRepository
+                .findByTenantIdAndUsernameIgnoreCase(tenantBId, ADMIN_USERNAME).orElseThrow());
         assertThat(adminA.getId()).isNotEqualTo(adminB.getId());
 
         ResponseEntity<JsonNode> usersOfA = restTemplate.exchange(
@@ -193,7 +205,8 @@ class TenantBootstrapIT extends AbstractIntegrationIT {
 
         // Not stored in plaintext: only the hash is persisted, and it validates the returned value.
         Long tenantId = tenantRepository.findByNameIgnoreCase(name).orElseThrow().getId();
-        User admin = userRepository.findByTenantIdAndUsernameIgnoreCase(tenantId, ADMIN_USERNAME).orElseThrow();
+        User admin = inTenantDatabase(tenantId, () -> userRepository
+                .findByTenantIdAndUsernameIgnoreCase(tenantId, ADMIN_USERNAME).orElseThrow());
         assertThat(admin.getPasswordHash()).isNotEqualTo(generated);
         assertThat(passwordEncoder.matches(generated, admin.getPasswordHash())).isTrue();
         assertThat(admin.isShouldChangePassword())
@@ -234,18 +247,23 @@ class TenantBootstrapIT extends AbstractIntegrationIT {
         assertThat(postTenant(tenantBody(name, email, PROVIDED_PASSWORD)).getStatusCode())
                 .isEqualTo(HttpStatus.CREATED);
         Long tenantId = tenantRepository.findByNameIgnoreCase(name).orElseThrow().getId();
-        User before = userRepository.findByTenantIdAndUsernameIgnoreCase(tenantId, ADMIN_USERNAME).orElseThrow();
+        User before = inTenantDatabase(tenantId, () -> userRepository
+                .findByTenantIdAndUsernameIgnoreCase(tenantId, ADMIN_USERNAME).orElseThrow());
 
+        // The bootstrapper itself needs no wrapper: it is a @Service, so the tenancy aspect publishes
+        // its context (host here — the test thread carries no TenantContext, exactly like the host
+        // request this normally runs inside).
         bootstrapper.bootstrapAdmin(tenantId, "other@" + name + ".test", "Different1Pw", false);
 
-        assertThat(userRepository.countByTenantId(tenantId))
+        assertThat(inTenantDatabase(tenantId, () -> userRepository.countByTenantId(tenantId)))
                 .as("the second bootstrap must not create a second user")
                 .isEqualTo(1);
-        assertThat(roleRepository.findAllByTenantId(tenantId))
+        assertThat(inTenantDatabase(tenantId, () -> roleRepository.findAllByTenantId(tenantId)))
                 .as("the second bootstrap must not create a second Admin role")
                 .filteredOn(role -> "Admin".equalsIgnoreCase(role.getName()))
                 .hasSize(1);
-        User after = userRepository.findByTenantIdAndUsernameIgnoreCase(tenantId, ADMIN_USERNAME).orElseThrow();
+        User after = inTenantDatabase(tenantId, () -> userRepository
+                .findByTenantIdAndUsernameIgnoreCase(tenantId, ADMIN_USERNAME).orElseThrow());
         assertThat(after.getId()).isEqualTo(before.getId());
         assertThat(after.getEmail())
                 .as("an existing admin's email must not be rewritten by a re-bootstrap")

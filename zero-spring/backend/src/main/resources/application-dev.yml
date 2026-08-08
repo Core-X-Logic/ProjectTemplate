@@ -6,6 +6,22 @@ logging:
 spring:
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5433/zero}
+  flyway:
+    # RLS taban çizgisi Adım 1: dev'de de kimlikler ayrı. `docker-compose.yml` postgres'i
+    # POSTGRES_USER=postgres (şifre `postgres`) ile açar ve o kümede superuser'dır — V11'in
+    # CREATE ROLE yetkisi oradan gelir. Uygulama ise `zero_app` ile bağlanır (application.yml).
+    #
+    # ⚠️ url datasource.url İLE BİRLİKTE taşınır. Dev postgres'i host'ta 5433'te (base varsayılan
+    # 5432). Yalnız datasource'u override etmek Flyway'i 5432'deki BAŞKA bir veritabanına bağlar
+    # ve hata "migration'lar uygulandı ama şema boş" şeklinde çok geride çıkar.
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/zero}
+    user: ${DB_MIGRATION_USER:postgres}
+    password: ${DB_MIGRATION_PASSWORD:postgres}
+    # SIRA — temiz bir dev veritabanında `zero_app` henüz YOKTUR ve onu V11 yaratır. Bu
+    # çalışır çünkü veritabanına ilk dokunan Flyway'dir: Flyway kendi bağlantısını
+    # spring.flyway.* ile kurar, Hikari havuzu ise ilk `getConnection()`e kadar hiç bağlantı
+    # açmaz ve o an Flyway çoktan bitmiştir. Yani ne temiz kurulumda ne de mevcut dev
+    # veritabanında el ile bir adım gerekir; `docker compose up -d` + boot yeterlidir.
   data:
     redis:
       port: ${REDIS_PORT:6380}

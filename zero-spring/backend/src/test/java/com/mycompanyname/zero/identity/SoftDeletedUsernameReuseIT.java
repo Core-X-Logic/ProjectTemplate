@@ -109,9 +109,14 @@ class SoftDeletedUsernameReuseIT extends AbstractIntegrationIT {
                 "roleNames", Set.of("Admin"));
     }
 
+    /**
+     * Raw SQL against a policed table (V12), from a thread that crosses no {@code @Service} boundary:
+     * with no context this reads 0 rows and {@code queryForObject} raises. Host is the right one here
+     * — the claim is about the row's stored state, not about any tenant's view of it.
+     */
     private boolean rowIsSoftDeleted(long userId) {
-        Boolean deleted = jdbcTemplate.queryForObject(
-                "select deleted from users where id = ?", Boolean.class, userId);
+        Boolean deleted = asHostDatabase(() -> jdbcTemplate.queryForObject(
+                "select deleted from users where id = ?", Boolean.class, userId));
         return Boolean.TRUE.equals(deleted);
     }
 

@@ -166,7 +166,7 @@ class TokenRevocationIT extends AbstractIntegrationIT {
     void disablingTwoFactorRevokesOutstandingTokens() throws Exception {
         long userId = createTwoFactorHostUser();
         // A 2FA user cannot log in for a token (login returns a challenge), so mint one directly.
-        User user = userRepository.findById(userId).orElseThrow();
+        User user = asHostDatabase(() -> userRepository.findById(userId).orElseThrow());
         String older = jwtService.issueAccessToken(user, Set.of());
 
         Thread.sleep(1100);
@@ -187,15 +187,17 @@ class TokenRevocationIT extends AbstractIntegrationIT {
         return restTemplate.exchange("/api/auth/me", HttpMethod.GET, new HttpEntity<>(headers), JsonNode.class);
     }
 
+    // The three helpers below write and read host-global `users` rows, which since V12 only the
+    // host branch of the policy reaches — and a test thread publishes no context of its own.
     private long createHostUser() {
-        return userRepository.saveAndFlush(newHostUser()).getId();
+        return asHostDatabase(() -> userRepository.saveAndFlush(newHostUser()).getId());
     }
 
     private long createTwoFactorHostUser() {
         User user = newHostUser();
         user.setTwoFactorEnabled(true);
         user.setTwoFactorSecret(fieldEncryptionService.encrypt("JBSWY3DPEHPK3PXP"));
-        return userRepository.saveAndFlush(user).getId();
+        return asHostDatabase(() -> userRepository.saveAndFlush(user).getId());
     }
 
     private User newHostUser() {
@@ -209,6 +211,6 @@ class TokenRevocationIT extends AbstractIntegrationIT {
     }
 
     private String usernameOf(long userId) {
-        return userRepository.findById(userId).orElseThrow().getUsername();
+        return asHostDatabase(() -> userRepository.findById(userId).orElseThrow().getUsername());
     }
 }

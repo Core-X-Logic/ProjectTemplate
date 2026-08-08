@@ -20,15 +20,22 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.security.SecureRandom;
+import java.time.Clock;
 import java.time.Instant;
-import java.util.Base64;
 import java.util.Optional;
 
 /**
  * Unauthenticated self-service account flows: forgot/reset password and email confirmation. These
  * operations are inherently cross-tenant (driven by a secret code or an explicit tenant name), so the
  * Hibernate tenant/host filter is disabled per call before issuing lookups.
+ *
+ * <p><b>The codes (R-44, V14).</b> Both secrets follow the invitation-token pattern: 32 random
+ * bytes, base64url, mailed once; only the SHA-256 hex is stored, next to an expiry. A code is
+ * usable only while its hash matches AND its expiry is in the future — expiry is derived at read
+ * time from {@link Clock}, never persisted as a state (a scheduled writer would be a
+ * {@code @Component} without a GUC and would silently see 0 rows on the policed {@code users}
+ * table — the R-46 class). Legacy plaintext codes issued before V14 match nothing (their hash was
+ * never stored) and are therefore invalid by construction: fail-closed, no migration data surgery.
  *
  * <p>Password strength ({@link PasswordPolicyValidator}) and the account fields it mutates are owned
  * by the identity module; email delivery is delegated to the notification module.
@@ -39,9 +46,6 @@ import java.util.Optional;
 @Slf4j
 public class AccountService {
 
-    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
-    private static final int CODE_BYTES = 32;
-
     private final UserRepository userRepository;
     private final TenantRepository tenantRepository;
     private final PasswordEncoder passwordEncoder;
@@ -50,6 +54,7 @@ public class AccountService {
     private final EmailSender emailSender;
     private final EmailTemplateService emailTemplateService;
     private final MessageSource messageSource;
+    private final Clock clock;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -67,20 +72,28 @@ public class AccountService {
             return;
         }
         User user = match.get();
-        String code = randomCode();
-        user.setPasswordResetCode(code);
+        String code = AccountRecoveryCodes.newCode();
+        // R-44: only the hash is persisted; the raw code lives exclusively in the mail below.
+        user.setPasswordResetCodeHash(AccountRecoveryCodes.sha256(code));
+        user.setPasswordResetCodeExpiresAt(clock.instant().plus(AccountRecoveryCodes.RESET_CODE_VALIDITY));
         userRepository.save(user);
         String body = emailTemplateService.passwordReset(user.getUsername(), code);
         emailSender.send(user.getEmail(), subject("Email.PasswordReset.Subject"), body);
     }
 
     /**
-     * Applies a new password given a valid reset code, enforcing the password policy and clearing the
-     * consumed code.
+     * Applies a new password given a valid, unexpired reset code, enforcing the password policy and
+     * clearing the consumed code.
      */
     public void resetPassword(String resetCode, String newPassword) {
         disableTenantFilters();
-        User user = findSingle("select u from User u where u.passwordResetCode = :code", resetCode)
+        // Message text is a contract, not prose: the reset screen tells a code rejection apart from
+        // a password rejection by detail prefix ("Invalid or expired…" vs "Password…"), and
+        // PasswordPolicyIT pins the exact string. Change it only together with both.
+        // Unknown and expired collapse into the same message on purpose — telling them apart would
+        // confirm to a code-guessing caller which codes EXIST.
+        User user = findByCodeHash("select u from User u where u.passwordResetCodeHash = :hash", resetCode)
+                .filter(candidate -> isUsable(candidate.getPasswordResetCodeExpiresAt()))
                 .orElseThrow(() -> DomainException.validation("Invalid or expired reset code"));
         // Same policy + history semantics as the authenticated change-password flow, resolved against
         // the target user's tenant (there is no authenticated caller during an anonymous reset).
@@ -89,22 +102,25 @@ public class AccountService {
         passwordHistoryService.checkNotRecentlyUsed(user.getId(), newPassword, policy.historyCount());
         String previousHash = user.getPasswordHash();
         user.setPasswordHash(passwordEncoder.encode(newPassword));
-        user.setPasswordResetCode(null);
+        user.setPasswordResetCodeHash(null);
+        user.setPasswordResetCodeExpiresAt(null);
         user.setShouldChangePassword(false);
-        user.setLastPasswordChangeAt(Instant.now());
+        user.setLastPasswordChangeAt(clock.instant());
         userRepository.save(user);
         passwordHistoryService.record(user.getId(), previousHash);
     }
 
     /**
-     * Confirms an email address given a valid confirmation code.
+     * Confirms an email address given a valid, unexpired confirmation code.
      */
     public void confirmEmail(String code) {
         disableTenantFilters();
-        User user = findSingle("select u from User u where u.emailConfirmationCode = :code", code)
+        User user = findByCodeHash("select u from User u where u.emailConfirmationCodeHash = :hash", code)
+                .filter(candidate -> isUsable(candidate.getEmailConfirmationCodeExpiresAt()))
                 .orElseThrow(() -> DomainException.validation("Invalid confirmation code"));
         user.setEmailConfirmed(true);
-        user.setEmailConfirmationCode(null);
+        user.setEmailConfirmationCodeHash(null);
+        user.setEmailConfirmationCodeExpiresAt(null);
         userRepository.save(user);
     }
 
@@ -126,12 +142,18 @@ public class AccountService {
                 .or(() -> userRepository.findByTenantIdAndEmailIgnoreCase(tenantId, value));
     }
 
-    private Optional<User> findSingle(String jpql, String code) {
-        if (code == null || code.isBlank()) {
+    /** True while the expiry exists and lies in the future. A null expiry refuses (fail-closed). */
+    private boolean isUsable(Instant expiresAt) {
+        return expiresAt != null && clock.instant().isBefore(expiresAt);
+    }
+
+    /** Resolves a RAW mailed code to its owner by stored SHA-256 (R-44); blank input matches nothing. */
+    private Optional<User> findByCodeHash(String jpql, String rawCode) {
+        if (rawCode == null || rawCode.isBlank()) {
             return Optional.empty();
         }
         return entityManager.createQuery(jpql, User.class)
-                .setParameter("code", code)
+                .setParameter("hash", AccountRecoveryCodes.sha256(rawCode.trim()))
                 .setMaxResults(1)
                 .getResultList()
                 .stream()
@@ -152,9 +174,4 @@ public class AccountService {
         return messageSource.getMessage(key, null, key, LocaleContextHolder.getLocale());
     }
 
-    private static String randomCode() {
-        byte[] bytes = new byte[CODE_BYTES];
-        SECURE_RANDOM.nextBytes(bytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-    }
 }

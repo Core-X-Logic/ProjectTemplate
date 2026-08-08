@@ -126,6 +126,11 @@ Claude Code kullanıyorsanız `/preflight` ve `/new-module` komutları ile `tech
 | Güvenlik | Rate limit, gövde sınırı, güvenlik başlıkları, CORS allowlist, secret taraması |
 | Gözlemlenebilirlik | Actuator (yetkili), Prometheus metrikleri, yapısal log |
 
-**Hazır olmayanlar** `RISK-REGISTER.md`'de açıkça listelenmiştir — özellikle şifre sıfırlama
-ekranı, dosya yükleme, kullanıcı daveti ve ödeme sağlayıcı entegrasyonu. Şablon size ne
-verdiğini olduğu kadar **ne vermediğini** de söyler.
+**Hazır olmayanlar** `RISK-REGISTER.md`'de açıkça listelenmiştir — özellikle dosya yükleme ve
+ödeme sağlayıcı entegrasyonunun canlı doğrulaması. Şablon size ne verdiğini olduğu kadar
+**ne vermediğini** de söyler. *(Bu listede uzun süre "şifre sıfırlama ekranı" ve "kullanıcı
+daveti" de yazıyordu; kayıt bayattı — ekranlar `5bc76d7`'den beri uçtan uca var
+(`features/account`: forgot/reset/confirm, login'den bağlantılı, en+tr, `PasswordPolicyIT`),
+davet akışı da artık şablonda (`/api/invitations` + `/account/accept-invitation`,
+`InvitationFlowIT`). Türetilmiş bir projenin keşif turu yanlışı yakaladı, kod değil kayıt
+düzeltildi.)*

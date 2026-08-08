@@ -215,9 +215,13 @@ class TwoFactorLoginIT extends AbstractTwoFactorIT {
     void aCorruptStoredSecretFailsClosedWithNoToken() {
         TwoFactorUser user = createHostUserWithTwoFactor(PASSWORD, 3);
         // Inject a fault: overwrite the stored ciphertext with something that cannot be decrypted.
-        User row = userRepository.findById(user.userId()).orElseThrow();
-        row.setTwoFactorSecret("not-valid-ciphertext");
-        userRepository.saveAndFlush(row);
+        // asHostDatabase because `users` is policed since V12 and a test thread announces no context
+        // of its own; the row is host-global, which only the host branch can reach anyway.
+        asHostDatabase(() -> {
+            User row = userRepository.findById(user.userId()).orElseThrow();
+            row.setTwoFactorSecret("not-valid-ciphertext");
+            userRepository.saveAndFlush(row);
+        });
 
         ResponseEntity<JsonNode> response = verify(null, loginForChallenge(user), currentTotp(user.secret()));
         assertThat(response.getStatusCode())
@@ -234,7 +238,7 @@ class TwoFactorLoginIT extends AbstractTwoFactorIT {
     void theSecretIsStoredAsCiphertextAndRecoveryCodesAsHashes() {
         TwoFactorUser user = createHostUserWithTwoFactor(PASSWORD, 3);
 
-        User row = userRepository.findById(user.userId()).orElseThrow();
+        User row = asHostDatabase(() -> userRepository.findById(user.userId()).orElseThrow());
         assertThat(row.getTwoFactorSecret())
                 .as("the TOTP secret must never sit in the database in clear text")
                 .isNotEqualTo(user.secret());

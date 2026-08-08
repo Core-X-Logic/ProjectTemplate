@@ -62,9 +62,13 @@ class MeShouldChangePasswordIT extends AbstractIntegrationIT {
                 .isFalse();
 
         // Flag the user (there is no API for this yet; set it directly like an operator would).
-        User user = userRepository.findById(userId).orElseThrow();
-        user.setShouldChangePassword(true);
-        userRepository.save(user);
+        // asHostDatabase: `users` is policed since V12 and a test thread announces no context —
+        // and "like an operator would" is exactly the host context this stands in for.
+        asHostDatabase(() -> {
+            User user = userRepository.findById(userId).orElseThrow();
+            user.setShouldChangePassword(true);
+            userRepository.save(user);
+        });
 
         // A new session must now report the flag as true.
         HttpHeaders flagged = bearerHeaders(accessToken(DEFAULT_TENANT, username, "Password123!"), DEFAULT_TENANT);

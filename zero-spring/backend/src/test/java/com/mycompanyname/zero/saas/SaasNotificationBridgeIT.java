@@ -59,13 +59,19 @@ class SaasNotificationBridgeIT extends AbstractSaasIT {
 
     /** All saas.subscription.* notification names delivered to the tenant's bootstrap admin. */
     private List<String> saasNotificationNames(long tenantId) {
-        User admin = userRepository.findByTenantIdAndUsernameIgnoreCase(tenantId, "admin")
-                .orElseThrow(() -> new AssertionError("bootstrap admin missing for tenant " + tenantId));
-        return userNotificationRepository
-                .findByUserIdOrderByCreatedAtDesc(admin.getId(), PageRequest.of(0, 50))
-                .getContent().stream()
-                .map(UserNotification::getNotificationName)
-                .filter(name -> name != null && name.startsWith("saas.subscription."))
-                .toList();
+        // inTenantDatabase: `users` is policed since V12 and `user_notifications` since V13; a test
+        // thread crosses no @Service boundary, so an unwrapped read answers 0 rows — here that false
+        // zero would even AGREE with the "no noise" assertions, certifying nothing.
+        return inTenantDatabase(tenantId, () -> {
+            User admin = userRepository
+                    .findByTenantIdAndUsernameIgnoreCase(tenantId, "admin")
+                    .orElseThrow(() -> new AssertionError("bootstrap admin missing for tenant " + tenantId));
+            return userNotificationRepository
+                    .findByUserIdOrderByCreatedAtDesc(admin.getId(), PageRequest.of(0, 50))
+                    .getContent().stream()
+                    .map(UserNotification::getNotificationName)
+                    .filter(name -> name != null && name.startsWith("saas.subscription."))
+                    .toList();
+        });
     }
 }

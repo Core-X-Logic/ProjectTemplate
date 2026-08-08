@@ -24,12 +24,21 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>Tenant users are enrolled through the repository so they need no subscription (the pre-login
  * endpoints are subscription-exempt, so login/verify/me all work for them regardless).
  *
- * <p><b>What the isolation actually rests on.</b> The challenge resolves its user by primary key, and a
- * primary-key load bypasses the Hibernate tenant {@code @Filter} — so the resolution is by id, and the
- * minted token's tenant comes authoritatively from THAT user's own {@code tenant_id} (JwtService reads
- * it), never from the X-Tenant header on the verify call. The header therefore cannot be used to cross
- * tenants: redeeming tenant A's challenge under tenant B's header still yields a tenant-A token, which
- * {@code AuthenticatedTenantFilter} then only lets tenant A read. That is the property proven below.
+ * <p><b>What the isolation actually rests on.</b> The challenge resolves its user by primary key, and
+ * the minted token's tenant comes authoritatively from THAT user's own {@code tenant_id} (JwtService
+ * reads it), never from the X-Tenant header on the verify call. The header therefore cannot be used to
+ * cross tenants.
+ *
+ * <p><b>V12 made the wrong-header case stricter, and that is a real behaviour change.</b> A
+ * primary-key load bypasses the Hibernate tenant {@code @Filter}, so redeeming tenant A's challenge
+ * under tenant B's header used to SUCCEED and hand back a tenant-A token — safe, because
+ * {@code AuthenticatedTenantFilter} then only let tenant A use it, but a cross-tenant read all the
+ * same. Row-level security has no {@code find()} exemption: under tenant B's setting the tenant-A user
+ * row is simply not there, so {@code verifyTwoFactor} takes its "the challenge points at a user who
+ * can no longer complete 2FA" path — burn the challenge, answer the same generic 401 every other 2FA
+ * failure answers. Fail-closed, no oracle, and the header now buys strictly less than before. The two
+ * tests below pin both halves: the correct header still mints the user's own tenant, and the wrong one
+ * is refused outright.
  */
 class TwoFactorTenantIsolationIT extends AbstractTwoFactorIT {
 
@@ -58,24 +67,45 @@ class TwoFactorTenantIsolationIT extends AbstractTwoFactorIT {
                 .isEqualTo(tenantId);
     }
 
+    /**
+     * Redeeming tenant A's challenge under tenant B's header. Before V12 this SUCCEEDED and returned a
+     * tenant-A token (harmless downstream, but a cross-tenant read: the primary-key load bypassed the
+     * Hibernate filter). The row-level policy has no such exemption, so the verify path can no longer
+     * see that user at all and fails closed with the generic 2FA 401.
+     *
+     * <p>Both properties are asserted, because "it is refused" alone would also be satisfied by an
+     * endpoint that had simply broken: the SAME user, with the SAME secret, must still complete a fresh
+     * challenge under its own header. That control is what makes the refusal about the header.
+     */
     @Test
-    void theMintedTokensTenantComesFromTheUserNotTheVerifyHeader() {
+    void redeemingAChallengeUnderAnotherTenantsHeaderIsRefusedAndMintsNothing() {
         long tenantA = ensureTenant(TENANT_A);
         long tenantB = ensureTenant(TENANT_B);
         assertThat(tenantA).isNotEqualTo(tenantB);
 
         TwoFactorUser user = createUserWithTwoFactor(tenantA, PASSWORD, 2);
-        String challenge = loginForChallenge(TENANT_A, user);
 
-        // Redeem tenant A's challenge while sending tenant B's header. The challenge resolves its user
-        // by id, so verification succeeds — but the token it mints is tenant A's, never tenant B's.
-        ResponseEntity<JsonNode> verified = verify(TENANT_B, challenge, currentTotp(user.secret()));
-        assertThat(verified.getStatusCode()).isEqualTo(HttpStatus.OK);
-        String accessToken = verified.getBody().path("accessToken").asText();
+        ResponseEntity<JsonNode> underWrongTenant =
+                verify(TENANT_B, loginForChallenge(TENANT_A, user), currentTotp(user.secret()));
+        assertThat(underWrongTenant.getStatusCode())
+                .as("under tenant B's setting the tenant-A user is not visible to the policy, so the "
+                        + "challenge resolves to nobody and the answer is the generic 2FA rejection — "
+                        + "no token, and no hint that the user exists in another tenant")
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(underWrongTenant.getBody().path("accessToken").isMissingNode()
+                || underWrongTenant.getBody().path("accessToken").asText("").isBlank())
+                .as("a refused verification must mint nothing at all")
+                .isTrue();
+
+        // Control: the same user completes a fresh challenge under its OWN header, and the token it
+        // gets is tenant A's — usable there, a 403 mismatch anywhere else.
+        ResponseEntity<JsonNode> underOwnTenant =
+                verify(TENANT_A, loginForChallenge(TENANT_A, user), currentTotp(user.secret()));
+        assertThat(underOwnTenant.getStatusCode())
+                .as("control: the refusal above is about the header, not about this user or its secret")
+                .isEqualTo(HttpStatus.OK);
+        String accessToken = underOwnTenant.getBody().path("accessToken").asText();
         assertThat(accessToken).isNotBlank();
-
-        // Proof the token is tenant A's, not B's: tenant B's header is a mismatch (403); tenant A's is
-        // accepted and reports tenant A. The X-Tenant header on verify bought no cross-tenant access.
         assertThat(me(TENANT_B, accessToken).getStatusCode())
                 .as("the minted token must NOT be usable as a tenant-B token")
                 .isEqualTo(HttpStatus.FORBIDDEN);

@@ -91,13 +91,19 @@ class SubscriptionExpiryNoticeIT extends AbstractSaasIT {
     }
 
     private List<UserNotification> noticeNotifications(long tenantId) {
-        User admin = userRepository.findByTenantIdAndUsernameIgnoreCase(tenantId, "admin")
-                .orElseThrow(() -> new AssertionError("bootstrap admin missing for tenant " + tenantId));
-        return userNotificationRepository
-                .findByUserIdOrderByCreatedAtDesc(admin.getId(), PageRequest.of(0, 50))
-                .getContent().stream()
-                .filter(notification -> NOTICE_NAME.equals(notification.getNotificationName()))
-                .toList();
+        // inTenantDatabase: see SaasNotificationBridgeIT — `users` is policed since V12 and
+        // `user_notifications` since V13; this read is issued from the test thread, which announces
+        // no context of its own, so unwrapped it would answer 0 rows and hide a delivered notice.
+        return inTenantDatabase(tenantId, () -> {
+            User admin = userRepository
+                    .findByTenantIdAndUsernameIgnoreCase(tenantId, "admin")
+                    .orElseThrow(() -> new AssertionError("bootstrap admin missing for tenant " + tenantId));
+            return userNotificationRepository
+                    .findByUserIdOrderByCreatedAtDesc(admin.getId(), PageRequest.of(0, 50))
+                    .getContent().stream()
+                    .filter(notification -> NOTICE_NAME.equals(notification.getNotificationName()))
+                    .toList();
+        });
     }
 
     private String statusOf(long tenantId) {

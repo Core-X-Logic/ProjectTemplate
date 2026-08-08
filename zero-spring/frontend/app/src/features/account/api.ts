@@ -1,7 +1,9 @@
 import { apiFetch } from '@/api/client';
 import type {
+  AcceptInvitationRequest,
   ConfirmEmailRequest,
   ForgotPasswordRequest,
+  InvitationInfoDto,
   ResetPasswordRequest,
 } from './types';
 
@@ -45,6 +47,34 @@ export function resetPassword(body: ResetPasswordRequest): Promise<void> {
 /** `POST /api/account/confirm-email` — consumes an email confirmation code. */
 export function confirmEmail(body: ConfirmEmailRequest): Promise<void> {
   return apiFetch<void>(`${ACCOUNT_URL}/confirm-email`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Invitation accept                                                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * `GET /api/account/invitation?token=…` — what the accept screen may render
+ * before asking for a password (most importantly the admin-fixed username).
+ * The token is the only credential; an unusable one is a 400 whose single
+ * message never distinguishes unknown/expired/revoked.
+ */
+export function getInvitationInfo(token: string): Promise<InvitationInfoDto> {
+  return apiFetch<InvitationInfoDto>(
+    `${ACCOUNT_URL}/invitation?token=${encodeURIComponent(token)}`,
+  );
+}
+
+/**
+ * `POST /api/account/accept-invitation` — consumes the token and creates the
+ * account. 204 both on creation and on the deliberate no-op (already
+ * accepted): either way the next step is signing in.
+ */
+export function acceptInvitation(body: AcceptInvitationRequest): Promise<void> {
+  return apiFetch<void>(`${ACCOUNT_URL}/accept-invitation`, {
     method: 'POST',
     body: JSON.stringify(body),
   });

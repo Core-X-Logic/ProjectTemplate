@@ -8,8 +8,6 @@ import com.mycompanyname.zero.identity.repo.RoleRepository;
 import com.mycompanyname.zero.tenancy.TenantRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.util.HashSet;
@@ -44,13 +42,6 @@ class RolePermissionReconciliationIT extends AbstractIntegrationIT {
 
     @Autowired
     private TenantRepository tenantRepository;
-
-    private TransactionTemplate transactionTemplate;
-
-    @Autowired
-    void setTransactionManager(PlatformTransactionManager transactionManager) {
-        this.transactionTemplate = new TransactionTemplate(transactionManager);
-    }
 
     @Test
     void hostAdminRoleRegainsAPermissionThatIsMissingFromAnAlreadyProvisionedDatabase() {
@@ -101,7 +92,7 @@ class RolePermissionReconciliationIT extends AbstractIntegrationIT {
                     .as("a role the operator created and tailored by hand must survive untouched")
                     .containsExactlyInAnyOrderElementsOf(operatorChosen);
         } finally {
-            transactionTemplate.executeWithoutResult(status -> roleRepository.deleteById(roleId));
+            asHostDatabase(() -> roleRepository.deleteById(roleId));
         }
     }
 
@@ -137,16 +128,21 @@ class RolePermissionReconciliationIT extends AbstractIntegrationIT {
         return permissions;
     }
 
+    // Every helper below reads or writes `roles`, policed since V12. A test thread crosses no
+    // @Service boundary, so nothing publishes a context for it and an unwrapped read answers 0 rows.
+    // Host is the honest context: reconciliation is a cross-tenant, host-scope operation, and it is
+    // exactly what DataSeeder now announces for itself.
     private long hostAdminRoleId() {
-        return roleRepository.findByNameIgnoreCaseAndTenantIdIsNull(ADMIN_ROLE_NAME)
+        return asHostDatabase(() -> roleRepository.findByNameIgnoreCaseAndTenantIdIsNull(ADMIN_ROLE_NAME)
                 .orElseThrow(() -> new AssertionError("seeded host Admin role must exist"))
-                .getId();
+                .getId());
     }
 
     private long defaultTenantAdminRoleId() {
-        return roleRepository.findByTenantIdAndNameIgnoreCase(defaultTenantId(), ADMIN_ROLE_NAME)
+        return asHostDatabase(() -> roleRepository
+                .findByTenantIdAndNameIgnoreCase(defaultTenantId(), ADMIN_ROLE_NAME)
                 .orElseThrow(() -> new AssertionError("seeded default-tenant Admin role must exist"))
-                .getId();
+                .getId());
     }
 
     private long defaultTenantId() {
@@ -156,7 +152,7 @@ class RolePermissionReconciliationIT extends AbstractIntegrationIT {
     }
 
     private long createCustomTenantRole(String name, Set<String> permissions) {
-        return transactionTemplate.execute(status -> {
+        return asHostDatabase(() -> {
             Role role = new Role();
             role.setTenantId(defaultTenantId());
             role.setName(name);
@@ -170,7 +166,7 @@ class RolePermissionReconciliationIT extends AbstractIntegrationIT {
 
     /** The permission collection is LAZY, so every read and write needs an open transaction. */
     private void mutatePermissions(long roleId, Consumer<Set<String>> mutation) {
-        transactionTemplate.executeWithoutResult(status -> {
+        asHostDatabase(() -> {
             Role role = requireRole(roleId);
             mutation.accept(role.getPermissions());
             roleRepository.save(role);
@@ -178,11 +174,11 @@ class RolePermissionReconciliationIT extends AbstractIntegrationIT {
     }
 
     private Set<String> permissionsOf(long roleId) {
-        return transactionTemplate.execute(status -> new HashSet<>(requireRole(roleId).getPermissions()));
+        return asHostDatabase(() -> new HashSet<>(requireRole(roleId).getPermissions()));
     }
 
     private Instant updatedAtOf(long roleId) {
-        return transactionTemplate.execute(status -> requireRole(roleId).getUpdatedAt());
+        return asHostDatabase(() -> requireRole(roleId).getUpdatedAt());
     }
 
     private Role requireRole(long roleId) {

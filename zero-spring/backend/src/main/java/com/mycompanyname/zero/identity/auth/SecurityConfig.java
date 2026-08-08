@@ -113,6 +113,16 @@ public class SecurityConfig {
                                     "/api/auth/two-factor/verify").permitAll()
                             .requestMatchers("/api/account/forgot-password", "/api/account/reset-password",
                                     "/api/account/confirm-email").permitAll()
+                            // Invitation accept: the invitee holds no session — the mailed
+                            // single-use token IS the credential, verified in InvitationService
+                            // against its stored SHA-256. Two exact paths, no /api/account/**
+                            // wildcard (the next account endpoint must claim its grant here
+                            // deliberately): the GET shows the fixed username before a password is
+                            // chosen, the POST consumes the token. Both claimed by
+                            // @EndpointPolicy(ANONYMOUS) on InvitationAcceptController and
+                            // throttled via zero.ratelimit.paths.
+                            .requestMatchers("/api/account/invitation",
+                                    "/api/account/accept-invitation").permitAll()
                             .requestMatchers("/api/localization/**").permitAll()
                             // P2-A. Stripe calls this and holds no credential of ours; the
                             // authentication is the Stripe-Signature header, verified offline in

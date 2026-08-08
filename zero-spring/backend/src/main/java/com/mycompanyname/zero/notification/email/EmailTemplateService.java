@@ -54,6 +54,19 @@ public class EmailTemplateService {
         return render("email/password-reset", variables);
     }
 
+    /**
+     * Invitation mail. The {@code /account/accept-invitation} segment and the {@code token}
+     * parameter are a CONTRACT with the SPA route and its {@code INVITATION_TOKEN_QUERY_PARAM} —
+     * renaming either side alone breaks every invitation already sitting in an inbox.
+     */
+    public String invitation(String username, String token, long validHours) {
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("username", username);
+        variables.put("validHours", validHours);
+        variables.put("inviteUrl", baseUrl + "/account/accept-invitation?token=" + token);
+        return render("email/invitation", variables);
+    }
+
     public String emailConfirmation(String name, String confirmationCode) {
         Map<String, Object> variables = new HashMap<>();
         variables.put("name", nullToEmpty(name));

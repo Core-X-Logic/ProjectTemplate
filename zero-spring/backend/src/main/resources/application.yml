@@ -2,8 +2,15 @@ spring:
   application.name: zero-platform
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/zero}
-    username: ${DB_USER:zero}
-    password: ${DB_PASSWORD:zero}
+    # RLS taban çizgisi Adım 1 — KİMLİK AYRIMI. Uygulama runtime'ı artık migration kimliğinden AYRI
+    # bir role bağlanır: `zero_app` (NOSUPERUSER NOBYPASSRLS, V11__app_role.sql). Tek kimlikle
+    # RLS KANITLANAMAZ — owner FORCE olmadan kendi politikasını atlar, superuser her hâlükârda
+    # atlar, izolasyon testleri politika hiç çalışmadan yeşil döner (ADR-0018).
+    # Şifre varsayılanı, V11'in rolü yaratırken kullandığı commit'li dev şifresidir; prod'da
+    # ikisinin de env'den gelmesi ZORUNLU (application-prod.yml) ve AppDbCredentialsValidator
+    # bu iki tuzağı açılışta reddeder.
+    username: ${DB_USER:zero_app}
+    password: ${DB_PASSWORD:zero_app_dev_password}
     # PROD-R9: an unsized pool defaults to 10 connections / 30 s timeout, which turns a slow query
     # into a cascade failure (every worker parks on connection acquisition). The timeout is kept
     # deliberately short so the request fails fast instead of holding a Tomcat thread hostage.
@@ -23,7 +30,20 @@ spring:
   jpa:
     hibernate.ddl-auto: validate
     open-in-view: false
-  flyway.enabled: true
+  flyway:
+    enabled: true
+    # Migration kimliği datasource'tan AYRI (ADR-0018). DDL, rol yaratma ve politika yaratma
+    # yetkisi owner/superuser'da kalır; runtime rolünde kalması RLS'i süs yapardı.
+    # Varsayılan `postgres`, dev postgres'inin superuser'ı (docker-compose.yml).
+    #
+    # ⚠️ url'i BİLEREK datasource ile aynı placeholder'a bağlıyoruz: ikisi tek `DB_URL` ile
+    # birlikte hareket etsin. Bir profil datasource.url'i override ediyorsa BUNU DA override
+    # etmeli — yalnız birini taşımak Flyway'i başka bir veritabanına bağlar ve "migration'lar
+    # uygulandı" görünürken uygulama boş şemaya bağlanır. application-dev.yml ikisini birlikte
+    # taşır; AbstractIntegrationIT ikisini birlikte Testcontainers'a yönlendirir.
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/zero}
+    user: ${DB_MIGRATION_USER:postgres}
+    password: ${DB_MIGRATION_PASSWORD:postgres}
   cache:
     # dev/test default: in-memory. Prod switches to redis (application-prod.yml, F5-ARCHITECTURE §6).
     type: ${CACHE_TYPE:simple}
@@ -206,7 +226,11 @@ zero:
     # the login endpoints — an unmetered verify is a channel for brute-forcing a 6-digit TOTP against a
     # live challenge. SecurityPathBindingIT.everyAnonymousBodyHandlerIsThrottled DERIVES this
     # obligation from the ANONYMOUS @RequestBody handlers, so omitting it fails the build.
-    paths: /api/auth/login,/api/auth/refresh,/api/auth/two-factor/verify,/api/account/forgot-password,/api/account/reset-password,/api/account/confirm-email,/api/billing/webhook/stripe,/api/billing/webhook/paytr,/api/billing/webhook/iyzico,/api/billing/callback/iyzico
+    # Davet akışı: /api/account/accept-invitation anonim bir @RequestBody ucudur (bcrypt + DB'ye
+    # gider), SecurityPathBindingIT bunu zorunlu kılar; /api/account/invitation gövdesiz bir GET
+    # olduğu için türetilmez ama BİLEREK listede — token tahmini için ölçülmemiş bir kanal
+    # bırakmamak için (confirm-email'in bir dönem listeden düşmüş olması aynı sınıftı, R-38A-3).
+    paths: /api/auth/login,/api/auth/refresh,/api/auth/two-factor/verify,/api/account/forgot-password,/api/account/reset-password,/api/account/confirm-email,/api/account/invitation,/api/account/accept-invitation,/api/billing/webhook/stripe,/api/billing/webhook/paytr,/api/billing/webhook/iyzico,/api/billing/callback/iyzico
     # D4: the largest request body accepted on any path above, in bytes. Previously this existed only
     # as a default inside RateLimitProperties, which made a load-bearing security parameter invisible
     # to whoever operates the deployment. A body over this is refused with 413 rather than forwarded

@@ -82,14 +82,14 @@ class SeedHardeningIT extends AbstractIntegrationIT {
         assertThat(permissionsOf(roleId))
                 .as("arrange step must actually strip the permission")
                 .doesNotContain(AppPermissions.EDITIONS_MANAGE);
-        long usersBefore = userRepository.count();
+        long usersBefore = asHostDatabase(() -> userRepository.count());
 
         runSeeder(seederWith(false, true, ""));
 
         assertThat(permissionsOf(roleId))
                 .as("with seeding off and reconciliation on, the drift must still be repaired")
                 .containsExactlyInAnyOrderElementsOf(AppPermissions.all());
-        assertThat(userRepository.count())
+        assertThat(asHostDatabase(() -> userRepository.count()))
                 .as("reconciliation must not seed anything — it repairs roles, it does not provision")
                 .isEqualTo(usersBefore);
     }
@@ -159,14 +159,17 @@ class SeedHardeningIT extends AbstractIntegrationIT {
         transactionTemplate.executeWithoutResult(status -> seeder.run(null));
     }
 
+    // Every helper below reads or writes `roles`/`users`, policed since V12. A test thread crosses
+    // no @Service boundary, so it has to announce its own context; host is the honest one — these are
+    // host-global rows, and host is exactly what DataSeeder now announces for itself.
     private long hostAdminRoleId() {
-        return roleRepository.findByNameIgnoreCaseAndTenantIdIsNull(ADMIN_ROLE_NAME)
+        return asHostDatabase(() -> roleRepository.findByNameIgnoreCaseAndTenantIdIsNull(ADMIN_ROLE_NAME)
                 .orElseThrow(() -> new AssertionError("seeded host Admin role must exist"))
-                .getId();
+                .getId());
     }
 
     private void mutatePermissions(long roleId, Consumer<Set<String>> mutation) {
-        transactionTemplate.executeWithoutResult(status -> {
+        asHostDatabase(() -> {
             Role role = requireRole(roleId);
             mutation.accept(role.getPermissions());
             roleRepository.save(role);
@@ -174,7 +177,7 @@ class SeedHardeningIT extends AbstractIntegrationIT {
     }
 
     private Set<String> permissionsOf(long roleId) {
-        return transactionTemplate.execute(status -> new HashSet<>(requireRole(roleId).getPermissions()));
+        return asHostDatabase(() -> new HashSet<>(requireRole(roleId).getPermissions()));
     }
 
     private Role requireRole(long roleId) {

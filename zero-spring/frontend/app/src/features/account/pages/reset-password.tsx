@@ -39,6 +39,25 @@ interface ResetPasswordFormValues {
 }
 
 /**
+ * True when a 400 from `POST /api/account/reset-password` rejects the PASSWORD
+ * rather than the code. Both failures arrive as `code: VALIDATION`, so only
+ * `detail` tells them apart — a contract with the backend's message prefixes:
+ * `PasswordPolicyValidator` ("Password does not meet policy: …", "Password
+ * must not be empty") and `PasswordHistoryService` ("Password was used
+ * recently; …") all start with "Password", while a stale/unknown code is
+ * "Invalid or expired reset code" (`AccountService`, pinned by
+ * `PasswordPolicyIT`). The split matters for recovery: a rejected password is
+ * fixed in the field, a rejected code is only fixed by requesting a new one.
+ */
+function isPasswordRejection(error: ApiError): boolean {
+  return (
+    error.status === 400 &&
+    typeof error.detail === 'string' &&
+    error.detail.startsWith('Password')
+  );
+}
+
+/**
  * "Reset password" (U-01, flow 1) — anonymous screen over
  * `POST /api/account/reset-password`.
  *
@@ -112,6 +131,15 @@ export function ResetPasswordPage() {
       setDone(true);
     } catch (error) {
       const fallback = intl.formatMessage({ id: 'account.reset.error' });
+      if (error instanceof ApiError && isPasswordRejection(error)) {
+        // The code is still valid; the password is what needs fixing. Editing
+        // the field re-runs the resolver and clears this server verdict.
+        form.setError('newPassword', {
+          type: 'server',
+          message: error.detail ?? fallback,
+        });
+        return;
+      }
       setServerError(
         error instanceof ApiError ? error.detail || fallback : fallback,
       );
@@ -240,12 +268,22 @@ export function ResetPasswordPage() {
                   />
 
                   {serverError && (
-                    <p
-                      role="alert"
-                      className="text-sm font-normal text-destructive"
-                    >
-                      {serverError}
-                    </p>
+                    <div className="flex flex-col gap-1">
+                      <p
+                        role="alert"
+                        className="text-sm font-normal text-destructive"
+                      >
+                        {serverError}
+                      </p>
+                      {/* A dead code cannot be revived from this form — the
+                          only way forward is asking for a fresh one. */}
+                      <Link
+                        to="/account/forgot-password"
+                        className="text-sm font-medium text-primary hover:underline"
+                      >
+                        <FormattedMessage id="account.reset.requestNew" />
+                      </Link>
+                    </div>
                   )}
 
                   <Button

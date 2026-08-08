@@ -8,6 +8,7 @@ import com.mycompanyname.zero.identity.repo.RoleRepository;
 import com.mycompanyname.zero.identity.repo.UserRepository;
 import com.mycompanyname.zero.saas.SaasSeeder;
 import com.mycompanyname.zero.shared.tenant.TenantContext;
+import com.mycompanyname.zero.tenancy.HibernateTenantFilterAspect;
 import com.mycompanyname.zero.tenancy.Tenant;
 import com.mycompanyname.zero.tenancy.TenantRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -92,6 +93,7 @@ public class DataSeeder implements ApplicationRunner {
         // transaction-scoped, so it is released by the commit or rollback below — no cleanup path can
         // leak it, unlike a row-based flag.
         acquireSeedLock();
+        announceHostContextToDatabase();
         TenantContext.clear();
         try {
             if (seedEnabled) {
@@ -149,6 +151,39 @@ public class DataSeeder implements ApplicationRunner {
     }
 
     /**
+     * Tells the database that this transaction runs as HOST, which the row-level policies of
+     * {@code V12__rls_identity.sql} onward read (ADR-0018). Without it this class cannot provision
+     * anything once {@code users} and {@code roles} are under policy.
+     *
+     * <p><b>Why it has to be written HERE and not left to the tenancy aspect.</b>
+     * {@code HibernateTenantFilterAspect} publishes the two settings for every {@code @Service}
+     * method ({@code within(@Service *)}); this class is a {@code @Component} implementing
+     * {@code ApplicationRunner}, so no join point of the pointcut is ever crossed on the way to
+     * {@code userRepository.save(...)} — and a repository call is not one either. With {@code users}
+     * and {@code roles} under policy, an unannounced context is not a leak but a REFUSAL: the seed's
+     * INSERTs violate {@code WITH CHECK} ("new row violates row-level security policy") and the
+     * application never finishes starting. ADR-0019 records the rule this is the first instance of —
+     * "reading a policed table from a {@code @Component} job is forbidden".
+     *
+     * <p><b>Why host and not per-tenant.</b> The seeder is host scope BY DEFINITION for
+     * {@link #seedHost()} ({@code tenant_id IS NULL} rows, which no tenant setting can ever match),
+     * and cross-tenant for {@link #reconcileTenantAdminRoles()}, which walks every tenant's static
+     * Admin role in one transaction. The host branch of the policy is the only one that covers both.
+     * The {@link TenantContext} switches below stay as they are: they steer entity-change auditing
+     * and the Hibernate filter, not this setting.
+     *
+     * <p>{@code is_local = true} keeps it transaction-scoped, so the pooled connection this seed
+     * borrows does not hand host authority to the first request that reuses it. Both public entry
+     * points bind it because {@link #reconcileStaticRolePermissions()} is also called directly
+     * (prod runs with seeding off; {@code RolePermissionReconciliationIT} calls it on the bean), and
+     * a self-invocation from {@link #run} simply rebinds the same value — idempotent.
+     */
+    private void announceHostContextToDatabase() {
+        jdbcTemplate.query("select set_config(?, ?, true)", resultSet -> null,
+                HibernateTenantFilterAspect.IS_HOST_SETTING, HibernateTenantFilterAspect.IS_HOST_ON);
+    }
+
+    /**
      * Reconciles the permission set of the STATIC {@code Admin} roles on every startup.
      *
      * <p>Why this cannot live inside {@link #seedIdentity()}: that step is keyed on the host admin
@@ -186,6 +221,7 @@ public class DataSeeder implements ApplicationRunner {
             log.info("Static role permission reconciliation skipped (zero.seed.reconcile-permissions=false)");
             return;
         }
+        announceHostContextToDatabase();
         TenantContext.clear();
         int updated;
         try {
