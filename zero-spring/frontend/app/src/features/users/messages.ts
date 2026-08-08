@@ -73,6 +73,35 @@ export const usersMessagesEn: Record<string, string> = {
   'users.activated': 'User activated.',
   'users.deactivated': 'User deactivated.',
   'users.exported': 'User list exported.',
+
+  // Invitations
+  'users.action.invite': 'Invite',
+  'users.action.invitations': 'Invitations',
+  'users.invite.title': 'Invite user',
+  'users.invite.description':
+    'An email with a single-use activation link will be sent. The invitee chooses their own password.',
+  'users.invite.usernameHint':
+    'The invitee signs in with this username; it cannot be changed on accept.',
+  'users.invite.emailHint': 'The invitation link is sent to this address.',
+  'users.invite.submit': 'Send invitation',
+  'users.invite.sent': 'Invitation sent.',
+  'users.invitations.title': 'Invitations',
+  'users.invitations.description':
+    'Pending invitations can be re-sent (a new link, new validity) or revoked.',
+  'users.invitations.empty': 'No invitations yet.',
+  'users.invitations.emptyDescription':
+    'Invite a user and the invitation will appear here.',
+  'users.invitations.loadError': 'Invitations could not be loaded.',
+  'users.invitations.column.status': 'Status',
+  'users.invitations.column.expiresAt': 'Expires',
+  'users.invitations.status.pending': 'Pending',
+  'users.invitations.status.accepted': 'Accepted',
+  'users.invitations.status.revoked': 'Revoked',
+  'users.invitations.status.expired': 'Expired',
+  'users.invitations.action.resend': 'Resend',
+  'users.invitations.action.revoke': 'Revoke',
+  'users.invitations.resent': 'Invitation re-sent.',
+  'users.invitations.revoked': 'Invitation revoked.',
 };
 
 export const usersMessagesTr: Record<string, string> = {
@@ -143,4 +172,33 @@ export const usersMessagesTr: Record<string, string> = {
   'users.activated': 'Kullanıcı aktifleştirildi.',
   'users.deactivated': 'Kullanıcı pasifleştirildi.',
   'users.exported': 'Kullanıcı listesi dışa aktarıldı.',
+
+  // Davetler
+  'users.action.invite': 'Davet et',
+  'users.action.invitations': 'Davetler',
+  'users.invite.title': 'Kullanıcı davet et',
+  'users.invite.description':
+    'Tek kullanımlık aktivasyon bağlantısı içeren bir e-posta gönderilir. Parolayı davet edilen kişi kendisi belirler.',
+  'users.invite.usernameHint':
+    'Davet edilen kişi bu kullanıcı adıyla giriş yapar; kabul sırasında değiştirilemez.',
+  'users.invite.emailHint': 'Davet bağlantısı bu adrese gönderilir.',
+  'users.invite.submit': 'Daveti gönder',
+  'users.invite.sent': 'Davet gönderildi.',
+  'users.invitations.title': 'Davetler',
+  'users.invitations.description':
+    'Bekleyen davetler yeniden gönderilebilir (yeni bağlantı, yeni süre) veya iptal edilebilir.',
+  'users.invitations.empty': 'Henüz davet yok.',
+  'users.invitations.emptyDescription':
+    'Bir kullanıcı davet ettiğinizde davet burada görünür.',
+  'users.invitations.loadError': 'Davetler yüklenemedi.',
+  'users.invitations.column.status': 'Durum',
+  'users.invitations.column.expiresAt': 'Son geçerlilik',
+  'users.invitations.status.pending': 'Bekliyor',
+  'users.invitations.status.accepted': 'Kabul edildi',
+  'users.invitations.status.revoked': 'İptal edildi',
+  'users.invitations.status.expired': 'Süresi doldu',
+  'users.invitations.action.resend': 'Yeniden gönder',
+  'users.invitations.action.revoke': 'İptal et',
+  'users.invitations.resent': 'Davet yeniden gönderildi.',
+  'users.invitations.revoked': 'Davet iptal edildi.',
 };

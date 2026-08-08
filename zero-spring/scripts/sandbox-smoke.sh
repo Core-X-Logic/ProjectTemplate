@@ -77,7 +77,7 @@ say "6/6 NEGATİF: callback-only yolun aktive ETMEDİĞİNİ panel + audit ile t
 cat <<'EOF'
   - Sağlayıcı panelinde bildirimin TESLİM EDİLDİĞİNİ gör (retry listesinde olmamalı).
   - subscription_events'te tek ACTIVE geçişi olmalı (duplicate teslimat ikinci satır üretmemeli):
-      docker compose exec postgres psql -U zero -d zero -c \
+      docker compose exec postgres psql -U postgres -d zero -c \
         "select count(*) from subscription_events where tenant_id=<TENANT_ID> and to_status='ACTIVE';"
   - iyzico için: panelden aynı bildirimi RESEND et -> uygulama 200 döner, sayaç ARTMAMALI.
 EOF

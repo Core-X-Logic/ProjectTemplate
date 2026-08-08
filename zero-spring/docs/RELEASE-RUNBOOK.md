@@ -499,7 +499,7 @@ Tarayıcıda prod URL → login → kullanıcı listesi. DevTools Network'te **C
 # çalışabilsin diye), dolayısıyla `zero-postgres` diye bir ad ARTIK YOK.
 # `docker compose exec` compose projesinin dizininden koşulmalı — yoksa `-f` ver:
 #   cd zero-spring/backend   ·   ya da   docker compose -f zero-spring/backend/docker-compose.yml ...
-docker compose exec postgres psql -U zero -d zero -c "select * from shedlock;"
+docker compose exec postgres psql -U postgres -d zero -c "select * from shedlock;"
 ```
 Beklenen: job ilk tetiklendikten sonra bir satır; `lock_until` geçmişte → job serbest.
 `locked_at` çok eski + `lock_until` gelecekte takılıysa → §5.5.
@@ -522,7 +522,7 @@ Bu yüzden deploy sonrası ve periyodik (önerilen: günlük) mutabakat zorunlu:
 # FAILED de taranır: PayTR'da failed → success MEŞRU bir sıralamadır (alıcı iframe içinde kartı
 # yeniden dener); success bildirimi kaçarsa para tahsil edilmiş, satır FAILED'de takılı kalır —
 # yalnız NOT_PAID tarayan sorgu tam bu şekli görmüyordu.
-docker compose exec postgres psql -U zero -d zero -c \
+docker compose exec postgres psql -U postgres -d zero -c \
   "select id, tenant_id, external_session_id, amount, currency, status, created_at \
      from payments where status in ('NOT_PAID','FAILED') \
      and created_at < now() - interval '1 hour' order by created_at;"
@@ -674,7 +674,7 @@ Bu surumde YENI migration var mi?
 
 ### 5.2 Senaryo 1 — DB bağlantısı
 *Belirti:* startup'ta `HikariPool-1 - Exception during pool initialization`, health `db: DOWN`, tüm uçlar 500.
-1. `docker compose exec postgres pg_isready -U zero -d zero` → DB ayakta mı? (ad değil servis — §3.8 notu)
+1. `docker compose exec postgres pg_isready -U postgres -d zero` → DB ayakta mı? (ad değil servis — §3.8 notu)
 2. Ayakta ise kimlik bilgisi: `DB_USER`/`DB_PASSWORD` env'i doğru mu (§1.2 komutu)?
 3. `FATAL: too many connections` ise → Hikari pool boyutu × instance sayısı > PG `max_connections`.
    İlk müdahale: fazla instance'ı durdur; kalıcı: `spring.datasource.hikari.maximum-pool-size` ayarla.
@@ -704,7 +704,7 @@ Sebep: secret deploy'lar arası değişti → eski token'lar doğrulanamıyor.
 *Belirti:* startup'ta `FlywayException: Migration V<n>__... failed` → uygulama hiç açılmaz.
 1. **Panikleme, DB'ye elle dokunma.** Önce durumu oku:
    ```bash
-   docker compose exec postgres psql -U zero -d zero \
+   docker compose exec postgres psql -U postgres -d zero \
      -c "select version, description, success, installed_on from flyway_schema_history order by installed_rank desc limit 5;"
    ```
 2. `success = false` satırı varsa → migration yarıda kaldı, şema **belirsiz** durumda.
@@ -718,7 +718,7 @@ Sebep: secret deploy'lar arası değişti → eski token'lar doğrulanamıyor.
 *Belirti:* abonelik durumları güncellenmiyor (trial bitmiş ama `TRIALING` kalmış), job log'u yok.
 1. Kilit durumunu oku:
    ```bash
-   docker compose exec postgres psql -U zero -d zero -c "select * from shedlock;"
+   docker compose exec postgres psql -U postgres -d zero -c "select * from shedlock;"
    ```
 2. `lock_until` **gelecekte** ve `locked_by` artık yaşamayan bir instance ise → kilit takılmış
    (job crash etti, lock süresi dolmadı). `zero.saas.lifecycle.lock-at-most-for` varsayılanı

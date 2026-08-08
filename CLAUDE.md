@@ -49,7 +49,8 @@ cd zero-spring/backend && docker compose up -d   # postgres:5433, redis:6380, ma
 
 # Konteynerlere SERVİS adıyla eriş, konteyner adıyla değil — `container_name` bilinçli olarak
 # yok (R-01b: bu şablondan türetilmiş iki proje aynı makinede çalışabilsin diye).
-docker compose exec postgres psql -U zero -d zero
+# Owner/superuser = `postgres` (şifre `postgres`); uygulama `zero_app` ile bağlanır (RLS taban çizgisi).
+docker compose exec postgres psql -U postgres -d zero
 docker compose exec redis redis-cli ping
 
 # Portlar çakışırsa (varsayılanlar 5433/6380/1025/8025 — application-dev.yml bunları bekler):

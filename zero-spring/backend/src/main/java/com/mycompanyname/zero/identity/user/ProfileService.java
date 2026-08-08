@@ -1,5 +1,6 @@
 package com.mycompanyname.zero.identity.user;
 
+import com.mycompanyname.zero.identity.auth.AccountRecoveryCodes;
 import com.mycompanyname.zero.identity.auth.CurrentUser;
 import com.mycompanyname.zero.identity.auth.TokenRevocationService;
 import com.mycompanyname.zero.identity.domain.Role;
@@ -22,10 +23,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.Set;
-import java.util.UUID;
 
 /**
  * Self-service profile management for the currently authenticated user. Operates strictly on the
@@ -45,6 +46,7 @@ public class ProfileService {
     private final MessageSource messageSource;
     /** Present only when zero.jwt.revocation.enabled is true; a no-op otherwise (PROD-R16). */
     private final ObjectProvider<TokenRevocationService> revocationServices;
+    private final Clock clock;
 
     @Transactional(readOnly = true)
     public ProfileDto getProfile() {
@@ -66,11 +68,14 @@ public class ProfileService {
                 && !request.email().isBlank()
                 && !request.email().equalsIgnoreCase(user.getEmail())) {
             // Changing the email invalidates confirmation; a fresh code is issued and a confirmation
-            // message is dispatched to the new address.
-            String code = newCode();
+            // message is dispatched to the new address. R-44 (V14): only the SHA-256 of the code is
+            // persisted, next to its expiry — the raw code lives exclusively in the mail.
+            String code = AccountRecoveryCodes.newCode();
             user.setEmail(request.email());
             user.setEmailConfirmed(false);
-            user.setEmailConfirmationCode(code);
+            user.setEmailConfirmationCodeHash(AccountRecoveryCodes.sha256(code));
+            user.setEmailConfirmationCodeExpiresAt(
+                    clock.instant().plus(AccountRecoveryCodes.CONFIRMATION_CODE_VALIDITY));
             sendEmailConfirmation(user, code);
         }
         return toDto(userRepository.save(user));
@@ -145,7 +150,4 @@ public class ProfileService {
                 roles);
     }
 
-    private static String newCode() {
-        return UUID.randomUUID().toString().replace("-", "");
-    }
 }

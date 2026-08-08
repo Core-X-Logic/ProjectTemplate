@@ -11,6 +11,99 @@
 
 ### Eklendi
 
+- **Kullanıcı daveti — uçtan uca akış (`identity/invitation`, `V15__user_invitations.sql`).**
+  `users.create` sahibi admin tek kullanımlık, süreli (72s) bir token postalar; davetli bağlantıdan
+  gelir, admin'in sabitlediği kullanıcı adını görür, parolasını seçer ve hesap kabulde aktif +
+  e-postası doğrulanmış doğar (token'ın o adrese gidip geri gelmesi doğrulamanın kendisidir).
+  - **Token:** 32 bayt `SecureRandom`, base64url; DB yalnız SHA-256 hex tutar (V14 reset/confirmation
+    deseniyle aynı — R-44). Tek kullanım guarded UPDATE ile (`transition`, affected-rows==1 —
+    read-then-write değil): çifte accept tek hesap üretir ve İLK parola korunur. `resend` hash'i
+    ezerek eski token'ı öldürür; `revoke` PENDING'i kapatır. Ayrı "EXPIRED" durumu bilinçli yok —
+    süre `expires_at`'ten okunur (zamanlanmış yazıcı R-46 sınıfı olurdu).
+  - **Tablo + RLS politikası TEK migration'da doğar** (V12 `organization_units` şekli, host-global
+    kol yok); `RlsCoverageIT` keşfi yeni tabloyu otomatik kapsar (taban 9 → keşif 10). Kısmi UNIQUE
+    indexler yalnız PENDING'i bağlar (`nulls not distinct` — host davetlerinde de teklik).
+  - **İzin:** `users.create` yeniden kullanıldı — davet, ertelenmiş kullanıcı yaratmadır; yeni izin
+    5-dosya kayıt + rol şablonu değişikliği maliyetine hiç kimsenin istemediği bir sınır çizerdi.
+    Anonim iki uç (`GET /api/account/invitation`, `POST /api/account/accept-invitation`) üçlü
+    yükümlülükle kayıtlı: SecurityConfig'te TAM path permitAll + `zero.ratelimit.paths` (GET de
+    BİLEREK listede — token tahmin kanalı) + `@EndpointPolicy(ANONYMOUS, SUBSCRIPTION_EXEMPT)`;
+    `SecurityPathBindingIT`/`SubscriptionExemptPathBindingIT` türetip doğruluyor. Koltuk sınırı
+    (`app.maxUserCount`) davet ANINDA değil kabul ANINDA ölçülür — bekleyen davet koltuk tutmaz.
+  - **Ölçülmüş iki gerçek tuzak, kodda gerekçeli** (kaynak projede kırmızı ölçüldü, buraya
+    düzeltilmiş haliyle geldi): (1) tenancy aspect'i her iç `@Service` girişinde Hibernate filtresini
+    yeniden kurar ve Hibernate 6 etkin filtreleri **bulk HQL mutasyonlarına da** uygular — anonim
+    akışta claim 0 satır güncelleyip geçerli token'a "Invalid invitation" diyordu; (2) koltuk sayacı
+    hostFilter altında her kiracı için 0 sayıp limiti hiç ısırmıyordu. Her bulk/varlık okuması öncesi
+    `disableTenantFilters()` ile kapatıldı (`InvitationService.claim` javadoc'u).
+  - **Frontend:** users ekranında davet + davet listesi dialogları (üçlü kilidin `<Can>` ayağı),
+    `/account/accept-invitation` sayfası (kullanıcı adı görüntülenir, parola belirlenir; ACCEPTED →
+    girişe yönlendirme, oracle yok), ayrı `invitation-*` modülleri (mevcut test mock fabrikaları
+    kırılmasın diye). ⚠️ Tipler ELLE bildirildi + `TODO(gen:api)` işaretli — bu depoda şema henüz
+    davet uçlarıyla yeniden üretilmedi; üretildiğinde alias'a çevrilmeli (elle kopya, backend alan
+    adı değişimini derleyiciden kaçırır).
+  - **Kanıt:** `InvitationFlowIT` (9/9 — mutlu yol + login, 403, oracle'sız 400'ler, expired+resend,
+    çifte accept, revoke, duplicate 409, kabul-anı koltuk sınırı, çapraz-tenant 404 + V15 RLS zemin
+    ölçümü `inTenantDatabase`/`asHostDatabase` ile); guard'lar yeşil.
+
+- **RLS taban çizgisi — PostgreSQL Row Level Security: kimlik ayrımı, GUC katmanı, politikalar ve
+  kapsam guard'ı (`R-08` Closed; ADR-0018 + ADR-0019).** Kiracı izolasyonu artık yalnız uygulama
+  katmanında (`@Filter`) değil, veritabanı zemininde de duruyor. Yığın, bu şablondan türetilmiş
+  projede üç kez doğrulanıp (oradaki kanıt: 15 mutasyon, 465 IT) buraya taşındı; `tenant_id`
+  taşıyan 9 tablonun 6'sı politikalı, 3'ü ADR-0019 ile bilinçli muaf.
+  - **Adım 1 — kimlik ayrımı, atlanamaz ön koşul.** Tek kimlikle RLS **kanıtlanamaz**: owner
+    `FORCE` olmadan kendi politikasını atlar, superuser her hâlükârda atlar → izolasyon testleri
+    politika hiç çalışmadan yeşil döner ve bunu söyleyen hiçbir satır olmaz. `V11__app_role.sql`
+    `zero_app` rolünü (`NOSUPERUSER NOBYPASSRLS`) yaratır; `spring.datasource` ile `spring.flyway`
+    kimlikleri ayrıldı (application*.yml, docker-compose `POSTGRES_USER=postgres`, ci.yml
+    `DB_USER=zero_app` + `DB_MIGRATION_USER=postgres`); `AppDbCredentialsValidator` prod'da
+    (datasource == migration kullanıcısı), (commit'li dev şifresi) ve (çözülmemiş `${...}`)
+    hâllerini açılışta reddeder. `AppDbIdentityIT` ayrımı **kilitler**: birinci iddia
+    `current_user == zero_app`, üçüncüsü `installed_by != zero_app` — kimlikler aynı olsa bu ikisi
+    mantıksal olarak birlikte geçemez.
+  - **Adım 2-3 — GUC katmanı + ADR-0018.** Tenant bağlamı `set_config(..., is_local=true)` ile
+    transaction-local yazılır (havuzda sızmaz); yazım Hibernate filtresini açan **aynı** aspect'te,
+    çünkü filtre kararı ile politika kararı aynı karardır. Her çağrıda iki ayar birlikte yazılır ve
+    karşı GUC boşaltılır — yoksa nested/context-switch çağrısında `OR is_host='on'` kolu kiracı
+    bağlamında true kalır ve izolasyon tamamen kalkar. Aspect çıkışta **çağıranın** bağlamını geri
+    kurar (materialized CTE ile oku-yaz tek round trip; abort edilmiş transaction'da restore
+    hatası suppressed olarak eklenir, gerçek hatayı gölgelemez). Politika şablonu
+    `nullif(current_setting(...), '')::bigint` — ölçüldü: `is_local=true` GUC transaction bitince
+    boş string'e döner, `''::bigint` NULL değil hata verir. Kanıt: `GucTenantContextIT` (10 test).
+  - **Adım 4 — politikalar.** `V12__rls_identity.sql` (`users`, `roles`, `organization_units`;
+    `users`/`roles` `USING`'inde ölçülmüş gerekçeli, kurulu-kiracı-bağlamına bağlı host-global
+    okuma kolu — `ImpersonationService.backToImpersonator()` — `WITH CHECK`'e bilinçli olarak
+    eklenmedi) + `V13__rls_audit_notification.sql` (`audit_logs`, `entity_changes`,
+    `user_notifications`; host-global kol YOK, host çapraz-tenant görünürlüğü ÜRÜN). `DataSeeder`
+    bir `@Component` olduğu için aspect'e uğramaz — kendi bağlamını açıkça yazar
+    (`announceHostContextToDatabase`); bu, ADR-0019'daki "`@Component` işten politikalı tabloya
+    erişim" kuralının ölçülmüş ilk örneği (`R-46`).
+  - **Adım 7 — kapsam guard'ı `RlsCoverageIT` (4 test).** Tablo listesi `information_schema`'dan
+    KEŞFEDİLİR (sabit liste yok — politikasız doğan yeni `tenant_id`'li tablo otomatik kırmızı);
+    keşif ≥ 9 taban assert'i boş-yeşili kapatır; `FORCE` da denetlenir; muafiyet listesi
+    ADR-0019'un makine-okunur satırından ayrıştırılıp test sabitiyle eşitlenir (drift = kırmızı;
+    otorite ADR, ekleme yeni ADR ister) ve muaf tablonun hem var hem politikasız olduğu iki yönlü
+    doğrulanır.
+  - **Bir davranış değişti, bilinçli ve daha sıkı:** 2FA verify'ını başka kiracının header'ıyla
+    kullanmak artık 200 + (kendi kiracısının) token değil, **401** — challenge kullanıcısını
+    primary key ile çözmek RLS altında çapraz-kiracı okumadır ve `@Filter`'ın aksine RLS'in
+    `find()` muafiyeti yoktur. `TwoFactorTenantIsolationIT` iki yarımı da assert eder (ret + aynı
+    kullanıcının kendi header'ıyla kontrol).
+  - **Uyarlanan testler:** `AbstractIntegrationIT` çift kimlik (Flyway=superuser, app=`zero_app`)
+    + `inTenantDatabase`/`asHostDatabase` yardımcıları aldı; 14 IT sınıfı test-thread
+    okuma/yazmalarında bağlamını **bildirir** hâle geldi (politikadan muaf tutulmadı):
+    `TenantFilterCoverageIT`, `TenantBootstrapIT`, `AbstractTwoFactorIT`, `TwoFactorLoginIT`,
+    `TwoFactorManagementIT`, `TokenRevocationIT`, `TokenRevocationSubSecondIT`,
+    `SoftDeletedUsernameReuseIT`, `MeShouldChangePasswordIT`, `SessionOwnershipIT`,
+    `SaasNotificationBridgeIT`, `SubscriptionExpiryNoticeIT`, `RolePermissionReconciliationIT`,
+    `SeedHardeningIT`, `ExportRowBoundIT`.
+  - **Kanıt (bu depoda):** 5 yeni IT sınıfı — `AppDbIdentityIT`(3) + `GucTenantContextIT`(10) +
+    `RlsIdentityIsolationIT`(8) + `RlsAuditNotificationIsolationIT`(11) + `RlsCoverageIT`(4) —
+    yeşil; migration+aspect taşınıp uyarlanmamış testlerle koşulduğunda `TenantBootstrapIT` 4/6 ve
+    `TenantFilterCoverageIT` 3/4 tam beklenen desenle kırmızıydı ("new row violates row-level
+    security policy" / fail-closed 0 satır) — uyarlamalar bu ölçümden sonra yapıldı. Artık
+    riskler: `R-45`, `R-46`, `R-47` (RISK-REGISTER).
+
 - **SaaS parite kapanışı: yaşam döngüsü bildirimleri + abonelik geçmişi UI + parite matrisi.**
   ASP.NET Zero SaaS davranışıyla kalem kalem parite ölçüldü ve iki kritik boşluk kapatıldı
   (`docs/SAAS-PARITY-MATRIX.md` — Tam/Tam+/Kısmi/Deferred + kanıt + bilinçli farklar):
@@ -90,6 +183,20 @@
 ### Kaldırıldı
 ### Düzeltildi
 
+- **Bayat kayıt: "şifre sıfırlama ekranı eksik" iddiası YANLIŞTI — kod değil kayıt düzeltildi.**
+  Kök `README.md` §6 ve `usage/FIRST-7-DAYS.md` Gün 2, "hazır olmayanlar" arasında şifre sıfırlama
+  ekranını (ve kullanıcı davetini) sayıyordu; oysa ekranlar `5bc76d7`'den (2026-07-19, "add the
+  account screens the backend already supported") beri uçtan uca var: `features/account` altında
+  forgot/reset/confirm sayfaları, login'den bağlantılı, en+tr, `PasswordPolicyIT` uçtan uca.
+  Yanlış, bu şablondan türetilmiş bir projenin keşif turunda yakalandı (oradaki denetim "ekran
+  eksik" diye iş açmıştı — kaynağı bu bayat kayıttı). İki doküman düzeltildi; davet akışı da bu
+  dilimle geldiği için listeden çıktı. Kayıtla birlikte üç GERÇEK boşluk da kapatıldı: politika
+  ihlali artık **alan hatası** olarak görünür (detail prefix sözleşmesi — "Password…" alan,
+  "Invalid or expired…" sayfa uyarısı; `reset-password.tsx` + davranış testi), geçersiz/bayat kodda
+  **"yeni kod isteyin"** bağlantısı (`account.reset.requestNew`), ve enumeration güvenliğinin
+  bilinmeyen-hesap yarısına IT kanıtı (aynı 204 + GreenMail'e posta GELMEDİĞİ assert edilir;
+  uydurma kod → 400, `PasswordPolicyIT`).
+
 - **Login: boş kiracı alanı bayat kalıcı kiracıyı temizliyor (`8f8452b`).** Eski davranış: alan
   doluysa `setTenant`, boşsa hiçbir şey — önceki oturumun kiracısı localStorage'da kalıyor ve her
   isteğe `X-Tenant` olarak biniyordu; "varsayılan için boş bırakın" bayat kiracıya giriş yapıyordu
@@ -110,6 +217,19 @@
   path'iyle eklendi (skill'ler mevcut; doğrulandı). Kod/CI akışı/test/konfig değişmedi.
 
 ### Güvenlik
+
+- **R-44 kapatıldı: şifre sıfırlama ve e-posta doğrulama kodları artık DB'de hash'li ve süreli
+  (`V14__reset_confirmation_code_hardening.sql` + `AccountRecoveryCodes`).** `password_reset_code`
+  ve `email_confirmation_code` V2'den beri düz metin ve süresizdi; "Invalid or expired reset code"
+  mesajındaki *expired* hiç gerçekleşmeyen bir koşuldu. Artık iki akış da davet token'ı deseninde:
+  DB yalnız SHA-256 hex + expiry tutar (reset **1 saat**, confirmation **72 saat**; süre `Clock`
+  üzerinden okuma anında türetilir), ham kod yalnız e-postada yaşar. Migration eski kolonlara
+  DOKUNMAZ: bekleyen kodlar TRUNCATE edilmez, yeni akış yalnız `*_hash` okur — NULL hash hiçbir
+  girdiyle eşleşmez (**fail-closed**), eski kolonlar rolling-deploy penceresi kapanınca ayrı V ile
+  düşülecek. Expired-vs-unknown aynı mesajla reddedilir (oracle yok). Kanıt `PasswordPolicyIT`:
+  DB zemininde saklanan değer postalanan kodun SHA-256'sı + legacy kolon NULL; `MutableClock` ile
+  1s+1dk sonra reset kodu 400 ve parola değişmemiş, 72s+1dk sonra confirmation kodu 400, taze kod
+  kendi penceresinde çalışıyor.
 
 - **Secret'lar repoya yazılmadı.** Registry + deploy kimlik bilgileri yalnız Actions Secrets/Variables
   ve prod secret store üzerinden tüketiliyor; `docker login` `--password-stdin` ile, kimlik bilgisi

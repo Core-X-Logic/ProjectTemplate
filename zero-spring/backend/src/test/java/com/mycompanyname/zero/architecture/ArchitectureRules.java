@@ -94,6 +94,12 @@ final class ArchitectureRules {
             "AccountController#forgotPassword",
             "AccountController#resetPassword",
             "AccountController#confirmEmail",
+            // SecurityConfig: "/api/account/invitation", "/api/account/accept-invitation" — the
+            // invitee has no session; the mailed single-use invitation token is the credential,
+            // verified against its stored SHA-256 in InvitationService. Both claim
+            // @EndpointPolicy(ANONYMOUS) and both are throttled via zero.ratelimit.paths.
+            "InvitationAcceptController#invitationInfo",
+            "InvitationAcceptController#acceptInvitation",
             // SecurityConfig: "/api/localization/**" — the login screen needs its dictionary before
             // it can offer a login form at all.
             "LocalizationController#languages",

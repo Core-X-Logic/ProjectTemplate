@@ -35,7 +35,7 @@ class TwoFactorManagementIT extends AbstractTwoFactorIT {
                 .as("setup returns the provisioning URI the authenticator imports")
                 .startsWith("otpauth://totp/");
 
-        User row = userRepository.findById(user.userId()).orElseThrow();
+        User row = asHostDatabase(() -> userRepository.findById(user.userId()).orElseThrow());
         assertThat(row.isTwoFactorEnabled())
                 .as("setup provisions a pending secret but must NOT switch 2FA on")
                 .isFalse();
@@ -61,7 +61,8 @@ class TwoFactorManagementIT extends AbstractTwoFactorIT {
                 .as("enable issues the configured number of recovery codes, once")
                 .isEqualTo(twoFactorProperties.getRecoveryCodeCount());
 
-        assertThat(userRepository.findById(user.userId()).orElseThrow().isTwoFactorEnabled()).isTrue();
+        assertThat(asHostDatabase(() -> userRepository.findById(user.userId()).orElseThrow())
+                .isTwoFactorEnabled()).isTrue();
 
         // End to end: the account now requires 2FA at login, and the enrolled secret verifies.
         ResponseEntity<JsonNode> loginResponse = login(null, user.username(), user.password());
@@ -85,7 +86,8 @@ class TwoFactorManagementIT extends AbstractTwoFactorIT {
         ResponseEntity<JsonNode> response = post("/api/profile/two-factor/enable", token,
                 Map.of("code", wrongTotp(secret)));
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(userRepository.findById(user.userId()).orElseThrow().isTwoFactorEnabled())
+        assertThat(asHostDatabase(() -> userRepository.findById(user.userId()).orElseThrow())
+                .isTwoFactorEnabled())
                 .as("a rejected confirmation must not enable 2FA")
                 .isFalse();
     }
@@ -100,12 +102,13 @@ class TwoFactorManagementIT extends AbstractTwoFactorIT {
         // wrong password is refused, 2FA stays on
         assertThat(post("/api/profile/two-factor/disable", token, Map.of("password", "wrong-password-1!"))
                 .getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(userRepository.findById(user.userId()).orElseThrow().isTwoFactorEnabled()).isTrue();
+        assertThat(asHostDatabase(() -> userRepository.findById(user.userId()).orElseThrow())
+                .isTwoFactorEnabled()).isTrue();
 
         // correct password disables and wipes the secret + recovery codes
         assertThat(post("/api/profile/two-factor/disable", token, Map.of("password", user.password()))
                 .getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
-        User row = userRepository.findById(user.userId()).orElseThrow();
+        User row = asHostDatabase(() -> userRepository.findById(user.userId()).orElseThrow());
         assertThat(row.isTwoFactorEnabled()).isFalse();
         assertThat(row.getTwoFactorSecret()).isNull();
         assertThat(recoveryCodeRepository.findByUserIdAndConsumedAtIsNull(user.userId())).isEmpty();
@@ -157,8 +160,9 @@ class TwoFactorManagementIT extends AbstractTwoFactorIT {
         assertThat(post("/api/profile/two-factor/enable", token, Map.of("code", currentTotp(secret)))
                 .getStatusCode()).isEqualTo(HttpStatus.OK);
 
-        assertThat(userRepository.findById(actor.userId()).orElseThrow().isTwoFactorEnabled()).isTrue();
-        User other = userRepository.findById(bystander.userId()).orElseThrow();
+        assertThat(asHostDatabase(() -> userRepository.findById(actor.userId()).orElseThrow())
+                .isTwoFactorEnabled()).isTrue();
+        User other = asHostDatabase(() -> userRepository.findById(bystander.userId()).orElseThrow());
         assertThat(other.isTwoFactorEnabled())
                 .as("one user enrolling in 2FA must not enable it for anyone else")
                 .isFalse();

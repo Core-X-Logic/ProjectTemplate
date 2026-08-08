@@ -24,6 +24,8 @@ silmeyin: yeni bir ADR yazın ve eskisini `Superseded by` ile işaretleyin — k
 | [0015](ADR-0015-saas-tenant-isolation.md) | SaaS'ta `@Filter` yok; host-only izin + explicit sorgu izolasyonu | Accepted |
 | [0016](ADR-0016-module-root-declaration-rule.md) | ArchUnit Rule 4 modül kökünün beyanını ölçer, entity'nin paketini değil | Accepted |
 | [0017](ADR-0017-payment-provider-strategy.md) | Ödeme sağlayıcı stratejisi — TR pazarı: PayTR + iyzico; Stripe uykuda | Accepted |
+| [0018](ADR-0018-rls-host-visibility.md) | RLS host görünürlüğü — bypass politikanın içinde, SECURITY DEFINER değil | Accepted |
+| [0019](ADR-0019-rls-exempt-tables.md) | RLS muafiyeti kapalı küme — yalnız `saas` tabloları (makine-okunur liste) | Accepted |
 
 ## Numara boşlukları
 
@@ -33,4 +35,4 @@ silmeyin: yeni bir ADR yazın ve eskisini `Superseded by` ile işaretleyin — k
   stratejisi kararıydı (greenfield parity build + tek seferlik ETL + big-bang cutover); yeni bir
   projede karşılığı yoktur.
 
-Yeni ADR eklerken numarayı **0016**'dan devam ettirin; boşlukları doldurmayın.
+Yeni ADR eklerken numarayı **0019**'dan devam ettirin; boşlukları doldurmayın.

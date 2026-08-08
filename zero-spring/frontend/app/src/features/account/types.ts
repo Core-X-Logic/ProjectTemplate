@@ -42,3 +42,43 @@ export const RESET_PASSWORD_MAX_LENGTH = 128;
  * alone breaks every link already sitting in a user's inbox.
  */
 export const CODE_QUERY_PARAM = 'code';
+
+/* -------------------------------------------------------------------------- */
+/* Invitation accept                                                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Same contract as {@link CODE_QUERY_PARAM}, for the invitation mail:
+ * `EmailTemplateService.invitation` builds
+ * `{baseUrl}/account/accept-invitation?token=…`.
+ */
+export const INVITATION_TOKEN_QUERY_PARAM = 'token';
+
+/**
+ * TODO(gen:api): HAND-DECLARED until the generated schema is regenerated with
+ * the invitation endpoints — then replace both with
+ * `components['schemas'][…]` aliases like everything above (a hand copy lets a
+ * backend field rename slip through the compiler).
+ *
+ * `InvitationInfoDto.status`: `PENDING` → show the password form; `ACCEPTED` →
+ * point at sign-in.
+ */
+export interface InvitationInfoDto {
+  username?: string | null;
+  email?: string | null;
+  status?: string;
+}
+
+/** TODO(gen:api): see above — mirrors backend `AcceptInvitationRequest`. */
+export interface AcceptInvitationRequest {
+  token: string;
+  password: string;
+}
+
+/**
+ * DTO floor of `AcceptInvitationRequest.password` (`@Size(min = 6, max = 128)`)
+ * — deliberately the same floor as the reset flow; the tenant `PasswordPolicy`
+ * is enforced on top server-side and surfaces as a ProblemDetail.
+ */
+export const INVITATION_PASSWORD_MIN_LENGTH = 6;
+export const INVITATION_PASSWORD_MAX_LENGTH = 128;

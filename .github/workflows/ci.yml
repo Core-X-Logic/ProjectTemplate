@@ -61,8 +61,18 @@ concurrency:
 env:
   # Tüm gate'lerde tek kaynaktan kullanılan CI Postgres koordinatları.
   DB_URL: jdbc:postgresql://localhost:5432/zero
-  DB_USER: zero
-  DB_PASSWORD: zero
+  # RLS taban çizgisi kimlik ayrımı: uygulama app rolüyle, Flyway owner'la bağlanır.
+  # `DB_USER` UYGULAMA kimliğidir; `zero` bırakılırsa jar'ı ayağa kaldıran gate'ler
+  # (live-smoke, migration-boot, typed-client-drift) superuser olarak boot eder ve
+  # RLS politikaları onları HİÇ kısıtlamaz — yani o gate'ler izolasyonu doğruluyor
+  # görünürken hiçbir şey doğrulamaz (FORCE ROW LEVEL SECURITY owner'ı bağlar,
+  # superuser'ı bağlamaz). Rolü ilk `flyway migrate` adımı V11 ile yaratır.
+  DB_USER: zero_app
+  DB_PASSWORD: zero_app_dev_password
+  # Flyway kimliği: tablo/rol/politika yaratabilen owner. Ayrı kalmak ZORUNLU;
+  # ikisi aynı olursa ayrımın kanıtı da (AppDbIdentityIT) anlamı da kalmaz.
+  DB_MIGRATION_USER: postgres
+  DB_MIGRATION_PASSWORD: postgres
   # Smoke gate'inin login olabilmesi için seed şifresi deterministik olmalı.
   # (prod profili kullanılmadığı için DataSeeder'ın fail-fast kontrolü tetiklenmez)
   SEED_ADMIN_PASSWORD: Ci-Smoke-Passw0rd!
@@ -276,8 +286,8 @@ jobs:
         image: postgres:16
         env:
           POSTGRES_DB: zero
-          POSTGRES_USER: zero
-          POSTGRES_PASSWORD: zero
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
         ports:
           - 5432:5432
         options: >-
@@ -414,8 +424,8 @@ jobs:
         image: postgres:16
         env:
           POSTGRES_DB: zero
-          POSTGRES_USER: zero
-          POSTGRES_PASSWORD: zero
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
         ports:
           - 5432:5432
         options: >-
@@ -481,7 +491,7 @@ jobs:
           docker run --rm --network host \
             -v "${PWD}/oldset:/flyway/sql:ro" \
             flyway/flyway:11-alpine \
-            -url="${DB_URL}" -user="${DB_USER}" -password="${DB_PASSWORD}" \
+            -url="${DB_URL}" -user="${DB_MIGRATION_USER}" -password="${DB_MIGRATION_PASSWORD}" \
             -connectRetries=10 -baselineOnMigrate=false \
             migrate
 
@@ -494,7 +504,7 @@ jobs:
           if ! docker run --rm --network host \
             -v "${PWD}/backend/src/main/resources/db/migration:/flyway/sql:ro" \
             flyway/flyway:11-alpine \
-            -url="${DB_URL}" -user="${DB_USER}" -password="${DB_PASSWORD}" \
+            -url="${DB_URL}" -user="${DB_MIGRATION_USER}" -password="${DB_MIGRATION_PASSWORD}" \
             -connectRetries=10 -ignoreMigrationPatterns='*:pending' \
             validate; then
             echo "::error::migration-drift: checksum drift — yayınlanmış bir migration dosyası değiştirilmiş. Mevcut kurulumlarda Flyway başlangıçta patlar. Düzeltme: dosyayı geri al ve değişikliği YENİ bir V sürümü olarak ekle."
@@ -508,7 +518,7 @@ jobs:
             docker run --rm --network host \
               -v "${PWD}/backend/src/main/resources/db/migration:/flyway/sql:ro" \
               flyway/flyway:11-alpine \
-              -url="${DB_URL}" -user="${DB_USER}" -password="${DB_PASSWORD}" \
+              -url="${DB_URL}" -user="${DB_MIGRATION_USER}" -password="${DB_MIGRATION_PASSWORD}" \
               -connectRetries=10 "$@"
           }
           run_flyway migrate
@@ -568,8 +578,8 @@ jobs:
         image: postgres:16
         env:
           POSTGRES_DB: zero
-          POSTGRES_USER: zero
-          POSTGRES_PASSWORD: zero
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
         ports:
           - 5432:5432
         options: >-

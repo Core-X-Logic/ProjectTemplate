@@ -7,6 +7,17 @@ Eşikler `../QUALITY-GATES.md`'de. Bu dosya **ölçümleri** tutar.
 
 ---
 
+## R-44 kapanışı + kullanıcı daveti dilimi — 2026-08-08 (scoped ölçüm)
+
+| Kapı | Sonuç |
+|---|---|
+| Backend scoped `verify` (`-Dit.test=InvitationFlowIT,PasswordPolicyIT,SecurityPathBindingIT,SubscriptionExemptPathBindingIT,RlsCoverageIT`) | **230 unit + 31 IT** (InvitationFlowIT 9 · PasswordPolicyIT 8 · SecurityPathBindingIT 6 · SubscriptionExemptPathBindingIT 4 · RlsCoverageIT 4), 0 fail / 0 error / 0 skip · `BUILD SUCCESS` |
+| Frontend `tsc -b` + `eslint` (etkilenen 17 dosya) + `vitest` (account + users testleri) | typecheck + lint temiz · **30 test / 5 dosya** yeşil (invite-dialog 4, accept-invitation 6, reset-password 6 — yenileri dâhil) |
+| Negatif kanıt (R-44 expired) | `AccountService.isUsable` süre kontrolü kasten devre dışı bırakıldığında `PasswordPolicyIT`'nin iki expired testi **KIRMIZI**: `[an expired reset code must be refused …] expected: 400 BAD_REQUEST but was: 204 NO_CONTENT` (confirmation'da aynı desen); geri alınınca 2/2 yeşil — testler gerçekten süre koşulunu ölçüyor |
+
+> ⚠️ TAM `clean verify` bu dilimde koşulmadı (ana süreçte koşulacak); yukarıdaki sayılar scoped
+> koşunun ölçümüdür.
+
 ## Devraldığınız temel — 2026-07-19 (Dalga 4 kapanışı)
 
 | Kapı | Sonuç |

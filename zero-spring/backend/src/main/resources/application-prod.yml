@@ -35,6 +35,15 @@ spring:
   cache:
     type: ${CACHE_TYPE:redis}
   datasource:
+    # RLS taban çizgisi Adım 1 — HİÇBİRİNDE DEFAULT YOK, JwtSecretValidator felsefesi: eksik
+    # yapılandırma sessizce güvensiz bir kuruluma düşmemeli. Çözülmemiş bir ${...} hata vermeden
+    # LİTERAL string olarak bağlanır (bkz. CLAUDE.md tuzak tablosu), o yüzden gerçek koruma
+    # `AppDbCredentialsValidator`: prod'da app kimliği migration kimliğiyle AYNIYSA (RLS baypası)
+    # ya da şifre V11__app_role.sql'deki commit'li dev şifresiyse AÇILIŞI REDDEDER.
+    # DB_USER beklenen değer: `zero_app` (NOSUPERUSER NOBYPASSRLS).
+    url: ${DB_URL}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
     # PROD-R9: sized for a multi-instance deployment. Keep (instances x maximum-pool-size) below the
     # database's max_connections, PgBouncer included.
     hikari:
@@ -43,6 +52,13 @@ spring:
       connection-timeout: ${DB_POOL_CONNECTION_TIMEOUT_MS:10000}
       max-lifetime: ${DB_POOL_MAX_LIFETIME_MS:1800000}
       leak-detection-threshold: ${DB_POOL_LEAK_DETECTION_MS:20000}
+  flyway:
+    # Migration kimliği de default'suz ve datasource'tan AYRI olmak ZORUNDA. Bu rol owner/
+    # superuser'dır (DDL + CREATE ROLE + CREATE POLICY); uygulamanın kullandığı rolle aynı
+    # olması, RLS'i eklemeden önce anlamsızlaştırmak demektir — validator bunu reddeder.
+    url: ${DB_URL}
+    user: ${DB_MIGRATION_USER}
+    password: ${DB_MIGRATION_PASSWORD}
   jpa:
     properties:
       hibernate:

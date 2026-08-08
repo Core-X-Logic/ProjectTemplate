@@ -153,5 +153,47 @@ describe('ResetPasswordPage', () => {
       'Invalid or expired reset code',
     );
     expect(screen.queryByText('Password updated')).not.toBeInTheDocument();
+    // A dead code is not recoverable from this form: the error must escort the
+    // user to requesting a fresh one, not strand them at "back to sign in".
+    expect(
+      screen.getByRole('link', { name: 'Request a new code' }),
+    ).toHaveAttribute('href', '/account/forgot-password');
+  });
+
+  it('pins a policy rejection to the password field instead of a page alert', async () => {
+    const user = userEvent.setup();
+    apiFetchMock.mockRejectedValue(
+      new ApiError(400, {
+        // Real shape: PasswordPolicyValidator's DomainException detail. The
+        // "Password" prefix is the discriminator the page keys off.
+        detail:
+          'Password does not meet policy: Password must contain 1 or more uppercase characters.',
+        code: 'VALIDATION',
+      }),
+    );
+
+    renderWithProviders(<ResetPasswordPage />, {
+      route: '/account/reset-password?code=valid-code',
+    });
+
+    await user.type(screen.getByLabelText('New password'), 'alllowercase');
+    await user.type(
+      screen.getByLabelText('Confirm new password'),
+      'alllowercase',
+    );
+    await user.click(
+      screen.getByRole('button', { name: 'Set new password' }),
+    );
+
+    // The verdict lands on the field the user must fix…
+    expect(
+      await screen.findByText(/Password does not meet policy/),
+    ).toBeInTheDocument();
+    // …not as a page-level alert, and without the "request a new code" escape
+    // hatch: the code is still valid and must not be thrown away.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'Request a new code' }),
+    ).not.toBeInTheDocument();
   });
 });

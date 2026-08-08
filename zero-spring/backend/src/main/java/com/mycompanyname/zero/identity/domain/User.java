@@ -71,11 +71,27 @@ public class User extends AbstractAuditedEntity {
     @Column(name = "email_confirmed", nullable = false)
     private boolean emailConfirmed = false;
 
-    @Column(name = "email_confirmation_code", length = 128)
-    private String emailConfirmationCode;
+    /**
+     * SHA-256 hex of the email confirmation code; the raw code exists only in the confirmation
+     * e-mail (R-44, V14). The legacy plaintext {@code email_confirmation_code} column still exists
+     * in the schema but is deliberately unmapped: nothing reads it, so every pre-V14 code is
+     * invalid by construction (fail-closed), and the column is dropped in a later migration once
+     * pre-V14 application versions are retired (rolling deploy).
+     */
+    @Column(name = "email_confirmation_code_hash", length = 128)
+    private String emailConfirmationCodeHash;
 
-    @Column(name = "password_reset_code", length = 128)
-    private String passwordResetCode;
+    /** Expiry of the confirmation code; a null or past instant refuses the code (R-44). */
+    @Column(name = "email_confirmation_code_expires_at")
+    private Instant emailConfirmationCodeExpiresAt;
+
+    /** Same pattern as {@link #emailConfirmationCodeHash}, for the password reset code (R-44, V14). */
+    @Column(name = "password_reset_code_hash", length = 128)
+    private String passwordResetCodeHash;
+
+    /** Expiry of the reset code; a null or past instant refuses the code (R-44). */
+    @Column(name = "password_reset_code_expires_at")
+    private Instant passwordResetCodeExpiresAt;
 
     @Column(name = "should_change_password", nullable = false)
     private boolean shouldChangePassword = false;

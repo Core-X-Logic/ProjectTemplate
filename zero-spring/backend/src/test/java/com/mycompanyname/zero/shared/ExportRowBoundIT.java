@@ -243,7 +243,8 @@ class ExportRowBoundIT extends AbstractIntegrationIT {
         // Fill to the limit, not past it: the fixture already holds the reader and the
         // bootstrapped admin, and one row over would make the export refuse before emitting the
         // SQL under assertion.
-        for (long existing = userRepository.countByTenantId(fixture.tenantId());
+        for (long existing = inTenantDatabase(fixture.tenantId(),
+                () -> userRepository.countByTenantId(fixture.tenantId()));
                 existing < MAX_ROWS; existing++) {
             insertUser(fixture.tenantId(), "u" + existing + suffix, Set.of());
         }
@@ -469,45 +470,65 @@ class ExportRowBoundIT extends AbstractIntegrationIT {
         // ArchUnit rule 3 scans @PreAuthorize in production packages only, so nothing else is
         // watching this line. These two were the last raw setPermissions literals in the test tree.
         role.setPermissions(Set.of(AppPermissions.USERS_READ, AuditPermissions.AUDITLOGS_READ));
-        roleRepository.save(role);
 
+        // One transaction that names the new tenant to the V12 row-level policies. A test thread
+        // crosses no @Service boundary, so nothing publishes a context for it; naming the tenant
+        // rather than host also means the fixture cannot accidentally provision into host scope.
         String username = "expadmin" + suffix;
+        inTenantDatabase(tenantId, () -> roleRepository.save(role));
         long adminUserId = insertUser(tenantId, username, Set.of(role));
-        long bootstrappedAdminId = userRepository
+        long bootstrappedAdminId = inTenantDatabase(tenantId, () -> userRepository
                 .findByTenantIdAndUsernameIgnoreCase(tenantId, "admin")
                 .orElseThrow(() -> new AssertionError(
                         "tenant creation must bootstrap an admin user (Issue #1)"))
-                .getId();
+                .getId());
 
         HttpHeaders headers = bearerHeaders(
                 accessToken(tenantName, username, FIXTURE_PASSWORD), tenantName);
         return new Fixture(tenantId, adminUserId, bootstrappedAdminId, headers);
     }
 
-    /** @return the generated id, so the exported rows can be matched against the fixture exactly. */
+    /**
+     * @return the generated id, so the exported rows can be matched against the fixture exactly.
+     *
+     * <p>{@code inTenantDatabase} because {@code users} is policed since V12 and a test thread crosses
+     * no {@code @Service} boundary, so nothing publishes {@code app.current_tenant} for it and the
+     * insert is refused outright ("new row violates row-level security policy"). Naming the tenant
+     * rather than host is what the fixture actually means, and it keeps the write honest: a filler row
+     * for tenant X can only be written under tenant X.
+     */
     private long insertUser(long tenantId, String username, Set<Role> roles) {
-        User user = new User();
-        user.setTenantId(tenantId);
-        user.setUsername(username);
-        user.setEmail(username + "@example.com");
-        user.setPasswordHash(passwordEncoder.encode(FIXTURE_PASSWORD));
-        user.setActive(true);
-        user.getRoles().addAll(roles);
-        return userRepository.save(user).getId();
+        return inTenantDatabase(tenantId, () -> {
+            User user = new User();
+            user.setTenantId(tenantId);
+            user.setUsername(username);
+            user.setEmail(username + "@example.com");
+            user.setPasswordHash(passwordEncoder.encode(FIXTURE_PASSWORD));
+            user.setActive(true);
+            user.getRoles().addAll(roles);
+            return userRepository.save(user).getId();
+        });
     }
 
+    /**
+     * {@code inTenantDatabase} because {@code audit_logs} is policed since V13 and this loop runs on
+     * the test thread: without an announced context every insert would hit the policy's
+     * {@code WITH CHECK} instead of seeding the export under test.
+     */
     private void insertAuditLogs(long tenantId, String marker, int count) {
-        for (int i = 0; i < count; i++) {
-            AuditLog log = new AuditLog();
-            log.setTenantId(tenantId);
-            log.setUsername(marker);
-            log.setExecutionTime(Instant.now());
-            log.setExecutionDurationMs(1);
-            log.setHttpMethod("GET");
-            log.setUrl("/probe/" + i);
-            log.setHttpStatusCode(200);
-            auditLogRepository.save(log);
-        }
+        inTenantDatabase(tenantId, () -> {
+            for (int i = 0; i < count; i++) {
+                AuditLog log = new AuditLog();
+                log.setTenantId(tenantId);
+                log.setUsername(marker);
+                log.setExecutionTime(Instant.now());
+                log.setExecutionDurationMs(1);
+                log.setHttpMethod("GET");
+                log.setUrl("/probe/" + i);
+                log.setHttpStatusCode(200);
+                auditLogRepository.save(log);
+            }
+        });
     }
 
     // ------------------------------------------------------------------ transport

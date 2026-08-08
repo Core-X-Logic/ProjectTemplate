@@ -234,8 +234,14 @@ class TenantFilterCoverageIT extends AbstractIntegrationIT {
         return prefix + "_" + System.nanoTime() + "_" + SEQ.incrementAndGet();
     }
 
+    /**
+     * {@code inTenantDatabase}: since V13 these tables are policed, and a test thread crosses no
+     * {@code @Service} boundary — an unannounced insert would hit {@code WITH CHECK}, not the filter
+     * under test. Announcing the SAME tenant the row is tagged with keeps this fixture a claim about
+     * the {@code @Filter} and doubles as the tenant-branch positive control for the policy.
+     */
     private void seedAuditLog(long tenantId, String marker) {
-        transactions().executeWithoutResult(status -> {
+        inTenantDatabase(tenantId, () -> {
             AuditLog log = new AuditLog();
             log.setTenantId(tenantId);
             log.setUsername(marker);
@@ -250,8 +256,9 @@ class TenantFilterCoverageIT extends AbstractIntegrationIT {
         });
     }
 
+    /** See {@link #seedAuditLog}. */
     private void seedEntityChange(long tenantId, String marker) {
-        transactions().executeWithoutResult(status -> {
+        inTenantDatabase(tenantId, () -> {
             EntityChange change = new EntityChange();
             change.setTenantId(tenantId);
             change.setEntityTypeName(marker);

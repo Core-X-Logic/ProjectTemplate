@@ -4,6 +4,7 @@ import { TwoFactorPage } from '@/auth/pages/two-factor';
 import { ForbiddenPage } from '@/auth/pages/forbidden';
 import { RequireAuth } from '@/auth/require-auth';
 import { AdminLayout } from '@/layouts/admin';
+import { AcceptInvitationPage } from '@/features/account/pages/accept-invitation';
 import { ConfirmEmailPage } from '@/features/account/pages/confirm-email';
 import { ForgotPasswordPage } from '@/features/account/pages/forgot-password';
 import { ResetPasswordPage } from '@/features/account/pages/reset-password';
@@ -56,6 +57,12 @@ export function AppRoutes() {
       />
       <Route path="/account/reset-password" element={<ResetPasswordPage />} />
       <Route path="/account/confirm-email" element={<ConfirmEmailPage />} />
+      {/* Davet akışı: aynı sözleşme — `EmailTemplateService.invitation` bağlantıyı
+          `{baseUrl}/account/accept-invitation?token=…` olarak üretir. */}
+      <Route
+        path="/account/accept-invitation"
+        element={<AcceptInvitationPage />}
+      />
 
       {/* Protected shell */}
       <Route element={<RequireAuth />}>

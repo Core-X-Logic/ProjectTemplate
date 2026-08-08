@@ -1,6 +1,13 @@
-import { useMutation } from '@tanstack/react-query';
-import { confirmEmail, forgotPassword, resetPassword } from './api';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import {
+  acceptInvitation,
+  confirmEmail,
+  forgotPassword,
+  getInvitationInfo,
+  resetPassword,
+} from './api';
 import type {
+  AcceptInvitationRequest,
   ConfirmEmailRequest,
   ForgotPasswordRequest,
   ResetPasswordRequest,
@@ -31,5 +38,29 @@ export function useResetPassword() {
 export function useConfirmEmail() {
   return useMutation({
     mutationFn: (body: ConfirmEmailRequest) => confirmEmail(body),
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Invitation accept                                                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Invitation lookup for the accept screen. `retry: false` on purpose: the only
+ * failure mode is "this token is unusable" (400), which retrying cannot fix
+ * and would only delay telling the invitee.
+ */
+export function useInvitationInfo(token: string) {
+  return useQuery({
+    queryKey: ['account', 'invitation', token] as const,
+    queryFn: () => getInvitationInfo(token),
+    enabled: token.length > 0,
+    retry: false,
+  });
+}
+
+export function useAcceptInvitation() {
+  return useMutation({
+    mutationFn: (body: AcceptInvitationRequest) => acceptInvitation(body),
   });
 }
