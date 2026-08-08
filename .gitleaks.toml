@@ -51,6 +51,14 @@ regexes = [
   '''emVyby1GSUVMRC1FTkMtREVW''',
   # application-test.yml + FieldEncryptionServiceTest — base64: "zero-FIELD-ENC-TEST-never-deploy"
   '''emVyby1GSUVMRC1FTkMtVEVTVC''',
+  # billing-providers.test.tsx — davranış testinin YAZMA-ONLY sahte iyzico fixture'ları.
+  # Test tam da bu değerin DOM'a asla geri dönmediğini assert ediyor
+  # (`not.toContain('iyz-secret-key-9876')`). Gerçek anahtar değil, hiçbir ortamda
+  # kullanılmıyor; generic-api-key kuralını alan adı + entropi olarak tetikledi (main CI
+  # 31bb5fb koşusu). Değer git geçmişinde kaldığı için dosyayı düzeltmek yetmez —
+  # değer-bazlı dar giriş tek kalıcı çözüm.
+  '''iyz-api-key-9876''',
+  '''iyz-secret-key-9876''',
 ]
 # Vendor referansı: takip edilmiyor ve ürün kodu değil.
 paths = [
