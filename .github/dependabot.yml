@@ -14,6 +14,13 @@ updates:
     schedule:
       interval: monthly
     open-pull-requests-limit: 3
+    ignore:
+      # Major surumler planli migrasyon isidir, dependabot PR'i degil. Turetilmis projede
+      # (kariora-perform) olculdu: ilk taramanin 6 PR'inin 4'u major'di ve dordu de merge
+      # edilemezdi (Boot 4 framework migrasyonu, ShedLock 5->7, uyumsuz react-router ikilisi,
+      # typescript-eslint peer araligiyla celisen TS 7). Ayni kural orada 2026-08-08'den beri.
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
     groups:
       # Spring sürümleri birlikte hareket eder; tek tek PR bakım yükü üretir.
       spring:
@@ -26,6 +33,13 @@ updates:
     schedule:
       interval: monthly
     open-pull-requests-limit: 3
+    ignore:
+      # Major surumler planli migrasyon isidir, dependabot PR'i degil. Turetilmis projede
+      # (kariora-perform) olculdu: ilk taramanin 6 PR'inin 4'u major'di ve dordu de merge
+      # edilemezdi (Boot 4 framework migrasyonu, ShedLock 5->7, uyumsuz react-router ikilisi,
+      # typescript-eslint peer araligiyla celisen TS 7). Ayni kural orada 2026-08-08'den beri.
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
     groups:
       react:
         patterns: ['react', 'react-dom', '@types/react*', 'react-router*']
