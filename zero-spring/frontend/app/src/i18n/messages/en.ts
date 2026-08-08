@@ -1,5 +1,6 @@
 import { accountMessages } from '@/features/account/messages';
 import { auditMessagesEn } from '@/features/audit/messages';
+import { billingProvidersMessages } from '@/features/billing-providers/messages';
 import { dashboardMessages } from '@/features/dashboard/messages';
 import { editionsMessages } from '@/features/editions/messages';
 import { profileMessages } from '@/features/profile/messages';
@@ -68,6 +69,7 @@ const en: Record<string, string> = {
   'nav.saas': 'Saas',
   'nav.editions': 'Editions',
   'nav.subscriptions': 'Subscriptions',
+  'nav.billingProviders': 'Payment providers',
   'nav.tenants': 'Tenants',
   'nav.profile': 'My profile',
 
@@ -133,6 +135,8 @@ const en: Record<string, string> = {
   ...settingsEn,
   ...editionsMessages.en,
   ...subscriptionsMessages.en,
+  // Managed billing credentials + failover (host-only screen)
+  ...billingProvidersMessages.en,
   // U-01: account self-service, own profile, tenant management
   ...accountMessages.en,
   ...profileMessages.en,

@@ -1,8 +1,10 @@
 package com.mycompanyname.zero.saas.billing;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mycompanyname.zero.saas.billing.credentials.ManagedBillingProperties;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -20,9 +22,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *       trap), and a boot that survived it would verify every {@code X-IYZ-SIGNATURE-V3} against
  *       the placeholder text — 400 to every delivery, and iyzico's retry budget is only three
  *       redeliveries before the webhook is gone for good.</li>
- *   <li>{@code enabled=false} registers NO provider bean at all — both iyzico surfaces then answer
- *       404 ({@code IyzicoDisabledSurfaceIT} proves that over the wire on the default context),
- *       and a fresh clone boots with no iyzico account.</li>
+ *   <li>The provider bean registers UNCONDITIONALLY (ADR-0020) — both iyzico surfaces still answer
+ *       404 on a fresh clone ({@code IyzicoDisabledSurfaceIT} proves that over the wire on the
+ *       default context), but the answer comes from {@code BillingProviderAvailability}, not from
+ *       a missing bean.</li>
  * </ul>
  */
 class IyzicoPropertiesValidationTest {
@@ -89,13 +92,13 @@ class IyzicoPropertiesValidationTest {
                 .doesNotThrowAnyException();
     }
 
-    // --- conditional bean registration ---
+    // --- bean registration (unconditional since ADR-0020) ---
 
     @Test
-    @DisplayName("enabled=false registers no iyzico provider bean")
-    void disabledRegistersNoProviderBean() {
+    @DisplayName("enabled=false STILL registers the provider bean — availability decides, not registration (ADR-0020)")
+    void disabledStillRegistersTheProviderBean() {
         contextRunner(false).run(context ->
-                assertThat(context).doesNotHaveBean(BillingProvider.class));
+                assertThat(context).hasSingleBean(IyzicoBillingProvider.class));
     }
 
     @Test
@@ -120,7 +123,16 @@ class IyzicoPropertiesValidationTest {
                 .withBean(BillingIyzicoProperties.class,
                         () -> properties(enabled, "api_x", "secret_x", "https://sandbox-api.iyzipay.com"))
                 .withBean(ObjectMapper.class)
+                .withBean(ManagedBillingProperties.class,
+                        IyzicoPropertiesValidationTest::passthroughManagedProperties)
                 .withUserConfiguration(BillingIyzicoConfig.class);
+    }
+
+    /** Passthrough view — registration semantics only; resolution is the admin IT's subject. */
+    private static ManagedBillingProperties passthroughManagedProperties() {
+        ManagedBillingProperties managed = Mockito.mock(ManagedBillingProperties.class);
+        Mockito.when(managed.iyzico(Mockito.any())).thenAnswer(call -> call.getArgument(0));
+        return managed;
     }
 
     private static BillingIyzicoProperties properties(boolean enabled, String apiKey,

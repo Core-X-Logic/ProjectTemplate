@@ -1,5 +1,6 @@
 import { accountMessages } from '@/features/account/messages';
 import { auditMessagesTr } from '@/features/audit/messages';
+import { billingProvidersMessages } from '@/features/billing-providers/messages';
 import { dashboardMessages } from '@/features/dashboard/messages';
 import { editionsMessages } from '@/features/editions/messages';
 import { profileMessages } from '@/features/profile/messages';
@@ -67,6 +68,7 @@ const tr: Record<string, string> = {
   'nav.saas': 'Saas',
   'nav.editions': 'Paketler',
   'nav.subscriptions': 'Abonelikler',
+  'nav.billingProviders': 'Ödeme sağlayıcıları',
   'nav.tenants': 'Kiracılar',
   'nav.profile': 'Profilim',
 
@@ -133,6 +135,8 @@ const tr: Record<string, string> = {
   ...settingsTr,
   ...editionsMessages.tr,
   ...subscriptionsMessages.tr,
+  // Yönetilen ödeme sağlayıcı bilgileri + failover (yalnız host ekranı)
+  ...billingProvidersMessages.tr,
   // U-01: hesap self-servis, kendi profili, kiracı yönetimi
   ...accountMessages.tr,
   ...profileMessages.tr,

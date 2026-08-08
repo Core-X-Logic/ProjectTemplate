@@ -26,6 +26,7 @@ silmeyin: yeni bir ADR yazın ve eskisini `Superseded by` ile işaretleyin — k
 | [0017](ADR-0017-payment-provider-strategy.md) | Ödeme sağlayıcı stratejisi — TR pazarı: PayTR + iyzico; Stripe uykuda | Accepted |
 | [0018](ADR-0018-rls-host-visibility.md) | RLS host görünürlüğü — bypass politikanın içinde, SECURITY DEFINER değil | Accepted |
 | [0019](ADR-0019-rls-exempt-tables.md) | RLS muafiyeti kapalı küme — yalnız `saas` tabloları (makine-okunur liste) | Accepted |
+| [0020](ADR-0020-managed-billing-credentials-failover.md) | Portal'dan yönetilebilir sağlayıcı kimlik bilgileri (şifreli, ayrı tablo) + checkout failover | Accepted |
 
 ## Numara boşlukları
 
@@ -35,4 +36,4 @@ silmeyin: yeni bir ADR yazın ve eskisini `Superseded by` ile işaretleyin — k
   stratejisi kararıydı (greenfield parity build + tek seferlik ETL + big-bang cutover); yeni bir
   projede karşılığı yoktur.
 
-Yeni ADR eklerken numarayı **0019**'dan devam ettirin; boşlukları doldurmayın.
+Yeni ADR eklerken numarayı **0020**'den devam ettirin; boşlukları doldurmayın.

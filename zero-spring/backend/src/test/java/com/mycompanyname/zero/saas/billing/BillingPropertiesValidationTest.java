@@ -1,8 +1,10 @@
 package com.mycompanyname.zero.saas.billing;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mycompanyname.zero.saas.billing.credentials.ManagedBillingProperties;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -18,8 +20,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *       case is the load-bearing one: {@code ${STRIPE_SECRET_KEY}} binds as a literal string with no
  *       error (measured project-wide trap), so without this guard a mis-deployed installation would
  *       come up green and verify webhook signatures against the placeholder text.</li>
- *   <li>{@code enabled=false} registers NO provider bean at all — the billing surface then answers
- *       404, and a fresh clone boots with no Stripe account.</li>
+ *   <li>The provider bean registers UNCONDITIONALLY (ADR-0020) — a fresh clone still boots with no
+ *       Stripe account and its billing surface still answers 404, but that answer comes from
+ *       {@code BillingProviderAvailability} (nothing enabled anywhere), not from a missing
+ *       bean.</li>
  * </ul>
  */
 class BillingPropertiesValidationTest {
@@ -76,13 +80,16 @@ class BillingPropertiesValidationTest {
                 .doesNotThrowAnyException();
     }
 
-    // --- conditional bean registration ---
+    // --- bean registration (unconditional since ADR-0020) ---
 
     @Test
-    @DisplayName("enabled=false registers no BillingProvider bean")
-    void disabledRegistersNoProviderBean() {
+    @DisplayName("enabled=false STILL registers the provider bean — availability decides, not registration (ADR-0020)")
+    void disabledStillRegistersTheProviderBean() {
+        // The old contract ("no bean when disabled") moved: the bean must exist so the portal can
+        // enable Stripe at runtime; the 404-when-unconfigured behaviour now lives in
+        // BillingProviderAvailability and is pinned by the disabled-surface ITs.
         contextRunner(false).run(context ->
-                assertThat(context).doesNotHaveBean(BillingProvider.class));
+                assertThat(context).hasSingleBean(StripeBillingProvider.class));
     }
 
     @Test
@@ -100,7 +107,20 @@ class BillingPropertiesValidationTest {
                 .withBean(BillingStripeProperties.class,
                         () -> properties(enabled, "sk_test_x", "whsec_x", "pk_x"))
                 .withBean(ObjectMapper.class)
+                .withBean(ManagedBillingProperties.class,
+                        BillingPropertiesValidationTest::passthroughManagedProperties)
                 .withUserConfiguration(BillingStripeConfig.class);
+    }
+
+    /**
+     * A managed-properties view that hands the environment bean back unchanged — this unit test is
+     * about REGISTRATION semantics, not credential resolution (the resolver's DB-over-env behaviour
+     * is proven end to end by {@code BillingProviderCredentialsAdminIT}).
+     */
+    private static ManagedBillingProperties passthroughManagedProperties() {
+        ManagedBillingProperties managed = Mockito.mock(ManagedBillingProperties.class);
+        Mockito.when(managed.stripe(Mockito.any())).thenAnswer(call -> call.getArgument(0));
+        return managed;
     }
 
     private static BillingStripeProperties properties(boolean enabled, String secretKey,

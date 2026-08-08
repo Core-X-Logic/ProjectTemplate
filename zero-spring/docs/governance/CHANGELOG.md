@@ -11,6 +11,37 @@
 
 ### Eklendi
 
+- **Portal'dan yönetilebilir ödeme sağlayıcı kimlik bilgileri + checkout failover (ADR-0020,
+  `V16__billing_provider_credentials.sql`).** Sağlayıcı bilgileri (PayTR/iyzico; Stripe dışlanmadı)
+  artık host portal'dan yazılır ve **restart'sız** etkinleşir; birden çok sağlayıcı açıkken checkout
+  başlatma, operatörün sırasıyla dener ve yalnız transport-sınıfı hatada (timeout/IO/5xx)
+  sıradakine geçer.
+  - **Saklama:** ayrı host-global tablo (`tenant_id` yok — RLS adayı değil), alanların JSON'u
+    `FieldEncryptionService` ile TEK ciphertext (AES-256-GCM, `zero.crypto.field-key` — PROD-R49
+    kapsam genişlemesi R-52). Settings modülü bilinçli reddedildi (host GET değerleri UI'ya döner;
+    ADR-0020 §1).
+  - **Uçlar** (`/api/billing/providers`, hepsi yeni `billing.credentials.manage` izni — Side.HOST,
+    5-dosya kayıt + en/tr): GET maskeli durum (`****` + son 4, alan ADLARI — asla değer), PUT
+    credentials (write-only merge: boş alan = "değiştirme"; enable ederken zorunlu alan doğrulaması
+    boot validator'ın yazım-zamanı karşılığı), DELETE (env davranışına dönüş), PUT order (failover
+    sırası).
+  - **Bean kaydı koşulsuz:** `@ConditionalOnProperty` kalktı; "açık mı" sorusu
+    `BillingProviderAvailability`'de. Kural: **disabled = yeni checkout'a kapalı, webhook'a
+    DEĞİL** — kimlik bilgisi durdukça webhook/callback/mutabakat yüzeyi açık kalır (uçuştaki ödeme
+    kendi sağlayıcısında biter). Hiçbir yerde yapılandırılmamış sağlayıcı 404 döner (taze klon
+    davranışı pinli kaldı: `*DisabledSurfaceIT`).
+  - **Failover + devre kesici:** 4xx failover TETİKLEMEZ (mutasyonla kanıtlı — 4xx'i failover'a
+    sayan mutant `BillingCheckoutFailoverIT.clientErrorDoesNotFailOver`'ı kırmızıya düşürdü,
+    geri alındı); sağlayıcı başına 2 ardışık transport hatası → 60 sn cool-down
+    (`BillingCheckoutCircuitBreaker`, bellek-içi, `Clock` bean'inden — resilience4j bilinçli
+    eklenmedi); `payments.provider` daima session'ı GERÇEKTEN kesen sağlayıcıyı taşır; her
+    deneme/geçiş log'da. Kalan riskler R-50…R-53 (risk defteri).
+  - **Testler:** `BillingProviderCredentialsAdminIT` (403/401 negatifleri, ciphertext-at-rest, ham
+    değer hiçbir yanıtta yok, DB>env'in restart'sız kanıtı — webhook SAKLANAN anahtarla doğrular,
+    DELETE sonrası 404'e dönüş), `BillingCheckoutFailoverIT` (failover, 4xx-negatif, MutableClock
+    ile cool-down gidiş-dönüşü, failover sonrası webhook'un kaynak sağlayıcıya bağlılığı),
+    `BillingCheckoutCircuitBreakerTest` (birim, el ile sürülen Clock).
+
 - **Kullanıcı daveti — uçtan uca akış (`identity/invitation`, `V15__user_invitations.sql`).**
   `users.create` sahibi admin tek kullanımlık, süreli (72s) bir token postalar; davetli bağlantıdan
   gelir, admin'in sabitlediği kullanıcı adını görür, parolasını seçer ve hesap kabulde aktif +

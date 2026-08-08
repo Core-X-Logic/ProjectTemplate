@@ -20,6 +20,8 @@ public final class SaasPermissions {
     public static final String SUBSCRIPTIONS_READ = "subscriptions.read";
     public static final String SUBSCRIPTIONS_MANAGE = "subscriptions.manage";
     public static final String TENANT_FEATURES_MANAGE = "tenantfeatures.manage";
+    /** Managed billing credentials + failover order (ADR-0020): the installation's merchant accounts. */
+    public static final String BILLING_CREDENTIALS_MANAGE = "billing.credentials.manage";
 
     private SaasPermissions() {
     }
@@ -30,6 +32,7 @@ public final class SaasPermissions {
                 EDITIONS_MANAGE,
                 SUBSCRIPTIONS_READ,
                 SUBSCRIPTIONS_MANAGE,
-                TENANT_FEATURES_MANAGE);
+                TENANT_FEATURES_MANAGE,
+                BILLING_CREDENTIALS_MANAGE);
     }
 }

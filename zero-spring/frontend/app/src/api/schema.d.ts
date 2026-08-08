@@ -276,6 +276,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/billing/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/providers/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateOrder"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/providers/{providerId}/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateCredentials"];
+        post?: never;
+        delete: operations["deleteCredentials"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/billing/webhook/iyzico": {
         parameters: {
             query?: never;
@@ -1559,6 +1607,16 @@ export interface components {
             tenantId?: number;
             username?: string;
         };
+        ProviderStatusDto: {
+            configured?: boolean;
+            configuredFields?: string[];
+            /** Format: int32 */
+            displayOrder?: number;
+            enabled?: boolean;
+            maskedHint?: string;
+            provider?: string;
+            source?: string;
+        };
         RecoveryCodesDto: {
             recoveryCodes?: string[];
         };
@@ -1711,6 +1769,15 @@ export interface components {
             name?: string;
             phoneNumber?: string;
             surname?: string;
+        };
+        UpdateProviderCredentialsRequest: {
+            credentials?: {
+                [key: string]: string;
+            };
+            enabled?: boolean;
+        };
+        UpdateProviderOrderRequest: {
+            order: string[];
         };
         UpdateRoleRequest: {
             displayName: string;
@@ -2154,6 +2221,96 @@ export interface operations {
                 content: {
                     "*/*": components["schemas"]["CheckoutSessionDto"];
                 };
+            };
+        };
+    };
+    status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ProviderStatusDto"][];
+                };
+            };
+        };
+    };
+    updateOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProviderOrderRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ProviderStatusDto"][];
+                };
+            };
+        };
+    };
+    updateCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                providerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProviderCredentialsRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ProviderStatusDto"];
+                };
+            };
+        };
+    };
+    deleteCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                providerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

@@ -12,6 +12,7 @@ import {
   Store,
   UserCog,
   Users,
+  Wallet,
 } from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
 import { MenuConfig, MenuItem } from './types';
@@ -55,6 +56,14 @@ export const MENU_SIDEBAR: MenuConfig = [
         icon: CreditCard,
         path: '/subscriptions',
         permission: 'subscriptions.read',
+      },
+      {
+        // Host-only: `billing.credentials.manage` is `Side.HOST`, so tenant
+        // roles never hold it and the entry never renders for them.
+        title: 'nav.billingProviders',
+        icon: Wallet,
+        path: '/billing-providers',
+        permission: 'billing.credentials.manage',
       },
     ],
   },

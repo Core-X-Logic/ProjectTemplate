@@ -4,6 +4,7 @@ import com.mycompanyname.zero.saas.billing.BillingConfirmationService;
 import com.mycompanyname.zero.saas.billing.BillingProvider;
 import com.mycompanyname.zero.saas.billing.BillingProviderRegistry;
 import com.mycompanyname.zero.saas.billing.IyzicoBillingProvider;
+import com.mycompanyname.zero.saas.billing.credentials.BillingProviderAvailability;
 import com.mycompanyname.zero.shared.domain.DomainException;
 import com.mycompanyname.zero.shared.web.EndpointPolicy;
 import com.mycompanyname.zero.shared.web.EndpointPolicy.Exposure;
@@ -51,6 +52,7 @@ public class BillingCallbackController {
     private static final String CALLBACK_ACTOR = IyzicoBillingProvider.PROVIDER_ID + "-callback";
 
     private final BillingProviderRegistry providerRegistry;
+    private final BillingProviderAvailability availability;
     private final BillingConfirmationService confirmationService;
 
     @RequestMapping(path = "/callback/iyzico", method = {RequestMethod.GET, RequestMethod.POST})
@@ -58,9 +60,12 @@ public class BillingCallbackController {
     public ResponseEntity<Void> iyzicoCallback(
             @RequestParam(value = "token", required = false) String token) {
         BillingProvider provider = providerRegistry.find(IyzicoBillingProvider.PROVIDER_ID)
-                // Same decision and reasoning as BillingWebhookService#requireProvider: with the
-                // flag off this surface does not exist, and 404 discloses nothing about whether
-                // billing COULD be enabled here.
+                // Same decision and reasoning as BillingWebhookService#requireProvider: when
+                // neither the environment nor a stored credential set configures iyzico this
+                // surface does not exist, and 404 discloses nothing about whether billing COULD
+                // be enabled here (surfaceExists, not checkoutEnabled: a disabled provider's
+                // in-flight payments still finish through this trigger — ADR-0020).
+                .filter(p -> availability.surfaceExists(p.id()))
                 .orElseThrow(() -> DomainException.notFound(
                         "Billing is not enabled on this installation"));
         if (token == null || token.isBlank()) {

@@ -1,5 +1,6 @@
 package com.mycompanyname.zero.saas.billing;
 
+import com.mycompanyname.zero.saas.billing.credentials.BillingProviderAvailability;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -69,6 +70,7 @@ public class BillingReconciliationService {
 
     private final BillingReconciliationProperties properties;
     private final BillingProviderRegistry providerRegistry;
+    private final BillingProviderAvailability availability;
     private final PaymentRepository paymentRepository;
     private final BillingConfirmationService confirmationService;
     private final java.time.Clock clock;
@@ -166,11 +168,19 @@ public class BillingReconciliationService {
                 (int) skippedWithoutQuerySupport, truncated);
     }
 
-    /** Registry ids whose providers can actually be asked ({@code supportsQueryConfirmation}). */
+    /**
+     * Registry ids whose providers can actually be asked ({@code supportsQueryConfirmation}) AND
+     * are configured on this installation. The availability filter arrived with ADR-0020: provider
+     * beans are registered unconditionally now, so "in the registry" no longer implies "has
+     * credentials" — and querying a provider nobody configured would send its query API blank
+     * credentials. {@code surfaceExists}, not {@code checkoutEnabled}, deliberately: a
+     * portal-disabled provider's in-flight payments must still reconcile to completion.
+     */
     private Set<String> queryCapableProviderIds() {
         Set<String> ids = new LinkedHashSet<>();
         for (String id : providerRegistry.ids()) {
-            if (providerRegistry.find(id).map(BillingProvider::supportsQueryConfirmation).orElse(false)) {
+            if (providerRegistry.find(id).map(BillingProvider::supportsQueryConfirmation).orElse(false)
+                    && availability.surfaceExists(id)) {
                 ids.add(id);
             }
         }
