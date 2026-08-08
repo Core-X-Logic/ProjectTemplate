@@ -1,5 +1,6 @@
 package com.mycompanyname.zero.saas.billing;
 
+import com.mycompanyname.zero.saas.billing.credentials.BillingProviderAvailability;
 import com.mycompanyname.zero.saas.subscription.SubscriptionService;
 import com.mycompanyname.zero.saas.subscription.web.dto.AssignEditionRequest;
 import com.mycompanyname.zero.shared.domain.DomainException;
@@ -62,6 +63,7 @@ public class BillingWebhookService {
     private static final String WEBHOOK_ACTOR_SUFFIX = "-webhook";
 
     private final BillingProviderRegistry providerRegistry;
+    private final BillingProviderAvailability availability;
     private final WebhookEventRepository webhookEventRepository;
     private final PaymentRepository paymentRepository;
     private final SubscriptionService subscriptionService;
@@ -275,15 +277,21 @@ public class BillingWebhookService {
     }
 
     /**
-     * 404 when the named provider is not enabled, chosen over 503. 503 tells the sender "temporarily
-     * down, retry" — but a webhook arriving at an installation with that provider OFF is a
-     * configuration mistake that no amount of retrying fixes, so inviting three days of retries only
-     * manufactures log noise. 404 states the truth: with the flag off, this surface does not exist
-     * (the provider bean is not registered at all), and it also discloses nothing about whether
-     * billing COULD be enabled here.
+     * 404 when the named provider is not configured anywhere, chosen over 503. 503 tells the sender
+     * "temporarily down, retry" — but a webhook arriving at an installation with that provider OFF
+     * is a configuration mistake that no amount of retrying fixes, so inviting three days of
+     * retries only manufactures log noise. 404 states the truth: this surface does not exist, and
+     * it also discloses nothing about whether billing COULD be enabled here.
+     *
+     * <p>ADR-0020 moved the question from "does the bean exist" (beans are unconditional now) to
+     * {@link BillingProviderAvailability#surfaceExists}: environment-enabled OR stored credentials
+     * present — the stored {@code enabled} flag deliberately NOT consulted, because disabling a
+     * provider closes NEW checkouts only. A payment that started on a provider must be allowed to
+     * finish on it, so its webhook surface stays open as long as credentials exist to verify with.
      */
     private BillingProvider requireProvider(String providerId) {
         return providerRegistry.find(providerId)
+                .filter(provider -> availability.surfaceExists(provider.id()))
                 .orElseThrow(() -> DomainException.notFound(
                         "Billing is not enabled on this installation"));
     }

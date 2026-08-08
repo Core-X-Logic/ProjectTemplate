@@ -1,28 +1,27 @@
 package com.mycompanyname.zero.saas.billing;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import com.mycompanyname.zero.saas.billing.credentials.ManagedBillingProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Registers the iyzico provider only when the deployment asked for it — the
- * {@link BillingPayTRConfig} pattern exactly, and for the same reason: the
- * {@code /api/billing/webhook/iyzico} and {@code /api/billing/callback/iyzico} routes must exist on
- * every profile ({@code SecurityPathBindingIT} requires every {@code permitAll} matcher and every
- * {@code zero.ratelimit.paths} entry to resolve to a live route, and both name the iyzico paths
- * unconditionally), so the web surface is always mapped and answers 404 when no provider bean
- * exists, while the bean that holds the merchant credentials is registered only behind the flag
- * (and behind {@link BillingIyzicoSecretValidator}, which has already refused to boot with unusable
- * credentials by the time this bean is constructed).
+ * Registers the iyzico provider UNCONDITIONALLY, on the managed-properties view — the
+ * {@link BillingPayTRConfig} reasoning exactly (ADR-0020): availability moved from "the bean
+ * exists" to {@code BillingProviderAvailability}, so both iyzico routes
+ * ({@code /api/billing/webhook/iyzico}, {@code /api/billing/callback/iyzico}) keep answering 404
+ * when neither the environment nor a stored credential set configures iyzico
+ * ({@code IyzicoDisabledSurfaceIT} still pins that), while a credential set saved through the
+ * portal brings the surface up WITHOUT a restart. {@link BillingIyzicoSecretValidator} keeps
+ * guarding the environment path at boot; the DB path is validated at write time.
  */
 @Configuration
 public class BillingIyzicoConfig {
 
     @Bean
-    @ConditionalOnProperty(prefix = "zero.billing.iyzico", name = "enabled", havingValue = "true")
     public IyzicoBillingProvider iyzicoBillingProvider(BillingIyzicoProperties properties,
+                                                       ManagedBillingProperties managedProperties,
                                                        ObjectMapper objectMapper) {
-        return new IyzicoBillingProvider(properties, objectMapper);
+        return new IyzicoBillingProvider(managedProperties.iyzico(properties), objectMapper);
     }
 }

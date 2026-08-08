@@ -22,6 +22,7 @@ import { SettingsPage } from '@/features/settings/pages/settings';
 import { EditionsListPage } from '@/features/editions/pages/editions-list';
 import { EditionFormPage } from '@/features/editions/pages/edition-form';
 import { SubscriptionsListPage } from '@/features/subscriptions/pages/subscriptions-list';
+import { BillingProvidersPage } from '@/features/billing-providers/pages/billing-providers';
 import {
   PaymentResultCancelPage,
   PaymentResultSuccessPage,
@@ -198,6 +199,18 @@ export function AppRoutes() {
             element={
               <RequireAuth permission="subscriptions.read">
                 <SubscriptionsListPage />
+              </RequireAuth>
+            }
+          />
+          {/* Payment provider credentials — host only. Route guard is one of
+              the four locks (menu filter + this guard + <Can> on writes +
+              backend `Side.HOST` + `billing.credentials.manage`). Values are
+              write-only: the screen only ever sees masks, never secrets. */}
+          <Route
+            path="billing-providers"
+            element={
+              <RequireAuth permission="billing.credentials.manage">
+                <BillingProvidersPage />
               </RequireAuth>
             }
           />

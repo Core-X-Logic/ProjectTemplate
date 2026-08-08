@@ -65,7 +65,8 @@ public final class PermissionDefinitions {
             leaf(AppPermissions.EDITIONS_MANAGE, GROUP_SAAS, Side.HOST),
             leaf(AppPermissions.SUBSCRIPTIONS_READ, GROUP_SAAS, Side.HOST),
             leaf(AppPermissions.SUBSCRIPTIONS_MANAGE, GROUP_SAAS, Side.HOST),
-            leaf(AppPermissions.TENANT_FEATURES_MANAGE, GROUP_SAAS, Side.HOST));
+            leaf(AppPermissions.TENANT_FEATURES_MANAGE, GROUP_SAAS, Side.HOST),
+            leaf(AppPermissions.BILLING_CREDENTIALS_MANAGE, GROUP_SAAS, Side.HOST));
 
     private PermissionDefinitions() {
     }

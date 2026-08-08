@@ -1,8 +1,10 @@
 package com.mycompanyname.zero.saas.billing;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mycompanyname.zero.saas.billing.credentials.ManagedBillingProperties;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -20,9 +22,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *       project-wide trap), and a boot that survived it would verify every notification hash
  *       against the placeholder text — 400 to PayTR, read there as failed deliveries, while buyers
  *       HAVE been charged.</li>
- *   <li>{@code enabled=false} registers NO provider bean at all — the surface then answers 404
- *       ({@code PayTRDisabledSurfaceIT} proves that over the wire on the default context), and a
- *       fresh clone boots with no PayTR account.</li>
+ *   <li>The provider bean registers UNCONDITIONALLY (ADR-0020) — the surface still answers 404 on
+ *       a fresh clone ({@code PayTRDisabledSurfaceIT} proves that over the wire on the default
+ *       context), but the answer comes from {@code BillingProviderAvailability}, not from a
+ *       missing bean.</li>
  * </ul>
  */
 class PayTRPropertiesValidationTest {
@@ -89,13 +92,13 @@ class PayTRPropertiesValidationTest {
                 .doesNotThrowAnyException();
     }
 
-    // --- conditional bean registration ---
+    // --- bean registration (unconditional since ADR-0020) ---
 
     @Test
-    @DisplayName("enabled=false registers no PayTR provider bean")
-    void disabledRegistersNoProviderBean() {
+    @DisplayName("enabled=false STILL registers the provider bean — availability decides, not registration (ADR-0020)")
+    void disabledStillRegistersTheProviderBean() {
         contextRunner(false).run(context ->
-                assertThat(context).doesNotHaveBean(BillingProvider.class));
+                assertThat(context).hasSingleBean(PayTRBillingProvider.class));
     }
 
     @Test
@@ -116,7 +119,16 @@ class PayTRPropertiesValidationTest {
                 .withBean(BillingPayTRProperties.class,
                         () -> properties(enabled, "123456", "key_x", "salt_x"))
                 .withBean(ObjectMapper.class)
+                .withBean(ManagedBillingProperties.class,
+                        PayTRPropertiesValidationTest::passthroughManagedProperties)
                 .withUserConfiguration(BillingPayTRConfig.class);
+    }
+
+    /** Passthrough view — registration semantics only; resolution is the admin IT's subject. */
+    private static ManagedBillingProperties passthroughManagedProperties() {
+        ManagedBillingProperties managed = Mockito.mock(ManagedBillingProperties.class);
+        Mockito.when(managed.paytr(Mockito.any())).thenAnswer(call -> call.getArgument(0));
+        return managed;
     }
 
     private static BillingPayTRProperties properties(boolean enabled, String merchantId,

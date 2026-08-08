@@ -4,6 +4,22 @@
  */
 
 export interface paths {
+    "/api/account/accept-invitation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["acceptInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/account/confirm-email": {
         parameters: {
             query?: never;
@@ -36,6 +52,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/account/invitation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["invitationInfo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/account/reset-password": {
         parameters: {
             query?: never;
@@ -59,7 +91,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_5"];
+        get: operations["list_6"];
         put?: never;
         post?: never;
         delete?: never;
@@ -244,6 +276,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/billing/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/providers/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateOrder"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/providers/{providerId}/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateCredentials"];
+        post?: never;
+        delete: operations["deleteCredentials"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/billing/webhook/iyzico": {
         parameters: {
             query?: never;
@@ -299,7 +379,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_3"];
+        get: operations["list_4"];
         put?: never;
         post: operations["create_4"];
         delete?: never;
@@ -366,6 +446,54 @@ export interface paths {
         get: operations["definitions"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_3"];
+        put?: never;
+        post: operations["invite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/invitations/{id}/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resend"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/invitations/{id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["revoke"];
         delete?: never;
         options?: never;
         head?: never;
@@ -731,7 +859,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_4"];
+        get: operations["list_5"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1032,6 +1160,10 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AcceptInvitationRequest: {
+            password: string;
+            token: string;
+        };
         AssignEditionRequest: {
             billingPeriod?: string;
             /** Format: int64 */
@@ -1217,6 +1349,28 @@ export interface components {
         ImpersonationTokenDto: {
             impersonationToken?: string;
         };
+        InvitationDto: {
+            /** Format: date-time */
+            createdAt?: string;
+            email?: string;
+            /** Format: date-time */
+            expiresAt?: string;
+            /** Format: int64 */
+            id?: number;
+            roleNames?: string[];
+            status?: string;
+            username?: string;
+        };
+        InvitationInfoDto: {
+            email?: string;
+            status?: string;
+            username?: string;
+        };
+        InviteUserRequest: {
+            email: string;
+            roleNames?: string[];
+            username: string;
+        };
         LanguageDto: {
             displayName?: string;
             name?: string;
@@ -1310,6 +1464,24 @@ export interface components {
         };
         PageEntityChangeDto: {
             content?: components["schemas"]["EntityChangeDto"][];
+            empty?: boolean;
+            first?: boolean;
+            last?: boolean;
+            /** Format: int32 */
+            number?: number;
+            /** Format: int32 */
+            numberOfElements?: number;
+            pageable?: components["schemas"]["PageableObject"];
+            /** Format: int32 */
+            size?: number;
+            sort?: components["schemas"]["SortObject"];
+            /** Format: int64 */
+            totalElements?: number;
+            /** Format: int32 */
+            totalPages?: number;
+        };
+        PageInvitationDto: {
+            content?: components["schemas"]["InvitationDto"][];
             empty?: boolean;
             first?: boolean;
             last?: boolean;
@@ -1434,6 +1606,16 @@ export interface components {
             /** Format: int64 */
             tenantId?: number;
             username?: string;
+        };
+        ProviderStatusDto: {
+            configured?: boolean;
+            configuredFields?: string[];
+            /** Format: int32 */
+            displayOrder?: number;
+            enabled?: boolean;
+            maskedHint?: string;
+            provider?: string;
+            source?: string;
         };
         RecoveryCodesDto: {
             recoveryCodes?: string[];
@@ -1588,6 +1770,15 @@ export interface components {
             phoneNumber?: string;
             surname?: string;
         };
+        UpdateProviderCredentialsRequest: {
+            credentials?: {
+                [key: string]: string;
+            };
+            enabled?: boolean;
+        };
+        UpdateProviderOrderRequest: {
+            order: string[];
+        };
         UpdateRoleRequest: {
             displayName: string;
             isDefault?: boolean;
@@ -1624,6 +1815,28 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    acceptInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptInvitationRequest"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     confirmEmail: {
         parameters: {
             query?: never;
@@ -1668,6 +1881,28 @@ export interface operations {
             };
         };
     };
+    invitationInfo: {
+        parameters: {
+            query: {
+                token: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["InvitationInfoDto"];
+                };
+            };
+        };
+    };
     resetPassword: {
         parameters: {
             query?: never;
@@ -1690,7 +1925,7 @@ export interface operations {
             };
         };
     };
-    list_5: {
+    list_6: {
         parameters: {
             query: {
                 userName?: string;
@@ -1989,6 +2224,96 @@ export interface operations {
             };
         };
     };
+    status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ProviderStatusDto"][];
+                };
+            };
+        };
+    };
+    updateOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProviderOrderRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ProviderStatusDto"][];
+                };
+            };
+        };
+    };
+    updateCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                providerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProviderCredentialsRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ProviderStatusDto"];
+                };
+            };
+        };
+    };
+    deleteCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                providerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     iyzicoWebhook: {
         parameters: {
             query?: never;
@@ -2065,7 +2390,7 @@ export interface operations {
             };
         };
     };
-    list_3: {
+    list_4: {
         parameters: {
             query: {
                 pageable: components["schemas"]["Pageable"];
@@ -2245,6 +2570,96 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["FeatureDefinitionDto"][];
+                };
+            };
+        };
+    };
+    list_3: {
+        parameters: {
+            query: {
+                pageable: components["schemas"]["Pageable"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["PageInvitationDto"];
+                };
+            };
+        };
+    };
+    invite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InviteUserRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["InvitationDto"];
+                };
+            };
+        };
+    };
+    resend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["InvitationDto"];
+                };
+            };
+        };
+    };
+    revoke: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["InvitationDto"];
                 };
             };
         };
@@ -2913,7 +3328,7 @@ export interface operations {
             };
         };
     };
-    list_4: {
+    list_5: {
         parameters: {
             query: {
                 pageable: components["schemas"]["Pageable"];

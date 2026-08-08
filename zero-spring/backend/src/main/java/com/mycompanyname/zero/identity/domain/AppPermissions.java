@@ -45,6 +45,7 @@ public final class AppPermissions {
     public static final String SUBSCRIPTIONS_READ = "subscriptions.read";
     public static final String SUBSCRIPTIONS_MANAGE = "subscriptions.manage";
     public static final String TENANT_FEATURES_MANAGE = "tenantfeatures.manage";
+    public static final String BILLING_CREDENTIALS_MANAGE = "billing.credentials.manage";
 
     private AppPermissions() {
     }
@@ -58,6 +59,6 @@ public final class AppPermissions {
                 TENANTS_MANAGE,
                 EDITIONS_READ, EDITIONS_MANAGE,
                 SUBSCRIPTIONS_READ, SUBSCRIPTIONS_MANAGE,
-                TENANT_FEATURES_MANAGE);
+                TENANT_FEATURES_MANAGE, BILLING_CREDENTIALS_MANAGE);
     }
 }
