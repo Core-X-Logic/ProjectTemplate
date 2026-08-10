@@ -37,6 +37,9 @@ function buildListQuery(params: UserListParams): string {
   if (params.search?.trim()) {
     query.set('search', params.search.trim());
   }
+  if (params.tenantId !== undefined) {
+    query.set('tenantId', String(params.tenantId));
+  }
   const encoded = query.toString();
   return encoded ? `?${encoded}` : '';
 }

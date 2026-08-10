@@ -37,11 +37,21 @@ public class UserController {
 
     private final UserService userService;
 
+    /**
+     * Without {@code tenantId}: the caller's own scope (tenant rows for a tenant caller, host rows
+     * for a host caller). With {@code tenantId}: that tenant's users, HOST CALLERS ONLY — the
+     * service rejects a tenant caller with 403 regardless of the value, because the JWT
+     * {@code tenant} claim is authoritative and a foreign id is a spoof attempt (see
+     * {@code UserService#listForTenant}).
+     */
     @GetMapping
     @PreAuthorize("hasAuthority('" + AppPermissions.USERS_READ + "')")
     public Page<UserDto> list(Pageable pageable,
-                              @RequestParam(required = false) String search) {
-        return userService.list(pageable, search);
+                              @RequestParam(required = false) String search,
+                              @RequestParam(required = false) Long tenantId) {
+        return tenantId == null
+                ? userService.list(pageable, search)
+                : userService.listForTenant(tenantId, pageable, search);
     }
 
     @GetMapping("/export")
