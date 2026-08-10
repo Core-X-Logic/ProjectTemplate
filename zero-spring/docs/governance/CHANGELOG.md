@@ -11,6 +11,27 @@
 
 ### Eklendi
 
+- **Host'tan kiracı kullanıcılarını görüntüleme + kiracı içine bürünme UI köprüsü.** Backend'in
+  zaten sunduğu iki yetenek (cross-tenant impersonation `targetTenantId`; host'un `users`
+  tablosunu okuyabilmesi, ADR-0018) üzerine eksik olan yüzey eklendi:
+  - **Backend:** `GET /api/users?tenantId=` — YALNIZ host bağlamı; kiracı çağıranı hangi id'yi
+    gönderirse göndersin (kendi id'si dahil) 403 alır — boş sayfa değil, çünkü boş sayfa "bu
+    kiracının kullanıcısı yok" diye okunur ve kendi id'siyle 200 alınabilseydi durum kodu yabancı
+    id'yi ele verirdi. Uygulama `UserService.listForTenant`: aynı iki aşamalı sayfalama (Q-03);
+    aspect'in giriş anında kurduğu `hostFilter` explicit `tenantId` predicate'iyle AND'lenip BOŞ
+    sayfa ürettiği için (IT'nin mutlu yolu ilk koşumda tam bu şekilde kırmızıydı) sorgu bloğunda
+    filtre askıya alınır ve `finally` içinde geri kurulur (`TenantAdminBootstrapper` deseni; RLS
+    tabanı yerinde kalır).
+  - **Frontend:** Kiracılar listesine `users.read` korumalı "Kullanıcıları gör" satır aksiyonu +
+    `TenantUsersDialog` (arama, sayfalama, aktiflik rozetleri); satır başına `users.impersonate`
+    korumalı "Bürün" düğmesi `auth.impersonate(userId, tenantId)` çağırır — pasif kullanıcıda ve
+    bürünme oturumu içindeyken (cascade kuralının UI aynası) devre dışı. en/tr anahtarları
+    `tenants.users.*`; `schema.d.ts` yeniden üretildi (`tenantId` parametresi).
+  - **Testler:** `HostTenantUserListingIT` (host mutlu yol satır-sahiplik doğrulamalı; parametresiz
+    host listelemenin host satırlarında kaldığının pinlenmesi; kiracı çağırana çift 403 negatifi) ·
+    `tenant-users-dialog.test.tsx` 5 test (cross-tenant sorgu dizesi, `impersonate(42, 7)` çağrısı,
+    pasif/cascade disable, izinsizde düğme yokluğu negatifi).
+
 - **Portal'dan yönetilebilir ödeme sağlayıcı kimlik bilgileri + checkout failover (ADR-0020,
   `V16__billing_provider_credentials.sql`).** Sağlayıcı bilgileri (PayTR/iyzico; Stripe dışlanmadı)
   artık host portal'dan yazılır ve **restart'sız** etkinleşir; birden çok sağlayıcı açıkken checkout

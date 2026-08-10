@@ -19,7 +19,11 @@ import com.mycompanyname.zero.shared.BoundedExport;
 import com.mycompanyname.zero.shared.domain.DomainException;
 import com.mycompanyname.zero.shared.domain.ErrorCode;
 import com.mycompanyname.zero.shared.tenant.TenantContext;
+import com.mycompanyname.zero.tenancy.HibernateTenantFilterAspect;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
+import org.hibernate.Session;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -56,6 +60,9 @@ public class UserService {
 
     /** Names this export in the refusal message; a constant, never anything the caller sent. */
     private static final String EXPORT_SUBJECT = "user";
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     private final BoundedExport boundedExport;
     private final UserRepository userRepository;
@@ -191,6 +198,54 @@ public class UserService {
                 .map(this::toDto)
                 .toList();
         return new PageImpl<>(content, pageable, idPage.getTotalElements());
+    }
+
+    /**
+     * Host-side listing of ONE tenant's users — the picker behind "view this tenant's users /
+     * impersonate one" on the tenants screen.
+     *
+     * <p>Host cross-tenant READ visibility of {@code users} is product behaviour (ADR-0018;
+     * {@code TenantFilterCoverageIT} pins the filter side), but {@link #list} deliberately answers
+     * for the CALLER's scope only — in host context that is the {@code tenant_id is null} rows. This
+     * method is the explicit opt-in for "a different tenant's users", and it refuses to exist for a
+     * tenant caller: the JWT {@code tenant} claim is authoritative, so a tenant operator passing a
+     * foreign {@code tenantId} is a spoof attempt and gets {@code FORBIDDEN}, not an empty page —
+     * an empty page would read as "that tenant has no users".
+     *
+     * <p>Same two-stage pagination as {@link #list}, same reasons (Q-03).
+     *
+     * <p><b>Why the session filter is suspended.</b> The aspect armed {@code hostFilter}
+     * ({@code tenant_id is null}) at method entry — correct for every other read in this service,
+     * but here it would AND itself onto the explicit {@code tenantId = :tenantId} predicate and
+     * silently answer an EMPTY page (measured: the IT's happy path failed exactly this way before
+     * this block existed). The explicit predicate is the primary defense and names the one tenant
+     * this method may see; the RLS floor stays in place either way (host context, ADR-0018: host
+     * reads {@code users} cross-tenant). Restore mirrors {@code TenantAdminBootstrapper}: the
+     * finally re-arms {@code hostFilter} — the guard above proved the caller is host — so the rest
+     * of the transaction runs behind the same filter it started with.
+     */
+    @Transactional(readOnly = true)
+    public Page<UserDto> listForTenant(Long tenantId, Pageable pageable, String search) {
+        if (TenantContext.getTenantId() != null) {
+            throw new DomainException(ErrorCode.FORBIDDEN,
+                    "Cross-tenant user listing is host-only");
+        }
+        String term = (search == null || search.isBlank()) ? null : search.trim();
+        Session session = entityManager.unwrap(Session.class);
+        session.disableFilter(HibernateTenantFilterAspect.HOST_FILTER);
+        try {
+            Page<Long> idPage = userRepository.searchIdsByTenantId(tenantId, term, pageable);
+            List<Long> ids = idPage.getContent();
+            if (ids.isEmpty()) {
+                return new PageImpl<>(List.of(), pageable, idPage.getTotalElements());
+            }
+            List<UserDto> content = inOrderOf(ids, userRepository.findAllByIdIn(ids)).stream()
+                    .map(this::toDto)
+                    .toList();
+            return new PageImpl<>(content, pageable, idPage.getTotalElements());
+        } finally {
+            session.enableFilter(HibernateTenantFilterAspect.HOST_FILTER);
+        }
     }
 
     /**

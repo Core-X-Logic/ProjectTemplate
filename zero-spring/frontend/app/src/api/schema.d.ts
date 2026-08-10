@@ -3629,6 +3629,7 @@ export interface operations {
             query: {
                 pageable: components["schemas"]["Pageable"];
                 search?: string;
+                tenantId?: number;
             };
             header?: never;
             path?: never;

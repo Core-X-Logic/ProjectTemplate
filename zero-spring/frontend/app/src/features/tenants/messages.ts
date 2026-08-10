@@ -69,6 +69,19 @@ export const tenantsEn = {
   'tenants.create.copied': 'Copied',
   'tenants.create.close': 'Close',
 
+  // Users dialog (host-side tenant user picker + impersonation)
+  'tenants.actions.showUsers': 'View users',
+  'tenants.users.title': 'Users of {tenant}',
+  'tenants.users.description':
+    'The users of this tenant. Impersonation opens the product exactly as that user sees it; the session is audited and you can return to your own account at any time.',
+  'tenants.users.searchPlaceholder': 'Search by username, email or name…',
+  'tenants.users.empty': 'No users match.',
+  'tenants.users.error': 'Users could not be loaded.',
+  'tenants.users.impersonate': 'Impersonate',
+  'tenants.users.impersonated': 'You are now impersonating {username}.',
+  'tenants.users.previous': 'Previous',
+  'tenants.users.next': 'Next',
+
   // Toasts
   'tenants.toast.created': 'Tenant created together with its admin user.',
   'tenants.toast.activated': 'Tenant activated.',
@@ -140,6 +153,20 @@ export const tenantsTr: Record<TenantsMessageId, string> = {
   'tenants.create.copyPassword': 'Parolayı kopyala',
   'tenants.create.copied': 'Kopyalandı',
   'tenants.create.close': 'Kapat',
+
+  // Kullanıcılar diyaloğu (host tarafı kiracı kullanıcı seçici + bürünme)
+  'tenants.actions.showUsers': 'Kullanıcıları gör',
+  'tenants.users.title': '{tenant} kullanıcıları',
+  'tenants.users.description':
+    'Bu kiracının kullanıcıları. Bürünme, ürünü o kullanıcının gördüğü şekliyle açar; oturum denetim kaydına işlenir ve istediğiniz an kendi hesabınıza dönebilirsiniz.',
+  'tenants.users.searchPlaceholder':
+    'Kullanıcı adı, e-posta veya ada göre ara…',
+  'tenants.users.empty': 'Eşleşen kullanıcı yok.',
+  'tenants.users.error': 'Kullanıcılar yüklenemedi.',
+  'tenants.users.impersonate': 'Bürün',
+  'tenants.users.impersonated': 'Artık {username} olarak oturumdasınız.',
+  'tenants.users.previous': 'Önceki',
+  'tenants.users.next': 'Sonraki',
 
   // Toasts
   'tenants.toast.created':

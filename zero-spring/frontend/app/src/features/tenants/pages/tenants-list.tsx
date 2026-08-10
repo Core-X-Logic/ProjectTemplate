@@ -6,7 +6,14 @@ import {
   PaginationState,
   useReactTable,
 } from '@tanstack/react-table';
-import { Building2, EllipsisVertical, Plus, Power, PowerOff } from 'lucide-react';
+import {
+  Building2,
+  EllipsisVertical,
+  Plus,
+  Power,
+  PowerOff,
+  Users,
+} from 'lucide-react';
 import { Helmet } from 'react-helmet-async';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { Can } from '@/auth/rbac';
@@ -32,6 +39,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { CreateTenantDialog } from '../components/create-tenant-dialog';
+import { TenantUsersDialog } from '../components/tenant-users-dialog';
 import { useActivateTenant, useDeactivateTenant, useTenants } from '../hooks';
 import { TENANTS_MANAGE, type TenantDto } from '../types';
 
@@ -66,6 +74,16 @@ export function TenantsListPage() {
   const deactivateTenant = useDeactivateTenant();
 
   const tenants = useMemo(() => data ?? [], [data]);
+
+  // The users dialog target survives menu close; `usersOpen` is separate so the
+  // closing animation does not flash an empty dialog when the target resets.
+  const [usersTenant, setUsersTenant] = useState<TenantDto | null>(null);
+  const [usersOpen, setUsersOpen] = useState(false);
+
+  const openUsers = (tenant: TenantDto) => {
+    setUsersTenant(tenant);
+    setUsersOpen(true);
+  };
 
   const toggleActive = (tenant: TenantDto) => {
     if (tenant.id === undefined) {
@@ -171,7 +189,11 @@ export function TenantsListPage() {
         id: 'actions',
         header: '',
         cell: ({ row }) => (
-          <TenantRowActions tenant={row.original} onToggleActive={toggleActive} />
+          <TenantRowActions
+            tenant={row.original}
+            onToggleActive={toggleActive}
+            onShowUsers={openUsers}
+          />
         ),
         enableSorting: false,
         size: 60,
@@ -249,6 +271,11 @@ export function TenantsListPage() {
       </Card>
 
       <CreateTenantDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <TenantUsersDialog
+        tenant={usersTenant}
+        open={usersOpen}
+        onOpenChange={setUsersOpen}
+      />
     </div>
   );
 }
@@ -256,9 +283,14 @@ export function TenantsListPage() {
 interface TenantRowActionsProps {
   tenant: TenantDto;
   onToggleActive: (tenant: TenantDto) => void;
+  onShowUsers: (tenant: TenantDto) => void;
 }
 
-function TenantRowActions({ tenant, onToggleActive }: TenantRowActionsProps) {
+function TenantRowActions({
+  tenant,
+  onToggleActive,
+  onShowUsers,
+}: TenantRowActionsProps) {
   const intl = useIntl();
 
   return (
@@ -274,6 +306,14 @@ function TenantRowActions({ tenant, onToggleActive }: TenantRowActionsProps) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" side="bottom">
+        {/* Listing a tenant's users rides on `users.read` (backend: the
+            host-only tenantId parameter of GET /api/users), not tenants.manage. */}
+        <Can permission="users.read">
+          <DropdownMenuItem onSelect={() => onShowUsers(tenant)}>
+            <Users />
+            <FormattedMessage id="tenants.actions.showUsers" />
+          </DropdownMenuItem>
+        </Can>
         <Can permission={TENANTS_MANAGE}>
           <DropdownMenuItem onSelect={() => onToggleActive(tenant)}>
             {tenant.active ? <PowerOff /> : <Power />}

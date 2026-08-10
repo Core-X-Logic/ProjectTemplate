@@ -34,4 +34,9 @@ export interface UserListParams {
   sort?: string[];
   /** Free-text filter (forwarded as `search`; ignored by older backends). */
   search?: string;
+  /**
+   * Host-only: list the users of THIS tenant instead of the caller's own scope.
+   * A tenant-side caller sending it is refused with 403 by the backend.
+   */
+  tenantId?: number;
 }
