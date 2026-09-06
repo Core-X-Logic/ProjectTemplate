@@ -94,13 +94,15 @@ export function TwoFactorPage() {
 
   const isRecovery = mode === 'recovery';
 
+  // Centering + page chrome come from the shared BrandedLayout route wrapper
+  // (see routes.tsx) — this page only renders its card.
   return (
-    <div className="flex grow items-center justify-center min-h-screen p-5">
+    <>
       <Helmet>
         <title>{intl.formatMessage({ id: 'auth.twoFactor.title' })}</title>
       </Helmet>
 
-      <Card className="w-full max-w-sm">
+      <Card className="w-full max-w-[400px]">
         <CardHeader className="flex-col items-stretch gap-1.5 py-6">
           <CardTitle className="text-lg">
             <FormattedMessage id="auth.twoFactor.title" />
@@ -209,6 +211,6 @@ export function TwoFactorPage() {
           </form>
         </CardContent>
       </Card>
-    </div>
+    </>
   );
 }

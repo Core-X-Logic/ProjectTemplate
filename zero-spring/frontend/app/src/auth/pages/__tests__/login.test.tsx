@@ -54,6 +54,25 @@ describe('LoginPage', () => {
     ).toBeInTheDocument();
   });
 
+  it('toggles password visibility via the labelled eye button', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<LoginPage />);
+
+    const password = screen.getByLabelText('Password');
+    expect(password).toHaveAttribute('type', 'password');
+
+    const toggle = screen.getByRole('button', {
+      name: 'Show or hide password',
+    });
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await user.click(toggle);
+    expect(password).toHaveAttribute('type', 'text');
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await user.click(toggle);
+    expect(password).toHaveAttribute('type', 'password');
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  });
+
   it('shows zod validation errors and does not call login on empty submit', async () => {
     const user = userEvent.setup();
     renderWithProviders(<LoginPage />);

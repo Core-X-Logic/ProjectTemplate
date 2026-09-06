@@ -37,6 +37,11 @@ const tr: Record<string, string> = {
   'auth.login.submitting': 'Giriş yapılıyor…',
   'auth.login.error': 'Giriş başarısız. Lütfen bilgilerinizi kontrol edin.',
   'auth.login.forgotPassword': 'Parolanızı mı unuttunuz?',
+  'auth.login.togglePassword': 'Parolayı göster veya gizle',
+  // Markalı auth yerleşimi — sağ panel metinleri (ürün-nötr).
+  'auth.login.brandedTitle': 'Güvenli Panel Erişimi',
+  'auth.login.brandedDescription':
+    'Panelinize güvenli, izin tabanlı erişimle çalışma alanınızı yönetmek için giriş yapın.',
   'auth.logout': 'Çıkış yap',
 
   // Auth / two-factor (login second step)

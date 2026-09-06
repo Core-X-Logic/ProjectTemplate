@@ -39,6 +39,11 @@ const en: Record<string, string> = {
   'auth.login.submitting': 'Signing in…',
   'auth.login.error': 'Sign in failed. Please check your credentials.',
   'auth.login.forgotPassword': 'Forgot your password?',
+  'auth.login.togglePassword': 'Show or hide password',
+  // Branded auth layout — right-hand panel copy (product-neutral).
+  'auth.login.brandedTitle': 'Secure Dashboard Access',
+  'auth.login.brandedDescription':
+    'Sign in to manage your workspace with secure, permission-based access to your dashboard.',
   'auth.logout': 'Sign out',
 
   // Auth / two-factor (login second step)

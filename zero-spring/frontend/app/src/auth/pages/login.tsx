@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { LoaderCircle } from 'lucide-react';
+import { Eye, EyeOff, LoaderCircle } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { Helmet } from 'react-helmet-async';
@@ -11,13 +11,7 @@ import { ApiError } from '@/api/client';
 import { useAuth } from '@/providers/auth-provider';
 import { useTenant } from '@/providers/tenant-provider';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Form,
   FormControl,
@@ -41,6 +35,7 @@ export function LoginPage() {
   const { user, login } = useAuth();
   const { setTenant } = useTenant();
   const [serverError, setServerError] = useState<string | null>(null);
+  const [passwordVisible, setPasswordVisible] = useState(false);
 
   const schema = useMemo(
     () =>
@@ -109,24 +104,24 @@ export function LoginPage() {
   const isSubmitting = form.formState.isSubmitting;
 
   return (
-    <div className="flex grow items-center justify-center min-h-screen p-5">
+    <>
       <Helmet>
         <title>{intl.formatMessage({ id: 'auth.login.title' })}</title>
       </Helmet>
 
-      <Card className="w-full max-w-sm">
-        <CardHeader className="flex-col items-stretch gap-1.5 py-6">
-          <CardTitle className="text-lg">
-            <FormattedMessage id="auth.login.title" />
-          </CardTitle>
-          <CardDescription>
-            <FormattedMessage id="auth.login.subtitle" />
-          </CardDescription>
-        </CardHeader>
-
-        <CardContent>
+      <Card className="w-full max-w-[400px]">
+        <CardContent className="p-6">
           <Form {...form}>
             <form onSubmit={submit} className="flex flex-col gap-5" noValidate>
+              <div className="text-center space-y-1 pb-3">
+                <h1 className="text-2xl font-semibold tracking-tight">
+                  <FormattedMessage id="auth.login.title" />
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  <FormattedMessage id="auth.login.subtitle" />
+                </p>
+              </div>
+
               <FormField
                 control={form.control}
                 name="usernameOrEmail"
@@ -167,16 +162,35 @@ export function LoginPage() {
                         <FormattedMessage id="auth.login.forgotPassword" />
                       </Link>
                     </div>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        type="password"
-                        autoComplete="current-password"
-                        placeholder={intl.formatMessage({
-                          id: 'auth.login.passwordPlaceholder',
+                    <div className="relative">
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type={passwordVisible ? 'text' : 'password'}
+                          autoComplete="current-password"
+                          placeholder={intl.formatMessage({
+                            id: 'auth.login.passwordPlaceholder',
+                          })}
+                        />
+                      </FormControl>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        mode="icon"
+                        onClick={() => setPasswordVisible((visible) => !visible)}
+                        aria-label={intl.formatMessage({
+                          id: 'auth.login.togglePassword',
                         })}
-                      />
-                    </FormControl>
+                        aria-pressed={passwordVisible}
+                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      >
+                        {passwordVisible ? (
+                          <EyeOff className="text-muted-foreground" />
+                        ) : (
+                          <Eye className="text-muted-foreground" />
+                        )}
+                      </Button>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -228,6 +242,6 @@ export function LoginPage() {
           </Form>
         </CardContent>
       </Card>
-    </div>
+    </>
   );
 }
